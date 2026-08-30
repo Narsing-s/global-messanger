@@ -1,0 +1,15 @@
+{
+  "name": "global-messenger",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/web", "apps/server"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w apps/server\" \"npm run dev -w apps/web\"",
+    "build": "npm run build -w apps/web && npm run build -w apps/server",
+    "db:generate": "npm run db:generate -w apps/server",
+    "db:migrate": "npm run db:migrate -w apps/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
