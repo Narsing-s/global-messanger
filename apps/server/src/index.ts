@@ -1,3 +1,4 @@
+
 import 'dotenv/config';
 
 import Fastify from 'fastify';
@@ -12,7 +13,14 @@ import { Server } from 'socket.io';
 import { z } from 'zod';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-
+declare module 'fastify' {
+  interface FastifyInstance {
+    authenticate: (
+      request: any,
+      reply: any
+    ) => Promise<void>;
+  }
+}
 const prisma = new PrismaClient();
 
 const app = Fastify({
@@ -191,7 +199,7 @@ app.post(
 
     if (!parsed.success) {
       return reply.badRequest(
-        parsed.error.flatten()
+        JSON.stringify(parsed.error.flatten())
       );
     }
 
@@ -264,7 +272,7 @@ app.post(
 
     if (!parsed.success) {
       return reply.badRequest(
-        parsed.error.flatten()
+        JSON.stringify(parsed.error.flatten())
       );
     }
 
@@ -407,7 +415,7 @@ app.post(
 
     if (!parsed.success) {
       return reply.badRequest(
-        parsed.error.flatten()
+        JSON.stringify(parsed.error.flatten())
       );
     }
 
@@ -511,7 +519,7 @@ app.post(
 
     if (!parsed.success) {
       return reply.badRequest(
-        parsed.error.flatten()
+        JSON.stringify(parsed.error.flatten())
       );
     }
 
@@ -782,7 +790,7 @@ app.post(
 
     if (!parsed.success) {
       return reply.badRequest(
-        parsed.error.flatten()
+        JSON.stringify(parsed.error.flatten())
       );
     }
 
@@ -938,7 +946,7 @@ app.patch(
 
     if (!parsed.success) {
       return reply.badRequest(
-        parsed.error.flatten()
+        JSON.stringify(parsed.error.flatten())
       );
     }
 
