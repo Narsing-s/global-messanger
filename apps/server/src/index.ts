@@ -650,6 +650,64 @@ app.get(
 /* Read Receipts                                                              */
 /* -------------------------------------------------------------------------- */
 
+
+app.get(
+  '/api/conversations/:id/messages/sync',
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const { id: userId } = authUser(request);
+    const conversationId = String((request.params as any).id);
+
+    if (!await member(userId, conversationId)) {
+      return reply.forbidden('Not a conversation member');
+    }
+
+    const query = request.query as {
+      after?: string;
+      limit?: string;
+    };
+
+    const limit = Math.min(
+      Math.max(Number(query.limit ?? 100), 1),
+      100
+    );
+
+    let afterDate: Date | undefined;
+
+    if (query.after) {
+      const parsedDate = new Date(query.after);
+
+      if (Number.isNaN(parsedDate.getTime())) {
+        return reply.badRequest('Invalid after timestamp');
+      }
+
+      afterDate = parsedDate;
+    }
+
+    const messages = await prisma.message.findMany({
+      where: {
+        conversationId,
+        ...(afterDate
+          ? { createdAt: { gt: afterDate } }
+          : {})
+      },
+      orderBy: {
+        createdAt: 'asc'
+      },
+      take: limit,
+      include: messageInclude
+    });
+
+    return {
+      conversationId,
+      messages,
+      count: messages.length,
+      hasMore: messages.length === limit,
+      syncedAt: new Date().toISOString()
+    };
+  }
+);
+
 app.post(
   '/api/conversations/:id/read',
   {
@@ -1168,6 +1226,127 @@ io.on(
     );
 
     /* ---------------------------- Typing ---------------------------------- */
+
+    /* ------------------------- Offline Sync ------------------------------ */
+
+    socket.on(
+      'conversation:sync',
+      async (
+        data: {
+          conversationId: string;
+          after?: string;
+        }
+      ) => {
+        try {
+          if (
+            !data?.conversationId ||
+            !(await member(
+              userId,
+              data.conversationId
+            ))
+          ) {
+            socket.emit(
+              'sync:failed',
+              {
+                conversationId:
+                  data?.conversationId,
+                error:
+                  'Not a conversation member'
+              }
+            );
+
+            return;
+          }
+
+          let afterDate: Date | undefined;
+
+          if (data.after) {
+            const parsedDate =
+              new Date(data.after);
+
+            if (
+              Number.isNaN(
+                parsedDate.getTime()
+              )
+            ) {
+              socket.emit(
+                'sync:failed',
+                {
+                  conversationId:
+                    data.conversationId,
+                  error:
+                    'Invalid sync timestamp'
+                }
+              );
+
+              return;
+            }
+
+            afterDate = parsedDate;
+          }
+
+          const messages =
+            await prisma.message.findMany({
+              where: {
+                conversationId:
+                  data.conversationId,
+
+                ...(afterDate
+                  ? {
+                      createdAt: {
+                        gt: afterDate
+                      }
+                    }
+                  : {})
+              },
+
+              orderBy: {
+                createdAt: 'asc'
+              },
+
+              take: 100,
+
+              include:
+                messageInclude
+            });
+
+          socket.emit(
+            'sync:messages',
+            {
+              conversationId:
+                data.conversationId,
+
+              messages,
+
+              count:
+                messages.length,
+
+              syncedAt:
+                new Date().toISOString(),
+
+              hasMore:
+                messages.length === 100
+            }
+          );
+        } catch (error) {
+          console.error(
+            'conversation:sync failed:',
+            error
+          );
+
+          socket.emit(
+            'sync:failed',
+            {
+              conversationId:
+                data?.conversationId,
+
+              error:
+                'Unable to synchronize messages'
+            }
+          );
+        }
+      }
+    );
 
     socket.on(
       'typing',
