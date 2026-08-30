@@ -25,16 +25,19 @@ model Conversation {
   title       String?
   isGroup     Boolean              @default(false)
   createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
   creatorId   String?
   creator     User?                @relation("ConversationCreator", fields: [creatorId], references: [id])
   members     ConversationMember[]
   messages    Message[]
+  @@index([updatedAt])
 }
 
 model ConversationMember {
   conversationId String
   userId         String
   joinedAt       DateTime @default(now())
+  lastReadAt     DateTime?
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([conversationId, userId])
@@ -52,4 +55,5 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User         @relation(fields: [senderId], references: [id])
   @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
 }

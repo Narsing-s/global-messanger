@@ -17,93 +17,90 @@ await app.register(cors, { origin: WEB_ORIGIN, credentials: true });
 await app.register(sensible);
 await app.register(jwt, { secret: process.env.JWT_SECRET ?? 'development-only-secret' });
 
-declare module '@fastify/jwt' {
-  interface FastifyJWT { user: { id: string; username: string }; }
-}
+declare module '@fastify/jwt' { interface FastifyJWT { user: { id: string; username: string }; } }
+app.decorate('authenticate', async (request: any) => { await request.jwtVerify(); });
+const authUser = (request: any) => request.user as { id: string; username: string };
 
-app.decorate('authenticate', async (request: any) => {
-  await request.jwtVerify();
-});
+const userSelect = { id: true, username: true, displayName: true, avatarUrl: true, lastSeenAt: true } as const;
+const messageInclude = { sender: { select: userSelect } } as const;
 
 app.get('/health', async () => ({ ok: true, service: 'global-messenger', time: new Date().toISOString() }));
 
-const authSchema = z.object({
-  username: z.string().trim().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
-  displayName: z.string().trim().min(1).max(60),
-  password: z.string().min(8).max(128)
-});
+const authSchema = z.object({ username: z.string().trim().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/), displayName: z.string().trim().min(1).max(60), password: z.string().min(8).max(128) });
 
 app.post('/api/auth/register', async (request, reply) => {
-  const parsed = authSchema.safeParse(request.body);
-  if (!parsed.success) return reply.badRequest(parsed.error.flatten());
-  const { username, displayName, password } = parsed.data;
-  const exists = await prisma.user.findUnique({ where: { username: username.toLowerCase() } });
-  if (exists) return reply.conflict('Username is already taken');
-  const passwordHash = await bcrypt.hash(password, 12);
-  const user = await prisma.user.create({ data: { username: username.toLowerCase(), displayName, passwordHash } });
-  const token = app.jwt.sign({ id: user.id, username: user.username });
-  return reply.code(201).send({ token, user: { id: user.id, username: user.username, displayName: user.displayName } });
+  const parsed = authSchema.safeParse(request.body); if (!parsed.success) return reply.badRequest(parsed.error.flatten());
+  const { username, displayName, password } = parsed.data; const normalized = username.toLowerCase();
+  if (await prisma.user.findUnique({ where: { username: normalized } })) return reply.conflict('Username is already taken');
+  const user = await prisma.user.create({ data: { username: normalized, displayName, passwordHash: await bcrypt.hash(password, 12) } });
+  return reply.code(201).send({ token: app.jwt.sign({ id: user.id, username: user.username }), user: { id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl } });
 });
 
 app.post('/api/auth/login', async (request, reply) => {
-  const body = z.object({ username: z.string().trim(), password: z.string().min(1) }).safeParse(request.body);
-  if (!body.success) return reply.badRequest(body.error.flatten());
+  const body = z.object({ username: z.string().trim(), password: z.string().min(1) }).safeParse(request.body); if (!body.success) return reply.badRequest(body.error.flatten());
   const user = await prisma.user.findUnique({ where: { username: body.data.username.toLowerCase() } });
   if (!user || !(await bcrypt.compare(body.data.password, user.passwordHash))) return reply.unauthorized('Invalid username or password');
   await prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
-  const token = app.jwt.sign({ id: user.id, username: user.username });
-  return { token, user: { id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl } };
+  return { token: app.jwt.sign({ id: user.id, username: user.username }), user: { id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl } };
 });
 
 app.get('/api/users/search', { preHandler: [app.authenticate] }, async (request) => {
-  const q = String((request.query as any)?.q ?? '').trim().toLowerCase();
-  if (!q) return [];
-  return prisma.user.findMany({
-    where: { username: { contains: q, mode: 'insensitive' } },
-    select: { id: true, username: true, displayName: true, avatarUrl: true, lastSeenAt: true },
-    take: 20
-  });
+  const q = String((request.query as any)?.q ?? '').trim(); if (!q) return [];
+  return prisma.user.findMany({ where: { username: { contains: q, mode: 'insensitive' } }, select: userSelect, take: 20 });
+});
+
+app.get('/api/conversations', { preHandler: [app.authenticate] }, async (request) => {
+  const { id } = authUser(request);
+  return prisma.conversation.findMany({ where: { members: { some: { userId: id } } }, orderBy: { updatedAt: 'desc' }, include: { members: { include: { user: { select: userSelect } } }, messages: { orderBy: { createdAt: 'desc' }, take: 1, include: messageInclude } } });
+});
+
+app.post('/api/conversations/direct', { preHandler: [app.authenticate] }, async (request, reply) => {
+  const { id } = authUser(request); const body = z.object({ userId: z.string().min(1) }).safeParse(request.body); if (!body.success) return reply.badRequest(body.error.flatten());
+  if (body.data.userId === id) return reply.badRequest('You cannot start a chat with yourself');
+  const target = await prisma.user.findUnique({ where: { id: body.data.userId }, select: userSelect }); if (!target) return reply.notFound('User not found');
+  const existing = await prisma.conversation.findFirst({ where: { isGroup: false, members: { every: { userId: { in: [id, body.data.userId] } } }, AND: [{ members: { some: { userId: id } } }, { members: { some: { userId: body.data.userId } } }] }, include: { members: { include: { user: { select: userSelect } } }, messages: { orderBy: { createdAt: 'desc' }, take: 1, include: messageInclude } } });
+  if (existing) return existing;
+  return prisma.conversation.create({ data: { isGroup: false, creatorId: id, members: { create: [{ userId: id }, { userId: body.data.userId }] } }, include: { members: { include: { user: { select: userSelect } } }, messages: true } });
+});
+
+app.get('/api/conversations/:id/messages', { preHandler: [app.authenticate] }, async (request, reply) => {
+  const { id: userId } = authUser(request); const conversationId = String((request.params as any).id);
+  const member = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!member) return reply.forbidden('Not a conversation member');
+  const limit = Math.min(Number((request.query as any)?.limit ?? 50), 100);
+  return prisma.message.findMany({ where: { conversationId }, orderBy: { createdAt: 'asc' }, take: limit, include: messageInclude });
+});
+
+app.post('/api/conversations/:id/read', { preHandler: [app.authenticate] }, async (request, reply) => {
+  const { id: userId } = authUser(request); const conversationId = String((request.params as any).id);
+  const member = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!member) return reply.forbidden();
+  const at = new Date(); await prisma.conversationMember.update({ where: { conversationId_userId: { conversationId, userId } }, data: { lastReadAt: at } });
+  io.to(`conversation:${conversationId}`).emit('message:read', { conversationId, userId, at }); return { ok: true, at };
+});
+
+app.patch('/api/messages/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
+  const { id: userId } = authUser(request); const messageId = String((request.params as any).id); const body = z.object({ body: z.string().trim().min(1).max(10000) }).safeParse(request.body); if (!body.success) return reply.badRequest(body.error.flatten());
+  const message = await prisma.message.findUnique({ where: { id: messageId } }); if (!message || message.senderId !== userId || message.deletedAt) return reply.notFound('Message not found');
+  const updated = await prisma.message.update({ where: { id: messageId }, data: { body: body.data.body, editedAt: new Date() }, include: messageInclude }); io.to(`conversation:${message.conversationId}`).emit('message:updated', updated); return updated;
+});
+
+app.delete('/api/messages/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
+  const { id: userId } = authUser(request); const messageId = String((request.params as any).id); const message = await prisma.message.findUnique({ where: { id: messageId } });
+  if (!message || message.senderId !== userId) return reply.notFound('Message not found');
+  const updated = await prisma.message.update({ where: { id: messageId }, data: { body: '', deletedAt: new Date() }, include: messageInclude }); io.to(`conversation:${message.conversationId}`).emit('message:deleted', { id: messageId, conversationId: message.conversationId, deletedAt: updated.deletedAt }); return { ok: true };
 });
 
 const httpServer = await app.listen({ port: PORT, host: '0.0.0.0' });
 const io = new Server(app.server, { cors: { origin: WEB_ORIGIN, credentials: true } });
 const online = new Map<string, number>();
 
-io.use(async (socket, next) => {
-  try {
-    const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error('Authentication required'));
-    const payload = app.jwt.verify<{ id: string; username: string }>(token);
-    socket.data.user = payload;
-    next();
-  } catch { next(new Error('Invalid authentication token')); }
-});
+io.use(async (socket, next) => { try { const token = socket.handshake.auth?.token; if (!token) return next(new Error('Authentication required')); socket.data.user = app.jwt.verify<{ id: string; username: string }>(token); next(); } catch { next(new Error('Invalid authentication token')); } });
 
 io.on('connection', async (socket) => {
-  const userId = socket.data.user.id as string;
-  online.set(userId, (online.get(userId) ?? 0) + 1);
-  socket.join(`user:${userId}`);
-  io.emit('presence:update', { userId, online: true });
-
-  socket.on('conversation:join', (conversationId: string) => socket.join(`conversation:${conversationId}`));
-  socket.on('typing', (data: { conversationId: string; typing: boolean }) => {
-    socket.to(`conversation:${data.conversationId}`).emit('typing', { userId, typing: data.typing });
-  });
-  socket.on('message:send', async (data: { conversationId: string; body: string; clientId?: string }) => {
-    if (!data?.conversationId || !data.body?.trim()) return;
-    const member = await prisma.conversationMember.findFirst({ where: { conversationId: data.conversationId, userId } });
-    if (!member) return;
-    const message = await prisma.message.create({ data: { conversationId: data.conversationId, senderId: userId, body: data.body.trim() }, include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } });
-    io.to(`conversation:${data.conversationId}`).emit('message:new', { ...message, clientId: data.clientId });
-  });
-  socket.on('disconnect', async () => {
-    const count = (online.get(userId) ?? 1) - 1;
-    if (count <= 0) {
-      online.delete(userId);
-      await prisma.user.update({ where: { id: userId }, data: { lastSeenAt: new Date() } }).catch(() => undefined);
-      io.emit('presence:update', { userId, online: false });
-    } else online.set(userId, count);
-  });
+  const userId = socket.data.user.id as string; online.set(userId, (online.get(userId) ?? 0) + 1); socket.join(`user:${userId}`); io.emit('presence:update', { userId, online: true });
+  socket.on('conversation:join', async (conversationId: string) => { const member = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (member) socket.join(`conversation:${conversationId}`); });
+  socket.on('typing', async (data: { conversationId: string; typing: boolean }) => { const member = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: data.conversationId, userId } } }); if (member) socket.to(`conversation:${data.conversationId}`).emit('typing', { userId, typing: !!data.typing }); });
+  socket.on('message:send', async (data: { conversationId: string; body: string; clientId?: string }) => { if (!data?.conversationId || !data.body?.trim()) return; const member = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: data.conversationId, userId } } }); if (!member) return; const message = await prisma.message.create({ data: { conversationId: data.conversationId, senderId: userId, body: data.body.trim() }, include: messageInclude }); await prisma.conversation.update({ where: { id: data.conversationId }, data: { updatedAt: new Date() } }); io.to(`conversation:${data.conversationId}`).emit('message:new', { ...message, clientId: data.clientId }); });
+  socket.on('disconnect', async () => { const count = (online.get(userId) ?? 1) - 1; if (count <= 0) { online.delete(userId); await prisma.user.update({ where: { id: userId }, data: { lastSeenAt: new Date() } }).catch(() => undefined); io.emit('presence:update', { userId, online: false }); } else online.set(userId, count); });
 });
 
 app.log.info(`Global Messenger API listening at ${httpServer}`);
