@@ -1,26 +1,1404 @@
 import 'dotenv/config';
-import Fastify from 'fastify'; import cors from '@fastify/cors'; import jwt from '@fastify/jwt'; import sensible from '@fastify/sensible'; import multipart from '@fastify/multipart'; import fastifyStatic from '@fastify/static'; import bcrypt from 'bcryptjs'; import {PrismaClient} from '@prisma/client'; import {Server} from 'socket.io'; import {z} from 'zod'; import path from 'node:path'; import fs from 'node:fs/promises';
-const prisma=new PrismaClient(); const app=Fastify({logger:true}); const PORT=Number(process.env.PORT??4000); const WEB_ORIGIN=process.env.WEB_ORIGIN??'http://localhost:5173'; const UPLOAD_DIR=path.resolve(process.env.UPLOAD_DIR??'uploads');
-await fs.mkdir(UPLOAD_DIR,{recursive:true}); await app.register(cors,{origin:WEB_ORIGIN,credentials:true}); await app.register(sensible); await app.register(multipart,{limits:{fileSize:25*1024*1024}}); await app.register(fastifyStatic,{root:UPLOAD_DIR,prefix:'/uploads/'}); await app.register(jwt,{secret:process.env.JWT_SECRET??'development-only-secret'});
-declare module '@fastify/jwt'{interface FastifyJWT{user:{id:string;username:string}}}; app.decorate('authenticate',async(r:any)=>{await r.jwtVerify()}); const authUser=(r:any)=>r.user as {id:string;username:string}; const userSelect={id:true,username:true,displayName:true,avatarUrl:true,lastSeenAt:true} as const;
-const messageInclude={sender:{select:userSelect},reactions:true,replyTo:{select:{id:true,body:true,senderId:true}}} as const; const conversationInclude={members:{include:{user:{select:userSelect}}},messages:{orderBy:{createdAt:'desc' as const},take:1,include:messageInclude}};
-app.get('/health',async()=>({ok:true,service:'global-messenger',time:new Date().toISOString()}));
-const authSchema=z.object({username:z.string().trim().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),displayName:z.string().trim().min(1).max(60),password:z.string().min(8).max(128)});
-app.post('/api/auth/register',async(r,rep)=>{const p=authSchema.safeParse(r.body);if(!p.success)return rep.badRequest(p.error.flatten());const {username,displayName,password}=p.data,n=username.toLowerCase();if(await prisma.user.findUnique({where:{username:n}}))return rep.conflict('Username is already taken');const u=await prisma.user.create({data:{username:n,displayName,passwordHash:await bcrypt.hash(password,12)}});return rep.code(201).send({token:app.jwt.sign({id:u.id,username:u.username}),user:{id:u.id,username:u.username,displayName:u.displayName,avatarUrl:u.avatarUrl}})});
-app.post('/api/auth/login',async(r,rep)=>{const p=z.object({username:z.string(),password:z.string().min(1)}).safeParse(r.body);if(!p.success)return rep.badRequest(p.error.flatten());const u=await prisma.user.findUnique({where:{username:p.data.username.toLowerCase()}});if(!u||!(await bcrypt.compare(p.data.password,u.passwordHash)))return rep.unauthorized('Invalid username or password');await prisma.user.update({where:{id:u.id},data:{lastSeenAt:new Date()}});return{token:app.jwt.sign({id:u.id,username:u.username}),user:{id:u.id,username:u.username,displayName:u.displayName,avatarUrl:u.avatarUrl}}});
-app.get('/api/users/search',{preHandler:[app.authenticate]},async r=>{const q=String((r.query as any)?.q??'').trim();if(!q)return[];return prisma.user.findMany({where:{OR:[{username:{contains:q,mode:'insensitive'}},{displayName:{contains:q,mode:'insensitive'}}]},select:userSelect,take:20})});
-app.get('/api/conversations',{preHandler:[app.authenticate]},async r=>{const {id}=authUser(r);return prisma.conversation.findMany({where:{members:{some:{userId:id}}},orderBy:{updatedAt:'desc'},include:conversationInclude})});
-app.post('/api/conversations/direct',{preHandler:[app.authenticate]},async(r,rep)=>{const {id}=authUser(r);const p=z.object({userId:z.string()}).safeParse(r.body);if(!p.success)return rep.badRequest(p.error.flatten());if(p.data.userId===id)return rep.badRequest('You cannot chat with yourself');const target=await prisma.user.findUnique({where:{id:p.data.userId},select:userSelect});if(!target)return rep.notFound('User not found');const e=await prisma.conversation.findFirst({where:{isGroup:false,AND:[{members:{some:{userId:id}}},{members:{some:{userId:p.data.userId}}}]},include:conversationInclude});if(e)return e;return prisma.conversation.create({data:{creatorId:id,members:{create:[{userId:id},{userId:p.data.userId}]}},include:conversationInclude})});
-app.post('/api/conversations/group',{preHandler:[app.authenticate]},async(r,rep)=>{const {id}=authUser(r);const p=z.object({title:z.string().trim().min(1).max(80),userIds:z.array(z.string()).min(1).max(100)}).safeParse(r.body);if(!p.success)return rep.badRequest(p.error.flatten());const ids=[id,...p.data.userIds.filter(x=>x!==id)];const users=await prisma.user.findMany({where:{id:{in:ids}},select:{id:true}});if(users.length!==new Set(ids).size)return rep.badRequest('One or more users were not found');return prisma.conversation.create({data:{isGroup:true,title:p.data.title,creatorId:id,members:{create:ids.map(userId=>({userId}))}},include:conversationInclude})});
-async function member(userId:string,conversationId:string){return prisma.conversationMember.findUnique({where:{conversationId_userId:{conversationId,userId}}})}
-app.get('/api/conversations/:id/messages',{preHandler:[app.authenticate]},async(r,rep)=>{const {id}=authUser(r),conversationId=String((r.params as any).id);if(!await member(id,conversationId))return rep.forbidden('Not a conversation member');const limit=Math.min(Math.max(Number((r.query as any)?.limit??100),1),100);return prisma.message.findMany({where:{conversationId},orderBy:{createdAt:'asc'},take:limit,include:messageInclude})});
-app.post('/api/conversations/:id/read',{preHandler:[app.authenticate]},async(r,rep)=>{const {id}=authUser(r),conversationId=String((r.params as any).id);if(!await member(id,conversationId))return rep.forbidden();const at=new Date();await prisma.conversationMember.update({where:{conversationId_userId:{conversationId,userId:id}},data:{lastReadAt:at}});io.to(`conversation:${conversationId}`).emit('message:read',{conversationId,userId:id,at});return{ok:true,at}});
-app.post('/api/uploads',{preHandler:[app.authenticate]},async(r,rep)=>{const file=await r.file();if(!file)return rep.badRequest('File is required');const safe=path.basename(file.filename).replace(/[^a-zA-Z0-9._-]/g,'_');const name=`${Date.now()}-${Math.random().toString(36).slice(2)}-${safe}`;const target=path.join(UPLOAD_DIR,name);await fs.writeFile(target,await file.toBuffer());return{url:`/uploads/${name}`,name:file.filename,mime:file.mimetype,size:(await fs.stat(target)).size}});
-app.post('/api/messages/:id/reactions',{preHandler:[app.authenticate]},async(r,rep)=>{const {id:userId}=authUser(r),messageId=String((r.params as any).id);const p=z.object({emoji:z.string().min(1).max(16)}).safeParse(r.body);if(!p.success)return rep.badRequest(p.error.flatten());const m=await prisma.message.findUnique({where:{id:messageId}});if(!m||!await member(userId,m.conversationId))return rep.notFound('Message not found');const reaction=await prisma.messageReaction.upsert({where:{messageId_userId_emoji:{messageId,userId,emoji:p.data.emoji}},create:{messageId,userId,emoji:p.data.emoji},update:{}});io.to(`conversation:${m.conversationId}`).emit('reaction:update',{messageId,reaction,action:'add'});return reaction});
-app.delete('/api/messages/:id/reactions',{preHandler:[app.authenticate]},async(r,rep)=>{const {id:userId}=authUser(r),messageId=String((r.params as any).id),emoji=String((r.query as any)?.emoji??'');const m=await prisma.message.findUnique({where:{id:messageId}});if(!m||!await member(userId,m.conversationId))return rep.notFound('Message not found');await prisma.messageReaction.deleteMany({where:{messageId,userId,emoji}});io.to(`conversation:${m.conversationId}`).emit('reaction:update',{messageId,userId,emoji,action:'remove'});return{ok:true}});
-app.patch('/api/messages/:id',{preHandler:[app.authenticate]},async(r,rep)=>{const {id:userId}=authUser(r),messageId=String((r.params as any).id);const p=z.object({body:z.string().trim().min(1).max(10000)}).safeParse(r.body);if(!p.success)return rep.badRequest(p.error.flatten());const m=await prisma.message.findUnique({where:{id:messageId}});if(!m||m.senderId!==userId||m.deletedAt)return rep.notFound('Message not found');const u=await prisma.message.update({where:{id:messageId},data:{body:p.data.body,editedAt:new Date()},include:messageInclude});io.to(`conversation:${m.conversationId}`).emit('message:updated',u);return u});
-app.delete('/api/messages/:id',{preHandler:[app.authenticate]},async(r,rep)=>{const {id:userId}=authUser(r),messageId=String((r.params as any).id);const m=await prisma.message.findUnique({where:{id:messageId}});if(!m||m.senderId!==userId)return rep.notFound('Message not found');const u=await prisma.message.update({where:{id:messageId},data:{body:'',deletedAt:new Date()},include:messageInclude});io.to(`conversation:${m.conversationId}`).emit('message:deleted',{id:messageId,conversationId:m.conversationId,deletedAt:u.deletedAt});return{ok:true}});
-const httpServer=await app.listen({port:PORT,host:'0.0.0.0'});const io=new Server(app.server,{cors:{origin:WEB_ORIGIN,credentials:true}});const online=new Map<string,number>();
-io.use(async(s,n)=>{try{s.data.user=app.jwt.verify(s.handshake.auth?.token??'');n()}catch{n(new Error('Invalid authentication token'))}});
-io.on('connection',async s=>{const userId=s.data.user.id as string;online.set(userId,(online.get(userId)??0)+1);s.join(`user:${userId}`);io.emit('presence:update',{userId,online:true});s.on('conversation:join',async(cid:string)=>{if(await member(userId,cid))s.join(`conversation:${cid}`)});s.on('typing',async d=>{if(await member(userId,d.conversationId))s.to(`conversation:${d.conversationId}`).emit('typing',{userId,typing:!!d.typing})});s.on('message:send',async d=>{if(!d?.conversationId||!d.body?.trim()||!await member(userId,d.conversationId))return;const m=await prisma.message.create({data:{conversationId:d.conversationId,senderId:userId,body:d.body.trim(),replyToId:d.replyToId||null,type:d.type||'text',attachmentUrl:d.attachmentUrl||null,attachmentName:d.attachmentName||null,attachmentMime:d.attachmentMime||null,attachmentSize:d.attachmentSize||null},include:messageInclude});await prisma.conversation.update({where:{id:d.conversationId},data:{updatedAt:new Date()}});io.to(`conversation:${d.conversationId}`).emit('message:new',{...m,clientId:d.clientId})});s.on('disconnect',async()=>{const c=(online.get(userId)??1)-1;if(c<=0){online.delete(userId);await prisma.user.update({where:{id:userId},data:{lastSeenAt:new Date()}}).catch(()=>{});io.emit('presence:update',{userId,online:false})}else online.set(userId,c)})});
-app.log.info(`Global Messenger API listening at ${httpServer}`);
+
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import jwt from '@fastify/jwt';
+import sensible from '@fastify/sensible';
+import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
+import bcrypt from 'bcryptjs';
+import { PrismaClient } from '@prisma/client';
+import { Server } from 'socket.io';
+import { z } from 'zod';
+import path from 'node:path';
+import fs from 'node:fs/promises';
+
+const prisma = new PrismaClient();
+
+const app = Fastify({
+  logger: true
+});
+
+const PORT = Number(process.env.PORT ?? 4000);
+
+const WEB_ORIGIN =
+  process.env.WEB_ORIGIN ?? 'http://localhost:5173';
+
+const UPLOAD_DIR = path.resolve(
+  process.env.UPLOAD_DIR ?? 'uploads'
+);
+
+await fs.mkdir(UPLOAD_DIR, {
+  recursive: true
+});
+
+/* -------------------------------------------------------------------------- */
+/* Plugins                                                                    */
+/* -------------------------------------------------------------------------- */
+
+await app.register(cors, {
+  origin: WEB_ORIGIN,
+  credentials: true
+});
+
+await app.register(sensible);
+
+await app.register(multipart, {
+  limits: {
+    fileSize: 25 * 1024 * 1024
+  }
+});
+
+await app.register(fastifyStatic, {
+  root: UPLOAD_DIR,
+  prefix: '/uploads/'
+});
+
+await app.register(jwt, {
+  secret:
+    process.env.JWT_SECRET ??
+    'development-only-secret'
+});
+
+/* -------------------------------------------------------------------------- */
+/* Types                                                                      */
+/* -------------------------------------------------------------------------- */
+
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    user: {
+      id: string;
+      username: string;
+    };
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Authentication                                                             */
+/* -------------------------------------------------------------------------- */
+
+app.decorate(
+  'authenticate',
+  async (request: any) => {
+    await request.jwtVerify();
+  }
+);
+
+const authUser = (
+  request: any
+): {
+  id: string;
+  username: string;
+} => {
+  return request.user as {
+    id: string;
+    username: string;
+  };
+};
+
+/* -------------------------------------------------------------------------- */
+/* Shared Prisma selections                                                   */
+/* -------------------------------------------------------------------------- */
+
+const userSelect = {
+  id: true,
+  username: true,
+  displayName: true,
+  avatarUrl: true,
+  lastSeenAt: true
+} as const;
+
+const messageInclude = {
+  sender: {
+    select: userSelect
+  },
+  reactions: true,
+  replyTo: {
+    select: {
+      id: true,
+      body: true,
+      senderId: true
+    }
+  }
+} as const;
+
+const conversationInclude = {
+  members: {
+    include: {
+      user: {
+        select: userSelect
+      }
+    }
+  },
+  messages: {
+    orderBy: {
+      createdAt: 'desc' as const
+    },
+    take: 1,
+    include: messageInclude
+  }
+};
+
+/* -------------------------------------------------------------------------- */
+/* Health                                                                     */
+/* -------------------------------------------------------------------------- */
+
+app.get(
+  '/health',
+  async () => {
+    return {
+      ok: true,
+      service: 'global-messenger',
+      time: new Date().toISOString()
+    };
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Validation                                                                 */
+/* -------------------------------------------------------------------------- */
+
+const authSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(3)
+    .max(24)
+    .regex(/^[a-zA-Z0-9_]+$/),
+
+  displayName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(60),
+
+  password: z
+    .string()
+    .min(8)
+    .max(128)
+});
+
+/* -------------------------------------------------------------------------- */
+/* Register                                                                   */
+/* -------------------------------------------------------------------------- */
+
+app.post(
+  '/api/auth/register',
+  async (request, reply) => {
+    const parsed = authSchema.safeParse(
+      request.body
+    );
+
+    if (!parsed.success) {
+      return reply.badRequest(
+        parsed.error.flatten()
+      );
+    }
+
+    const {
+      username,
+      displayName,
+      password
+    } = parsed.data;
+
+    const normalizedUsername =
+      username.toLowerCase();
+
+    const existing =
+      await prisma.user.findUnique({
+        where: {
+          username: normalizedUsername
+        }
+      });
+
+    if (existing) {
+      return reply.conflict(
+        'Username is already taken'
+      );
+    }
+
+    const passwordHash =
+      await bcrypt.hash(password, 12);
+
+    const user =
+      await prisma.user.create({
+        data: {
+          username: normalizedUsername,
+          displayName,
+          passwordHash
+        }
+      });
+
+    const token = app.jwt.sign({
+      id: user.id,
+      username: user.username
+    });
+
+    return reply
+      .code(201)
+      .send({
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          displayName: user.displayName,
+          avatarUrl: user.avatarUrl
+        }
+      });
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Login                                                                      */
+/* -------------------------------------------------------------------------- */
+
+app.post(
+  '/api/auth/login',
+  async (request, reply) => {
+    const parsed = z
+      .object({
+        username: z.string(),
+        password: z.string().min(1)
+      })
+      .safeParse(request.body);
+
+    if (!parsed.success) {
+      return reply.badRequest(
+        parsed.error.flatten()
+      );
+    }
+
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          username:
+            parsed.data.username.toLowerCase()
+        }
+      });
+
+    if (
+      !user ||
+      !(await bcrypt.compare(
+        parsed.data.password,
+        user.passwordHash
+      ))
+    ) {
+      return reply.unauthorized(
+        'Invalid username or password'
+      );
+    }
+
+    await prisma.user.update({
+      where: {
+        id: user.id
+      },
+      data: {
+        lastSeenAt: new Date()
+      }
+    });
+
+    const token = app.jwt.sign({
+      id: user.id,
+      username: user.username
+    });
+
+    return {
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl
+      }
+    };
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* User Search                                                                */
+/* -------------------------------------------------------------------------- */
+
+app.get(
+  '/api/users/search',
+  {
+    preHandler: [app.authenticate]
+  },
+  async request => {
+    const query = String(
+      (request.query as any)?.q ?? ''
+    ).trim();
+
+    if (!query) {
+      return [];
+    }
+
+    return prisma.user.findMany({
+      where: {
+        OR: [
+          {
+            username: {
+              contains: query,
+              mode: 'insensitive'
+            }
+          },
+          {
+            displayName: {
+              contains: query,
+              mode: 'insensitive'
+            }
+          }
+        ]
+      },
+
+      select: userSelect,
+
+      take: 20
+    });
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Conversations                                                              */
+/* -------------------------------------------------------------------------- */
+
+app.get(
+  '/api/conversations',
+  {
+    preHandler: [app.authenticate]
+  },
+  async request => {
+    const { id } = authUser(request);
+
+    return prisma.conversation.findMany({
+      where: {
+        members: {
+          some: {
+            userId: id
+          }
+        }
+      },
+
+      orderBy: {
+        updatedAt: 'desc'
+      },
+
+      include: conversationInclude
+    });
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Direct Conversation                                                        */
+/* -------------------------------------------------------------------------- */
+
+app.post(
+  '/api/conversations/direct',
+  {
+    preHandler: [app.authenticate]
+  },
+  async (request, reply) => {
+    const { id } = authUser(request);
+
+    const parsed = z
+      .object({
+        userId: z.string()
+      })
+      .safeParse(request.body);
+
+    if (!parsed.success) {
+      return reply.badRequest(
+        parsed.error.flatten()
+      );
+    }
+
+    if (parsed.data.userId === id) {
+      return reply.badRequest(
+        'You cannot chat with yourself'
+      );
+    }
+
+    const target =
+      await prisma.user.findUnique({
+        where: {
+          id: parsed.data.userId
+        },
+        select: userSelect
+      });
+
+    if (!target) {
+      return reply.notFound(
+        'User not found'
+      );
+    }
+
+    const existing =
+      await prisma.conversation.findFirst({
+        where: {
+          isGroup: false,
+
+          AND: [
+            {
+              members: {
+                some: {
+                  userId: id
+                }
+              }
+            },
+            {
+              members: {
+                some: {
+                  userId: parsed.data.userId
+                }
+              }
+            }
+          ]
+        },
+
+        include: conversationInclude
+      });
+
+    if (existing) {
+      return existing;
+    }
+
+    return prisma.conversation.create({
+      data: {
+        creatorId: id,
+
+        members: {
+          create: [
+            {
+              userId: id
+            },
+            {
+              userId: parsed.data.userId
+            }
+          ]
+        }
+      },
+
+      include: conversationInclude
+    });
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Group Conversation                                                         */
+/* -------------------------------------------------------------------------- */
+
+app.post(
+  '/api/conversations/group',
+  {
+    preHandler: [app.authenticate]
+  },
+  async (request, reply) => {
+    const { id } = authUser(request);
+
+    const parsed = z
+      .object({
+        title: z
+          .string()
+          .trim()
+          .min(1)
+          .max(80),
+
+        userIds: z
+          .array(z.string())
+          .min(1)
+          .max(100)
+      })
+      .safeParse(request.body);
+
+    if (!parsed.success) {
+      return reply.badRequest(
+        parsed.error.flatten()
+      );
+    }
+
+    const ids = [
+      id,
+      ...parsed.data.userIds.filter(
+        userId => userId !== id
+      )
+    ];
+
+    const users =
+      await prisma.user.findMany({
+        where: {
+          id: {
+            in: ids
+          }
+        },
+
+        select: {
+          id: true
+        }
+      });
+
+    if (
+      users.length !==
+      new Set(ids).size
+    ) {
+      return reply.badRequest(
+        'One or more users were not found'
+      );
+    }
+
+    return prisma.conversation.create({
+      data: {
+        isGroup: true,
+        title: parsed.data.title,
+        creatorId: id,
+
+        members: {
+          create: ids.map(
+            userId => ({
+              userId
+            })
+          )
+        }
+      },
+
+      include: conversationInclude
+    });
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Conversation Membership                                                    */
+/* -------------------------------------------------------------------------- */
+
+async function member(
+  userId: string,
+  conversationId: string
+) {
+  return prisma.conversationMember.findUnique({
+    where: {
+      conversationId_userId: {
+        conversationId,
+        userId
+      }
+    }
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Messages                                                                   */
+/* -------------------------------------------------------------------------- */
+
+app.get(
+  '/api/conversations/:id/messages',
+  {
+    preHandler: [app.authenticate]
+  },
+  async (request, reply) => {
+    const { id } = authUser(request);
+
+    const conversationId =
+      String(
+        (request.params as any).id
+      );
+
+    const isMember =
+      await member(
+        id,
+        conversationId
+      );
+
+    if (!isMember) {
+      return reply.forbidden(
+        'Not a conversation member'
+      );
+    }
+
+    const limit = Math.min(
+      Math.max(
+        Number(
+          (request.query as any)?.limit ??
+            100
+        ),
+        1
+      ),
+      100
+    );
+
+    return prisma.message.findMany({
+      where: {
+        conversationId
+      },
+
+      orderBy: {
+        createdAt: 'asc'
+      },
+
+      take: limit,
+
+      include: messageInclude
+    });
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Read Receipts                                                              */
+/* -------------------------------------------------------------------------- */
+
+app.post(
+  '/api/conversations/:id/read',
+  {
+    preHandler: [app.authenticate]
+  },
+  async (request, reply) => {
+    const { id } = authUser(request);
+
+    const conversationId =
+      String(
+        (request.params as any).id
+      );
+
+    const isMember =
+      await member(
+        id,
+        conversationId
+      );
+
+    if (!isMember) {
+      return reply.forbidden();
+    }
+
+    const at = new Date();
+
+    await prisma.conversationMember.update({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId: id
+        }
+      },
+
+      data: {
+        lastReadAt: at
+      }
+    });
+
+    io
+      .to(`conversation:${conversationId}`)
+      .emit(
+        'message:read',
+        {
+          conversationId,
+          userId: id,
+          at
+        }
+      );
+
+    return {
+      ok: true,
+      at
+    };
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Uploads                                                                    */
+/* -------------------------------------------------------------------------- */
+
+app.post(
+  '/api/uploads',
+  {
+    preHandler: [app.authenticate]
+  },
+  async (request, reply) => {
+    const file =
+      await request.file();
+
+    if (!file) {
+      return reply.badRequest(
+        'File is required'
+      );
+    }
+
+    const safe =
+      path
+        .basename(file.filename)
+        .replace(
+          /[^a-zA-Z0-9._-]/g,
+          '_'
+        );
+
+    const name =
+      `${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}-${safe}`;
+
+    const target =
+      path.join(
+        UPLOAD_DIR,
+        name
+      );
+
+    await fs.writeFile(
+      target,
+      await file.toBuffer()
+    );
+
+    const stat =
+      await fs.stat(target);
+
+    return {
+      url: `/uploads/${name}`,
+      name: file.filename,
+      mime: file.mimetype,
+      size: stat.size
+    };
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Reactions                                                                  */
+/* -------------------------------------------------------------------------- */
+
+app.post(
+  '/api/messages/:id/reactions',
+  {
+    preHandler: [app.authenticate]
+  },
+  async (request, reply) => {
+    const { id: userId } =
+      authUser(request);
+
+    const messageId =
+      String(
+        (request.params as any).id
+      );
+
+    const parsed = z
+      .object({
+        emoji: z
+          .string()
+          .min(1)
+          .max(16)
+      })
+      .safeParse(request.body);
+
+    if (!parsed.success) {
+      return reply.badRequest(
+        parsed.error.flatten()
+      );
+    }
+
+    const message =
+      await prisma.message.findUnique({
+        where: {
+          id: messageId
+        }
+      });
+
+    if (
+      !message ||
+      !(await member(
+        userId,
+        message.conversationId
+      ))
+    ) {
+      return reply.notFound(
+        'Message not found'
+      );
+    }
+
+    const reaction =
+      await prisma.messageReaction.upsert({
+        where: {
+          messageId_userId_emoji: {
+            messageId,
+            userId,
+            emoji: parsed.data.emoji
+          }
+        },
+
+        create: {
+          messageId,
+          userId,
+          emoji: parsed.data.emoji
+        },
+
+        update: {}
+      });
+
+    io
+      .to(
+        `conversation:${message.conversationId}`
+      )
+      .emit(
+        'reaction:update',
+        {
+          messageId,
+          reaction,
+          action: 'add'
+        }
+      );
+
+    return reaction;
+  }
+);
+
+app.delete(
+  '/api/messages/:id/reactions',
+  {
+    preHandler: [app.authenticate]
+  },
+  async (request, reply) => {
+    const { id: userId } =
+      authUser(request);
+
+    const messageId =
+      String(
+        (request.params as any).id
+      );
+
+    const emoji =
+      String(
+        (request.query as any)?.emoji ??
+          ''
+      );
+
+    const message =
+      await prisma.message.findUnique({
+        where: {
+          id: messageId
+        }
+      });
+
+    if (
+      !message ||
+      !(await member(
+        userId,
+        message.conversationId
+      ))
+    ) {
+      return reply.notFound(
+        'Message not found'
+      );
+    }
+
+    await prisma.messageReaction.deleteMany({
+      where: {
+        messageId,
+        userId,
+        emoji
+      }
+    });
+
+    io
+      .to(
+        `conversation:${message.conversationId}`
+      )
+      .emit(
+        'reaction:update',
+        {
+          messageId,
+          userId,
+          emoji,
+          action: 'remove'
+        }
+      );
+
+    return {
+      ok: true
+    };
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Edit Message                                                               */
+/* -------------------------------------------------------------------------- */
+
+app.patch(
+  '/api/messages/:id',
+  {
+    preHandler: [app.authenticate]
+  },
+  async (request, reply) => {
+    const { id: userId } =
+      authUser(request);
+
+    const messageId =
+      String(
+        (request.params as any).id
+      );
+
+    const parsed = z
+      .object({
+        body: z
+          .string()
+          .trim()
+          .min(1)
+          .max(10000)
+      })
+      .safeParse(request.body);
+
+    if (!parsed.success) {
+      return reply.badRequest(
+        parsed.error.flatten()
+      );
+    }
+
+    const message =
+      await prisma.message.findUnique({
+        where: {
+          id: messageId
+        }
+      });
+
+    if (
+      !message ||
+      message.senderId !== userId ||
+      message.deletedAt
+    ) {
+      return reply.notFound(
+        'Message not found'
+      );
+    }
+
+    const updated =
+      await prisma.message.update({
+        where: {
+          id: messageId
+        },
+
+        data: {
+          body: parsed.data.body,
+          editedAt: new Date()
+        },
+
+        include: messageInclude
+      });
+
+    io
+      .to(
+        `conversation:${message.conversationId}`
+      )
+      .emit(
+        'message:updated',
+        updated
+      );
+
+    return updated;
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Delete Message                                                             */
+/* -------------------------------------------------------------------------- */
+
+app.delete(
+  '/api/messages/:id',
+  {
+    preHandler: [app.authenticate]
+  },
+  async (request, reply) => {
+    const { id: userId } =
+      authUser(request);
+
+    const messageId =
+      String(
+        (request.params as any).id
+      );
+
+    const message =
+      await prisma.message.findUnique({
+        where: {
+          id: messageId
+        }
+      });
+
+    if (
+      !message ||
+      message.senderId !== userId
+    ) {
+      return reply.notFound(
+        'Message not found'
+      );
+    }
+
+    const updated =
+      await prisma.message.update({
+        where: {
+          id: messageId
+        },
+
+        data: {
+          body: '',
+          deletedAt: new Date()
+        },
+
+        include: messageInclude
+      });
+
+    io
+      .to(
+        `conversation:${message.conversationId}`
+      )
+      .emit(
+        'message:deleted',
+        {
+          id: messageId,
+          conversationId:
+            message.conversationId,
+          deletedAt:
+            updated.deletedAt
+        }
+      );
+
+    return {
+      ok: true
+    };
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* HTTP Server                                                                */
+/* -------------------------------------------------------------------------- */
+
+const httpServer =
+  await app.listen({
+    port: PORT,
+    host: '0.0.0.0'
+  });
+
+/* -------------------------------------------------------------------------- */
+/* Socket.IO                                                                  */
+/* -------------------------------------------------------------------------- */
+
+const io = new Server(
+  app.server,
+  {
+    cors: {
+      origin: WEB_ORIGIN,
+      credentials: true
+    }
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Online Presence                                                            */
+/* -------------------------------------------------------------------------- */
+
+const online =
+  new Map<string, number>();
+
+/* -------------------------------------------------------------------------- */
+/* Socket Authentication                                                       */
+/* -------------------------------------------------------------------------- */
+
+io.use(
+  async (socket, next) => {
+    try {
+      const token =
+        socket.handshake.auth?.token;
+
+      socket.data.user =
+        app.jwt.verify(token);
+
+      next();
+    } catch {
+      next(
+        new Error(
+          'Invalid authentication token'
+        )
+      );
+    }
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Socket Connections                                                         */
+/* -------------------------------------------------------------------------- */
+
+io.on(
+  'connection',
+  async socket => {
+    const userId =
+      socket.data.user.id as string;
+
+    /* ------------------------------ Online -------------------------------- */
+
+    online.set(
+      userId,
+      (online.get(userId) ?? 0) + 1
+    );
+
+    socket.join(
+      `user:${userId}`
+    );
+
+    io.emit(
+      'presence:update',
+      {
+        userId,
+        online: true
+      }
+    );
+
+    /* ------------------------- Conversation Join -------------------------- */
+
+    socket.on(
+      'conversation:join',
+      async (
+        conversationId: string
+      ) => {
+        if (
+          await member(
+            userId,
+            conversationId
+          )
+        ) {
+          socket.join(
+            `conversation:${conversationId}`
+          );
+        }
+      }
+    );
+
+    /* ---------------------------- Typing ---------------------------------- */
+
+    socket.on(
+      'typing',
+      async data => {
+        if (
+          await member(
+            userId,
+            data.conversationId
+          )
+        ) {
+          socket
+            .to(
+              `conversation:${data.conversationId}`
+            )
+            .emit(
+              'typing',
+              {
+                userId,
+                typing: !!data.typing
+              }
+            );
+        }
+      }
+    );
+
+    /* ------------------------- Message Send ------------------------------- */
+
+    socket.on(
+      'message:send',
+      async data => {
+        try {
+          if (
+            !data?.conversationId ||
+            !data?.body?.trim()
+          ) {
+            socket.emit(
+              'message:failed',
+              {
+                clientId:
+                  data?.clientId,
+                conversationId:
+                  data?.conversationId,
+                error:
+                  'Message body is required'
+              }
+            );
+
+            return;
+          }
+
+          const isMember =
+            await member(
+              userId,
+              data.conversationId
+            );
+
+          if (!isMember) {
+            socket.emit(
+              'message:failed',
+              {
+                clientId:
+                  data.clientId,
+                conversationId:
+                  data.conversationId,
+                error:
+                  'You are not a member of this conversation'
+              }
+            );
+
+            return;
+          }
+
+          /* -------------------------- Persist ----------------------------- */
+
+          const message =
+            await prisma.message.create({
+              data: {
+                conversationId:
+                  data.conversationId,
+
+                senderId:
+                  userId,
+
+                body:
+                  data.body.trim(),
+
+                replyToId:
+                  data.replyToId ||
+                  null,
+
+                type:
+                  data.type ||
+                  'text',
+
+                attachmentUrl:
+                  data.attachmentUrl ||
+                  null,
+
+                attachmentName:
+                  data.attachmentName ||
+                  null,
+
+                attachmentMime:
+                  data.attachmentMime ||
+                  null,
+
+                attachmentSize:
+                  data.attachmentSize ||
+                  null
+              },
+
+              include:
+                messageInclude
+            });
+
+          /* ---------------------- Update Conversation --------------------- */
+
+          await prisma.conversation.update({
+            where: {
+              id:
+                data.conversationId
+            },
+
+            data: {
+              updatedAt:
+                new Date()
+            }
+          });
+
+          /* ----------------------- Broadcast Message ---------------------- */
+
+          io
+            .to(
+              `conversation:${data.conversationId}`
+            )
+            .emit(
+              'message:new',
+              {
+                ...message,
+
+                clientId:
+                  data.clientId
+              }
+            );
+
+          /* ---------------------- Delivery Ack ---------------------------- */
+
+          io
+            .to(
+              `user:${userId}`
+            )
+            .emit(
+              'message:delivered',
+              {
+                messageId:
+                  message.id,
+
+                conversationId:
+                  message.conversationId,
+
+                clientId:
+                  data.clientId,
+
+                deliveredAt:
+                  new Date().toISOString()
+              }
+            );
+        } catch (error) {
+          console.error(
+            'message:send failed:',
+            error
+          );
+
+          /* ---------------------- Failure Ack ---------------------------- */
+
+          socket.emit(
+            'message:failed',
+            {
+              clientId:
+                data?.clientId,
+
+              conversationId:
+                data?.conversationId,
+
+              error:
+                'Unable to send message'
+            }
+          );
+        }
+      }
+    );
+
+    /* ----------------------------- Disconnect ----------------------------- */
+
+    socket.on(
+      'disconnect',
+      async () => {
+        const count =
+          (online.get(userId) ?? 1) -
+          1;
+
+        if (count <= 0) {
+          online.delete(userId);
+
+          await prisma.user
+            .update({
+              where: {
+                id: userId
+              },
+
+              data: {
+                lastSeenAt:
+                  new Date()
+              }
+            })
+            .catch(() => {});
+
+          io.emit(
+            'presence:update',
+            {
+              userId,
+              online: false
+            }
+          );
+        } else {
+          online.set(
+            userId,
+            count
+          );
+        }
+      }
+    );
+  }
+);
+
+/* -------------------------------------------------------------------------- */
+/* Startup                                                                    */
+/* -------------------------------------------------------------------------- */
+
+app.log.info(
+  `Global Messenger API listening at ${httpServer}`
+);
