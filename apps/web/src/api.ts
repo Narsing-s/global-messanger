@@ -1,22 +1,16 @@
 declare global {
   interface Window {
-    __GM_CONFIG__?: {
-      API_URL?: string;
-    };
+    __GM_CONFIG__?: { API_URL?: string };
   }
 }
 
+// Use Render's backend automatically in production. VITE_API_URL can still override it.
 const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
-
-// Production must never silently fall back to localhost.
-const API = configuredApi || (import.meta.env.DEV ? 'http://localhost:4000' : '');
-
-if (!API && !import.meta.env.DEV) {
-  console.error('Global Messenger API URL is not configured. Set VITE_API_URL in the frontend deployment.');
-}
+const API = configuredApi || (import.meta.env.DEV
+  ? 'http://localhost:4000'
+  : 'https://global-messanger-backend.onrender.com');
 
 async function request(path: string, options: RequestInit = {}) {
-  if (!API) throw new Error('API URL is not configured');
   const token = localStorage.getItem('gm_token');
   const res = await fetch(`${API}${path}`, {
     ...options,
@@ -26,9 +20,17 @@ async function request(path: string, options: RequestInit = {}) {
     }
   });
 
-  const data = await res.json().catch(() => ({}));
+  const contentType = res.headers.get('content-type') || '';
+  const text = await res.text();
+  let data: any = {};
+  if (text && contentType.includes('application/json')) {
+    try { data = JSON.parse(text); } catch { data = { message: text }; }
+  } else if (text) {
+    data = { message: text };
+  }
+
   if (!res.ok) {
-    throw new Error(typeof data === 'string' ? data : data.message ?? 'Request failed');
+    throw new Error(data?.message || `Request failed (${res.status})`);
   }
   return data;
 }
