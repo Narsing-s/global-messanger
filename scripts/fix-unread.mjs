@@ -4,20 +4,24 @@ const web = 'apps/web/src/main.tsx';
 const css = 'apps/web/src/styles.css';
 const server = 'apps/server/src/index.ts';
 
-/*
- * Unread-count hardening.
- *
- * The badge belongs ONLY to the conversation avatar, like WhatsApp.
- * The source patch is intentionally regex/marker based because the
- * hardening scripts may run repeatedly and must remain idempotent.
- */
-
 let s = fs.readFileSync(server, 'utf8');
 
-// Add unreadCount to GET /api/conversations. Do not depend on exact whitespace.
+// GET /api/conversations: return each chat with the recipient's unread total.
 if (!s.includes('/* unread-counts */')) {
-  const marker = "    include: conversationInclude\n    });";
-  const replacement = `    include: conversationInclude
+  const routeStart = s.indexOf("app.get(\n  '/api/conversations'");
+  if (routeStart >= 0) {
+    const routeEnd = s.indexOf("\n);", routeStart);
+    if (routeEnd >= 0) {
+      const route = s.slice(routeStart, routeEnd + 3);
+      const find = /return prisma\.conversation\.findMany\(\{[\s\S]*?include: conversationInclude\n    \}\);/;
+      const replacement = `const conversations = await prisma.conversation.findMany({
+      where: {
+        members: {
+          some: { userId: id }
+        }
+      },
+      orderBy: { updatedAt: 'desc' },
+      include: conversationInclude
     });
 
     /* unread-counts */
@@ -32,27 +36,19 @@ if (!s.includes('/* unread-counts */')) {
       });
       return { ...conversation, unreadCount };
     }));`;
-
-  // Only patch the conversations route's first matching include by locating the route.
-  const routeStart = s.indexOf("app.get(\n  '/api/conversations'");
-  if (routeStart >= 0) {
-    const routeEnd = s.indexOf("\n);", routeStart);
-    if (routeEnd >= 0) {
-      const route = s.slice(routeStart, routeEnd + 3);
-      if (route.includes('return prisma.conversation.findMany({') && route.includes('include: conversationInclude')) {
-        const patched = route.replace(marker, replacement);
+      if (find.test(route)) {
+        const patched = route.replace(find, replacement);
         s = s.slice(0, routeStart) + patched + s.slice(routeEnd + 3);
       }
     }
   }
 }
 
-// Emit unread updates after a new message. Find the message:new broadcast block.
+// Emit unread updates after a new message.
 if (!s.includes("emit('unread:update'")) {
   const marker = ".emit(\n              'message:new',\n              {\n                ...message,\n\n                clientId:\n                  data.clientId\n              }\n            );";
   const replacement = `.emit(\n              'message:new',\n              {\n                ...message,\n                clientId: data.clientId\n              }\n            );
 
-          // Update each recipient's chat-list badge in real time.
           const recipients = await prisma.conversationMember.findMany({
             where: { conversationId: data.conversationId, userId: { not: userId } },
             select: { userId: true, lastReadAt: true }
@@ -73,40 +69,35 @@ if (!s.includes("emit('unread:update'")) {
   if (s.includes(marker)) s = s.replace(marker, replacement);
 }
 
-// Make every socket join a private user room so unread:update reaches the user.
+// Put each authenticated socket into a private user room.
 if (!s.includes("socket.join(`user:${userId}`)")) {
   const marker = 'io.on(\'connection\', socket => {';
   if (s.includes(marker)) {
     s = s.replace(marker, `${marker}\n  const userId = String(socket.data.user?.id ?? socket.handshake.auth?.userId ?? '');\n  if (userId) socket.join(\`user:\${userId}\`);`);
   }
 }
-
 fs.writeFileSync(server, s);
 
 let w = fs.readFileSync(web, 'utf8');
 
-// State for unread totals and a ref for the active conversation.
 if (!w.includes('[unread,setUnread]')) {
   const marker = "[conversationLoading,setConversationLoading]=useState(false);";
   const replacement = "[conversationLoading,setConversationLoading]=useState(false),[unread,setUnread]=useState<Record<string,number>>({}),activeConversationRef=useRef('');";
   if (w.includes(marker)) w = w.replace(marker, replacement);
 }
 
-// Realtime unread badge updates.
 if (!w.includes("s.on('unread:update'")) {
   const marker = "s.on('connect',()=>setSocketError(''));";
   const replacement = "s.on('connect',()=>setSocketError(''));s.on('unread:update',(d:any)=>{if(!d?.conversationId)return;const id=String(d.conversationId);setUnread(p=>({...p,[id]:id===activeConversationRef.current?0:Math.max(0,Number(d.unreadCount)||0)}));});";
   if (w.includes(marker)) w = w.replace(marker, replacement);
 }
 
-// Initialize badges from GET /api/conversations.
 if (!w.includes('initialUnread')) {
   const marker = "setChats(Array.isArray(data)?data:[]);const next:Record<string,boolean>={};";
   const replacement = "const list=Array.isArray(data)?data:[];setChats(list);const initialUnread:Record<string,number>={};list.forEach((c:any)=>{initialUnread[String(c.id)]=Math.max(0,Number(c.unreadCount)||0)});setUnread(initialUnread);const next:Record<string,boolean>={};";
   if (w.includes(marker)) w = w.replace(marker, replacement);
 }
 
-// Track the active conversation and clear its badge after it is marked read.
 if (!w.includes('activeConversationRef.current=id')) {
   const marker = "const id=active.id;const requestId=++messageRequest.current;";
   const replacement = "const id=active.id;activeConversationRef.current=id;const requestId=++messageRequest.current;";
@@ -117,13 +108,11 @@ const readMarker = "api.read(id).catch(()=>{});setMobile(true);";
 const readReplacement = "api.read(id).then(()=>setUnread(p=>({...p,[id]:0}))).catch(()=>{});setMobile(true);";
 if (w.includes(readMarker)) w = w.replace(readMarker, readReplacement);
 
-// Put the unread number on the avatar only.
 if (!w.includes('profile-avatar-wrap')) {
   const marker = '<div className="avatar c1">{initials(chatName(c,user.id))}</div><div className="chat-copy">';
   const replacement = '<div className="avatar c1 profile-avatar-wrap">{initials(chatName(c,user.id))}{(unread[c.id]||0)>0&&<span className="unread-badge">{unread[c.id]>99?\'99+\':unread[c.id]}</span>}</div><div className="chat-copy">';
   if (w.includes(marker)) w = w.replace(marker, replacement);
 }
-
 fs.writeFileSync(web, w);
 
 let c = fs.readFileSync(css, 'utf8');
