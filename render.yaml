@@ -2,7 +2,7 @@ services:
   - type: web
     name: global-messenger-api
     runtime: node
-    plan: free
+    plan: starter
     region: singapore
     buildCommand: npm install && npm run db:generate && npm run build -w apps/server
     startCommand: node apps/server/dist/index.js
@@ -37,5 +37,5 @@ services:
 databases:
   - name: global-messenger-db
     databaseName: global_messenger
-    plan: free
+    plan: 0.1c-256mb
     region: singapore
