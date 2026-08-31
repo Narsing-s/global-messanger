@@ -7,8 +7,8 @@
     "apps/server"
   ],
   "scripts": {
-    "predev": "node scripts/harden-app.mjs",
-    "prebuild": "node scripts/harden-app.mjs",
+    "predev": "node scripts/harden-app.mjs && node scripts/fix-chat-switch.mjs && node scripts/error-boundary.mjs",
+    "prebuild": "node scripts/harden-app.mjs && node scripts/fix-chat-switch.mjs && node scripts/error-boundary.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:server": "npm --prefix apps/server run dev",
     "dev:web": "npm --prefix apps/web run dev",
