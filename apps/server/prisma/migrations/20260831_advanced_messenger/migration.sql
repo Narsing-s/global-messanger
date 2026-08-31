@@ -1,9 +1,6 @@
 ALTER TABLE "ConversationMember" ADD COLUMN "mutedUntil" TIMESTAMP(3);
 ALTER TABLE "ConversationMember" ADD COLUMN "archivedAt" TIMESTAMP(3);
 
-ALTER TABLE "User" ADD COLUMN "dummy" TEXT;
-ALTER TABLE "User" DROP COLUMN "dummy";
-
 CREATE TABLE "MessageBookmark" (
     "messageId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
