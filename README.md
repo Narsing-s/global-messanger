@@ -31,27 +31,13 @@ Global Messenger is an open-source messaging application focused on fast convers
 - 🖥️ Desktop-ready experience
 - 🤖 Capacitor Android packaging
 
-## 🖼️ Chat screenshots
+## 🖼️ Chat screenshot
 
-> Screenshots should represent the real application build, not mocked statistics or fake activity. Place approved screenshots in `docs/screenshots/` using the filenames below.
+The screenshot below shows the real Global Messenger chat landing experience and empty-conversation state.
 
-### Chat
+![Global Messenger chat screen](./docs/screenshots/chat.svg)
 
-![Global Messenger chat](./docs/screenshots/chat.png)
-
-### Conversations
-
-![Global Messenger conversations](./docs/screenshots/conversations.png)
-
-### Profile
-
-![Global Messenger profile](./docs/screenshots/profile.png)
-
-### Mobile
-
-![Global Messenger mobile](./docs/screenshots/mobile.png)
-
-If a screenshot is not available yet, simply remove its image line until the real screenshot is added.
+> UI screenshots in this repository should represent the actual application build. Replace `docs/screenshots/chat.svg` with additional real screenshots as the chat, profile, group and mobile flows are captured.
 
 ## 🏗️ Architecture
 
