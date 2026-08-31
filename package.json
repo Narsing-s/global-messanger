@@ -7,7 +7,7 @@
     "apps/server"
   ],
   "scripts": {
-    "dev": "concurrently --raw \"npm --prefix apps/server run dev\" \"npm --prefix apps/web run dev\"",
+    "dev": "concurrently --raw --kill-others-on-fail \"npm run dev:server\" \"npm run dev:web\"",
     "dev:server": "npm --prefix apps/server run dev",
     "dev:web": "npm --prefix apps/web run dev",
     "build": "npm run build -w apps/web && npm run build -w apps/server",
@@ -29,6 +29,7 @@
     "@prisma/client": true,
     "@prisma/engines": true,
     "prisma": true,
+    "prisma@6.3.1": true,
     "protobufjs@7.6.6": true
   }
 }
