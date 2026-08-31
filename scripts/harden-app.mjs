@@ -1,4 +1,4 @@
-﻿import fs from 'node:fs';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,6 +38,10 @@ patch('apps/web/src/main.tsx', [
     "return <div className={`bubble-row ${own?'own':''}`}>",
     "return <div data-message-id={message.id} className={`bubble-row ${own?'own':''}`}>"
   ],
+  [
+    "const s=io(API,{auth:{token},transports:['websocket','polling'],reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:1000});",
+    "const s=io(API,{auth:{token},transports:import.meta.env.DEV?['polling']:['websocket','polling'],upgrade:!import.meta.env.DEV,reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:1000});"
+  ]
 ]);
 
 // When a new socket connects, send it a snapshot of users already online.
@@ -54,5 +58,3 @@ patch('apps/server/src/index.ts', [
 ]);
 
 console.log('[harden] runtime hardening complete');
-
-
