@@ -23,21 +23,38 @@ function patch(file, replacements) {
   }
 }
 
-// Keep the previous chat rendered while the next conversation is loading.
-// This prevents a transient empty React tree/white screen during rapid chat switching.
+// Keep chat switching inside one guarded async transaction. Never blank the
+// current message list while another conversation is being fetched.
 patch('apps/web/src/main.tsx', [
   [
-    'const requestId=++messageRequest.current;setMessages([]);setOtherTyping(false);',
-    'const requestId=++messageRequest.current;setOtherTyping(false);'
+    'const requestId=++messageRequest.current;setOtherTyping(false);setMenu(null);setReaction(null);setReply(null);setEditing(null);setEmojiOpen(false);if(socket.connected)socket.emit(\'conversation:join\',id);api.messages(id).then(data=>{if(cancelled||requestId!==messageRequest.current)return;const next=Array.isArray(data)?data.filter(m=>m?.conversationId===id):[];setMessages(next);setSocketError(\'\')}).catch(e=>{if(cancelled||requestId!==messageRequest.current)return;setSocketError(e.message||\'Unable to load messages\')}).finally(()=>{if(!cancelled&&requestId===messageRequest.current)setConversationLoading(false)});',
+    'const requestId=++messageRequest.current;setOtherTyping(false);setMenu(null);setReaction(null);setReply(null);setEditing(null);setEmojiOpen(false);setConversationLoading(true);if(socket.connected)socket.emit(\'conversation:join\',id);api.messages(id).then(data=>{if(cancelled||requestId!==messageRequest.current)return;const next=Array.isArray(data)?data.filter(m=>m?.conversationId===id):[];setMessages(next);setSocketError(\'\')}).catch(e=>{if(cancelled||requestId!==messageRequest.current)return;setSocketError(e.message||\'Unable to load messages\')}).finally(()=>{if(!cancelled&&requestId===messageRequest.current)setConversationLoading(false)});'
   ],
   [
-    "s.on('presence:update',(d:any)=>{if(d?.userId)setPresence(p=>({...p,[String(d.userId)]:Boolean(d.online)}))});",
-    "s.on('presence:update',(d:any)=>{if(d?.userId){const uid=String(d.userId);const online=Boolean(d.online);setPresence(p=>({...p,[uid]:online}));(window as any).__gmPresence={...((window as any).__gmPresence||{}),[uid]:online};}});"
+    "s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>p.some(x=>x.id===m.id)?p:[...p,m]);setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[])]}:c))});",
+    "s.on('message:new',(m:Message)=>{if(!m?.id||!m?.conversationId)return;if(m.senderId!==me.id)messagePing();setMessages(p=>m.conversationId===activeConversationId.current?(p.some(x=>x.id===m.id)?p:[...p,m]):p);setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[])]}:c))});"
   ],
   [
-    "return <div className={`bubble-row ${own?'own':''}`}>",
-    "return <div data-message-id={message.id} className={`bubble-row ${own?'own':''}`}>"
+    'const fileRef=useRef<HTMLInputElement>(null),lastTypingSound=useRef(0),messageRequest=useRef(0);',
+    'const fileRef=useRef<HTMLInputElement>(null),lastTypingSound=useRef(0),messageRequest=useRef(0),activeConversationId=useRef<string|null>(null);'
   ],
+  [
+    'useEffect(()=>{if(!active||!socket)return;const id=String(active.id);',
+    'useEffect(()=>{activeConversationId.current=active?String(active.id):null;if(!active||!socket)return;const id=String(active.id);'
+  ],
+  [
+    "function Bubble({message,own,onReply,onMenu,menu,onEdit,onDelete,onReact,reactOpen,onEmoji}:{message:Message;own:boolean;",
+    "function Bubble({message,own,onReply,onMenu,menu,onEdit,onDelete,onReact,reactOpen,onEmoji}:{message:Message;own:boolean;"
+  ],
+  [
+    "new Date(message.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})",
+    "(Number.isNaN(new Date(message.createdAt).getTime())?'':new Date(message.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}))"
+  ]
+]);
+
+// Prevent development Socket.IO websocket proxy churn. Polling is stable in
+// Vite dev; production still uses websocket first.
+patch('apps/web/src/main.tsx', [
   [
     "const s=io(API,{auth:{token},transports:['websocket','polling'],reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:1000});",
     "const s=io(API,{auth:{token},transports:import.meta.env.DEV?['polling']:['websocket','polling'],upgrade:!import.meta.env.DEV,reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:1000});"
@@ -45,7 +62,6 @@ patch('apps/web/src/main.tsx', [
 ]);
 
 // When a new socket connects, send it a snapshot of users already online.
-// Without this, the second logged-in user only receives future presence changes.
 patch('apps/server/src/index.ts', [
   [
     "    io.emit(\n      'presence:update',\n      {\n        userId,\n        online: true\n      }\n    );",
