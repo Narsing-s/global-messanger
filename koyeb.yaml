@@ -8,10 +8,6 @@ services:
     ports:
       - port: 8000
         protocol: http
-    health_checks:
-      - port: 8000
-        path: /health
-        protocol: http
     docker:
       dockerfile: apps/server/Dockerfile
     env:
