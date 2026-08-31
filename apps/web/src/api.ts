@@ -10,6 +10,36 @@ const API = configuredApi || (import.meta.env.DEV
   ? 'http://localhost:4000'
   : 'https://global-messenger-api.onrender.com');
 
+type ConversationResponse = {
+  id: string;
+  isGroup?: boolean;
+  title?: string | null;
+  members?: Array<{ user?: any }>;
+  messages?: any[];
+  [key: string]: any;
+};
+
+function normalizeConversation(value: any): ConversationResponse {
+  const conversation = value && typeof value === 'object' ? value : {};
+  return {
+    ...conversation,
+    id: String(conversation.id ?? ''),
+    isGroup: Boolean(conversation.isGroup),
+    title: conversation.title ?? null,
+    members: Array.isArray(conversation.members)
+      ? conversation.members.filter((member: any) => member?.user?.id)
+      : [],
+    messages: Array.isArray(conversation.messages) ? conversation.messages : []
+  };
+}
+
+function normalizeConversations(value: any): ConversationResponse[] {
+  const list = Array.isArray(value) ? value : value?.conversations;
+  return Array.isArray(list)
+    ? list.map(normalizeConversation).filter(conversation => conversation.id)
+    : [];
+}
+
 async function request(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem('gm_token');
   const res = await fetch(`${API}${path}`, {
@@ -37,16 +67,22 @@ async function request(path: string, options: RequestInit = {}) {
 
 export const api = {
   searchUsers: (q: string) => request(`/api/users/search?q=${encodeURIComponent(q)}`),
-  conversations: () => request('/api/conversations'),
-  direct: (userId: string) => request('/api/conversations/direct', { method: 'POST', body: JSON.stringify({ userId }) }),
-  group: (title: string, userIds: string[]) => request('/api/conversations/group', { method: 'POST', body: JSON.stringify({ title, userIds }) }),
-  messages: (id: string, limit = 100) => request(`/api/conversations/${id}/messages?limit=${limit}`),
-  read: (id: string) => request(`/api/conversations/${id}/read`, { method: 'POST' }),
-  editMessage: (id: string, body: string) => request(`/api/messages/${id}`, { method: 'PATCH', body: JSON.stringify({ body }) }),
-  deleteMessage: (id: string) => request(`/api/messages/${id}`, { method: 'DELETE' }),
+  conversations: async () => normalizeConversations(await request('/api/conversations')),
+  direct: async (userId: string) => normalizeConversation(await request('/api/conversations/direct', {
+    method: 'POST',
+    body: JSON.stringify({ userId })
+  })),
+  group: async (title: string, userIds: string[]) => normalizeConversation(await request('/api/conversations/group', {
+    method: 'POST',
+    body: JSON.stringify({ title, userIds })
+  })),
+  messages: (id: string, limit = 100) => request(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`),
+  read: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }),
+  editMessage: (id: string, body: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ body }) }),
+  deleteMessage: (id: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   upload: (file: File) => { const f = new FormData(); f.append('file', file); return request('/api/uploads', { method: 'POST', body: f }); },
-  react: (id: string, emoji: string) => request(`/api/messages/${id}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }),
-  unreact: (id: string, emoji: string) => request(`/api/messages/${id}/reactions`, { method: 'DELETE', body: JSON.stringify({ emoji }) }),
+  react: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }),
+  unreact: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'DELETE', body: JSON.stringify({ emoji }) }),
   registerDevice: (token: string, platform: string) => request('/api/devices', { method: 'POST', body: JSON.stringify({ token, platform }) })
 };
 
