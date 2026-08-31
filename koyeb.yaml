@@ -1,0 +1,27 @@
+name: global-messenger-api
+services:
+  - name: global-messenger-api
+    type: web
+    instance_type: free
+    regions:
+      - fra
+    ports:
+      - port: 8000
+        protocol: http
+    health_checks:
+      - port: 8000
+        path: /health
+        protocol: http
+    docker:
+      dockerfile: apps/server/Dockerfile
+    env:
+      - key: PORT
+        value: "8000"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        secret: DATABASE_URL
+      - key: JWT_SECRET
+        secret: JWT_SECRET
+      - key: WEB_ORIGIN
+        secret: WEB_ORIGIN
