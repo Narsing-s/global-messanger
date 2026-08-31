@@ -32,6 +32,21 @@ const PORT = Number(process.env.PORT ?? 4000);
 const WEB_ORIGIN =
   process.env.WEB_ORIGIN ?? 'http://localhost:5173';
 
+const isAllowedOrigin = (origin?: string | null) => {
+  if (!origin) return true;
+
+  const configured = WEB_ORIGIN
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+
+  const isLocalDev =
+    /^https?:\/\/localhost:\d+$/.test(origin) ||
+    /^https?:\/\/127\.0\.0\.1:\d+$/.test(origin);
+
+  return configured.includes(origin) || isLocalDev;
+};
+
 const UPLOAD_DIR = path.resolve(
   process.env.UPLOAD_DIR ?? 'uploads'
 );
@@ -45,7 +60,9 @@ await fs.mkdir(UPLOAD_DIR, {
 /* -------------------------------------------------------------------------- */
 
 await app.register(cors, {
-  origin: WEB_ORIGIN,
+  origin: (origin, cb) => {
+    cb(null, isAllowedOrigin(origin));
+  },
   credentials: true
 });
 
@@ -1139,7 +1156,9 @@ const io = new Server(
   app.server,
   {
     cors: {
-      origin: WEB_ORIGIN,
+      origin: (origin, callback) => {
+        callback(null, isAllowedOrigin(origin));
+      },
       credentials: true
     }
   }
