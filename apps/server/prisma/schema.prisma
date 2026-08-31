@@ -43,7 +43,7 @@ model Conversation {
   title       String?
   isGroup     Boolean              @default(false)
   createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
   creatorId   String?
   creator     User?                @relation("ConversationCreator", fields: [creatorId], references: [id])
   members     ConversationMember[]
