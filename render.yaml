@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: starter
     region: singapore
-    buildCommand: npm ci && npm run db:generate && npm run build -w apps/server
+    buildCommand: npm ci --include=dev && npm run db:generate && npm run build -w apps/server
     startCommand: npm run db:deploy && node apps/server/dist/index.js
     healthCheckPath: /health
     envVars:
@@ -32,7 +32,7 @@ services:
   - type: static
     name: global-messenger-web
     rootDir: apps/web
-    buildCommand: npm ci && npm run build
+    buildCommand: cd ../.. && npm ci --include=dev && npm run build -w apps/web
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
