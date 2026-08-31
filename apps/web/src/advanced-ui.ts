@@ -9,147 +9,18 @@ function activeConversation(): any | null {
   const cached = (window as any).__gmConversations as any[] | undefined;
   return cached?.find((c: any) => c.isGroup ? (c.title || 'Group') === title : c.members?.some((m: any) => m.user.id !== me.id && m.user.displayName === title)) ?? null;
 }
-
-async function conversations() {
-  const r = await fetch(`${API}/api/conversations`, { headers: headers() });
-  if (!r.ok) throw new Error('Unable to load conversations');
-  const data = await r.json();
-  (window as any).__gmConversations = data;
-  return data;
-}
-
-async function getConversation() {
-  const cached = activeConversation();
-  if (cached) return cached;
-  const data = await conversations();
-  const title = document.querySelector('.chat-heading b')?.textContent?.trim();
-  const me = JSON.parse(localStorage.getItem('gm_user') || '{}');
-  return data.find((c: any) => c.isGroup ? (c.title || 'Group') === title : c.members?.some((m: any) => m.user.id !== me.id && m.user.displayName === title)) ?? null;
-}
-
+async function conversations() { const r = await fetch(`${API}/api/conversations`, { headers: headers() }); if (!r.ok) throw new Error('Unable to load conversations'); const data = await r.json(); (window as any).__gmConversations = data; return data; }
+async function getConversation() { const cached = activeConversation(); if (cached) return cached; const data = await conversations(); const title = document.querySelector('.chat-heading b')?.textContent?.trim(); const me = JSON.parse(localStorage.getItem('gm_user') || '{}'); return data.find((c: any) => c.isGroup ? (c.title || 'Group') === title : c.members?.some((m: any) => m.user.id !== me.id && m.user.displayName === title)) ?? null; }
 function closePanel() { document.getElementById('gm-advanced-center')?.remove(); }
-
-function panel(title: string, body: string) {
-  closePanel();
-  const root = document.createElement('div');
-  root.id = 'gm-advanced-center';
-  root.innerHTML = `<div class="gm-advanced-card"><div class="gm-advanced-head"><div><strong>${title}</strong><small>Global Messenger Advanced</small></div><button data-close>×</button></div><div class="gm-advanced-body">${body}</div></div>`;
-  document.body.appendChild(root);
-  root.querySelector('[data-close]')?.addEventListener('click', closePanel);
-  root.addEventListener('click', e => { if (e.target === root) closePanel(); });
-  return root;
-}
-
-async function searchMessages() {
-  const root = panel('Message search', `<div class="gm-advanced-search"><input id="gm-msg-query" placeholder="Search messages…" autofocus><button id="gm-msg-go">Search</button></div><div id="gm-msg-results"><p class="muted">Search across all conversations.</p></div>`);
-  const input = root.querySelector<HTMLInputElement>('#gm-msg-query')!;
-  const run = async () => {
-    const q = input.value.trim();
-    if (q.length < 2) return;
-    const out = root.querySelector('#gm-msg-results')!;
-    out.innerHTML = '<p class="muted">Searching…</p>';
-    try {
-      const r = await fetch(`${API}/api/messages/search?q=${encodeURIComponent(q)}&limit=50`, { headers: headers() });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.message || 'Search failed');
-      out.innerHTML = data.length ? data.map((m: any) => `<button class="gm-result" data-conversation="${m.conversationId}"><b>${escapeHtml(m.sender?.displayName || 'User')}</b><span>${escapeHtml(m.body)}</span><small>${new Date(m.createdAt).toLocaleString()}</small></button>`).join('') : '<p class="muted">No messages found.</p>';
-      out.querySelectorAll<HTMLButtonElement>('.gm-result').forEach(b => b.onclick = () => { closePanel(); window.dispatchEvent(new CustomEvent('gm:advanced-open-conversation', { detail: { conversationId: b.dataset.conversation } })); });
-    } catch (e: any) { out.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`; }
-  };
-  root.querySelector('#gm-msg-go')!.addEventListener('click', run);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
-}
-
-async function savedMessages() {
-  const root = panel('Saved messages', '<p class="muted">Loading…</p>');
-  try {
-    const r = await fetch(`${API}/api/bookmarks`, { headers: headers() });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.message || 'Unable to load saved messages');
-    root.querySelector('.gm-advanced-body')!.innerHTML = data.length ? data.map((x: any) => `<div class="gm-saved"><b>${escapeHtml(x.message?.sender?.displayName || 'User')}</b><p>${escapeHtml(x.message?.body || '')}</p><small>${new Date(x.createdAt).toLocaleString()}</small></div>`).join('') : '<p class="muted">No saved messages yet.</p>';
-  } catch (e: any) { root.querySelector('.gm-advanced-body')!.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`; }
-}
-
-async function pinnedMessages() {
-  const c = await getConversation();
-  if (!c) return alert('Open a conversation first.');
-  const root = panel('Pinned messages', '<p class="muted">Loading…</p>');
-  try {
-    const r = await fetch(`${API}/api/conversations/${c.id}/pins`, { headers: headers() });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.message || 'Unable to load pinned messages');
-    root.querySelector('.gm-advanced-body')!.innerHTML = data.length ? data.map((x: any) => `<div class="gm-saved"><b>${escapeHtml(x.message?.sender?.displayName || 'User')}</b><p>${escapeHtml(x.message?.body || '')}</p><small>${new Date(x.createdAt).toLocaleString()}</small></div>`).join('') : '<p class="muted">No pinned messages in this conversation.</p>';
-  } catch (e: any) { root.querySelector('.gm-advanced-body')!.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`; }
-}
-
-async function muteConversation() {
-  const c = await getConversation();
-  if (!c) return alert('Open a conversation first.');
-  const value = prompt('Mute for minutes (0 = unmute):', '60');
-  if (value === null) return;
-  const minutes = Number(value);
-  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 525600) return alert('Enter a whole number between 0 and 525600.');
-  const r = await fetch(`${API}/api/conversations/${c.id}/mute`, { method: 'POST', headers: headers(), body: JSON.stringify({ minutes }) });
-  if (!r.ok) return alert('Unable to update mute setting.');
-  alert(minutes ? `Conversation muted for ${minutes} minutes.` : 'Conversation unmuted.');
-}
-
-async function blockCurrentUser() {
-  const c = await getConversation();
-  const me = JSON.parse(localStorage.getItem('gm_user') || '{}');
-  const other = c?.members?.find((m: any) => m.user.id !== me.id)?.user;
-  if (!other) return alert('Open a direct conversation first.');
-  if (!confirm(`Block @${other.username}?`)) return;
-  const r = await fetch(`${API}/api/users/${other.id}/block`, { method: 'POST', headers: headers() });
-  if (!r.ok) return alert('Unable to block user.');
-  alert(`@${other.username} is blocked.`);
-}
-
-function commandCenter() {
-  const root = panel('Command center', `<div class="gm-advanced-grid">
-    <button data-action="search">🔎<b>Search messages</b><span>Search every conversation</span></button>
-    <button data-action="saved">🔖<b>Saved messages</b><span>Your bookmarks</span></button>
-    <button data-action="pins">📌<b>Pinned messages</b><span>Current conversation</span></button>
-    <button data-action="mute">🔕<b>Mute conversation</b><span>Control notifications</span></button>
-    <button data-action="block">🚫<b>Block contact</b><span>Privacy control</span></button>
-    <button data-action="offline">📡<b>Connection</b><span>Offline-first status</span></button>
-  </div>`);
-  root.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(b => b.onclick = () => {
-    const action = b.dataset.action;
-    if (action === 'search') searchMessages();
-    else if (action === 'saved') savedMessages();
-    else if (action === 'pins') pinnedMessages().catch(e => alert(e.message));
-    else if (action === 'mute') muteConversation().catch(e => alert(e.message));
-    else if (action === 'block') blockCurrentUser().catch(e => alert(e.message));
-    else if (action === 'offline') alert(navigator.onLine ? 'You are online. Realtime sync is available.' : 'You are offline. Keep composing; reconnect to sync.');
-  });
-}
-
+function panel(title: string, body: string) { closePanel(); const root = document.createElement('div'); root.id = 'gm-advanced-center'; root.innerHTML = `<div class="gm-advanced-card"><div class="gm-advanced-head"><div><strong>${title}</strong><small>Global Messenger Advanced</small></div><button data-close>×</button></div><div class="gm-advanced-body">${body}</div></div>`; document.body.appendChild(root); root.querySelector('[data-close]')?.addEventListener('click', closePanel); root.addEventListener('click', e => { if (e.target === root) closePanel(); }); return root; }
+async function searchMessages() { const root = panel('Message search', `<div class="gm-advanced-search"><input id="gm-msg-query" placeholder="Search messages…" autofocus><button id="gm-msg-go">Search</button></div><div id="gm-msg-results"><p class="muted">Search across all conversations.</p></div>`); const input = root.querySelector<HTMLInputElement>('#gm-msg-query')!; const run = async () => { const q = input.value.trim(); if (q.length < 2) return; const out = root.querySelector('#gm-msg-results')!; out.innerHTML = '<p class="muted">Searching…</p>'; try { const r = await fetch(`${API}/api/messages/search?q=${encodeURIComponent(q)}&limit=50`, { headers: headers() }); const data = await r.json(); if (!r.ok) throw new Error(data.message || 'Search failed'); out.innerHTML = data.length ? data.map((m: any) => `<button class="gm-result" data-conversation="${m.conversationId}"><b>${escapeHtml(m.sender?.displayName || 'User')}</b><span>${escapeHtml(m.body)}</span><small>${new Date(m.createdAt).toLocaleString()}</small></button>`).join('') : '<p class="muted">No messages found.</p>'; out.querySelectorAll<HTMLButtonElement>('.gm-result').forEach(b => b.onclick = () => { closePanel(); window.dispatchEvent(new CustomEvent('gm:advanced-open-conversation', { detail: { conversationId: b.dataset.conversation } })); }); } catch (e: any) { out.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`; } }; root.querySelector('#gm-msg-go')!.addEventListener('click', run); input.addEventListener('keydown', e => { if (e.key === 'Enter') run(); }); }
+async function savedMessages() { const root = panel('Saved messages', '<p class="muted">Loading…</p>'); try { const r = await fetch(`${API}/api/bookmarks`, { headers: headers() }); const data = await r.json(); if (!r.ok) throw new Error(data.message || 'Unable to load saved messages'); root.querySelector('.gm-advanced-body')!.innerHTML = data.length ? data.map((x: any) => `<div class="gm-saved"><b>${escapeHtml(x.message?.sender?.displayName || 'User')}</b><p>${escapeHtml(x.message?.body || '')}</p><small>${new Date(x.createdAt).toLocaleString()}</small></div>`).join('') : '<p class="muted">No saved messages yet.</p>'; } catch (e: any) { root.querySelector('.gm-advanced-body')!.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`; } }
+async function pinnedMessages() { const c = await getConversation(); if (!c) return alert('Open a conversation first.'); const root = panel('Pinned messages', '<p class="muted">Loading…</p>'); try { const r = await fetch(`${API}/api/conversations/${c.id}/pins`, { headers: headers() }); const data = await r.json(); if (!r.ok) throw new Error(data.message || 'Unable to load pinned messages'); root.querySelector('.gm-advanced-body')!.innerHTML = data.length ? data.map((x: any) => `<div class="gm-saved"><b>${escapeHtml(x.message?.sender?.displayName || 'User')}</b><p>${escapeHtml(x.message?.body || '')}</p><small>${new Date(x.createdAt).toLocaleString()}</small></div>`).join('') : '<p class="muted">No pinned messages in this conversation.</p>'; } catch (e: any) { root.querySelector('.gm-advanced-body')!.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`; } }
+async function muteConversation() { const c = await getConversation(); if (!c) return alert('Open a conversation first.'); const value = prompt('Mute for minutes (0 = unmute):', '60'); if (value === null) return; const minutes = Number(value); if (!Number.isInteger(minutes) || minutes < 0 || minutes > 525600) return alert('Enter a whole number between 0 and 525600.'); const r = await fetch(`${API}/api/conversations/${c.id}/mute`, { method: 'POST', headers: headers(), body: JSON.stringify({ minutes }) }); if (!r.ok) return alert('Unable to update mute setting.'); alert(minutes ? `Conversation muted for ${minutes} minutes.` : 'Conversation unmuted.'); }
+async function blockCurrentUser() { const c = await getConversation(); const me = JSON.parse(localStorage.getItem('gm_user') || '{}'); const other = c?.members?.find((m: any) => m.user.id !== me.id)?.user; if (!other) return alert('Open a direct conversation first.'); if (!confirm(`Block @${other.username}?`)) return; const r = await fetch(`${API}/api/users/${other.id}/block`, { method: 'POST', headers: headers() }); if (!r.ok) return alert('Unable to block user.'); alert(`@${other.username} is blocked.`); }
+async function aiAssistant() { const c = await getConversation(); const context = c?.messages?.slice?.(0, 12)?.map((m: any) => `${m.sender?.displayName || 'User'}: ${m.body || ''}`).join('\n') || ''; const root = panel('AI Assistant', `<p class="muted">Ask AI to summarize, rewrite, explain, brainstorm, or draft a reply.</p><textarea id="gm-ai-prompt" rows="5" placeholder="e.g. Summarize this conversation or draft a polite reply…"></textarea><button id="gm-ai-go" class="gm-ai-button">Ask AI</button><div id="gm-ai-result"></div>`); const input = root.querySelector<HTMLTextAreaElement>('#gm-ai-prompt')!; const out = root.querySelector<HTMLDivElement>('#gm-ai-result')!; root.querySelector('#gm-ai-go')!.addEventListener('click', async () => { const prompt = input.value.trim(); if (!prompt) return; out.innerHTML = '<p class="muted">Thinking…</p>'; try { const r = await fetch(`${API}/api/ai/assist`, { method: 'POST', headers: headers(), body: JSON.stringify({ prompt, context }) }); const data = await r.json(); if (!r.ok) throw new Error(data.message || 'AI request failed'); out.innerHTML = `<div class="gm-ai-answer">${escapeHtml(data.answer)}</div>`; } catch (e: any) { out.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`; } }); input.focus(); }
+function commandCenter() { const root = panel('Command center', `<div class="gm-advanced-grid"><button data-action="search">🔎<b>Search messages</b><span>Search every conversation</span></button><button data-action="saved">🔖<b>Saved messages</b><span>Your bookmarks</span></button><button data-action="pins">📌<b>Pinned messages</b><span>Current conversation</span></button><button data-action="mute">🔕<b>Mute conversation</b><span>Control notifications</span></button><button data-action="block">🚫<b>Block contact</b><span>Privacy control</span></button><button data-action="ai">✨<b>AI Assistant</b><span>Summarize, write and brainstorm</span></button></div>`); root.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(b => b.onclick = () => { const action = b.dataset.action; if (action === 'search') searchMessages(); else if (action === 'saved') savedMessages(); else if (action === 'pins') pinnedMessages().catch(e => alert(e.message)); else if (action === 'mute') muteConversation().catch(e => alert(e.message)); else if (action === 'block') blockCurrentUser().catch(e => alert(e.message)); else if (action === 'ai') aiAssistant().catch(e => alert(e.message)); }); }
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c] as string)); }
-
-function injectStyles() {
-  if (document.getElementById('gm-advanced-style')) return;
-  const s = document.createElement('style'); s.id = 'gm-advanced-style';
-  s.textContent = `#gm-advanced-center{position:fixed;inset:0;z-index:100001;background:rgba(2,6,23,.58);display:grid;place-items:center;padding:18px;font-family:system-ui}.gm-advanced-card{width:min(680px,96vw);max-height:86vh;overflow:auto;background:#fff;border-radius:24px;box-shadow:0 30px 100px #0005;color:#172033}.gm-advanced-head{display:flex;justify-content:space-between;padding:20px 22px;border-bottom:1px solid #e9edf4}.gm-advanced-head strong{font-size:19px}.gm-advanced-head small{display:block;color:#8993a5;margin-top:4px}.gm-advanced-head button{border:0;background:transparent;font-size:26px;cursor:pointer;color:#7b8495}.gm-advanced-body{padding:20px}.gm-advanced-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.gm-advanced-grid button{padding:16px;border:1px solid #e5e9f1;border-radius:15px;background:#fafbfe;text-align:left;cursor:pointer}.gm-advanced-grid b,.gm-advanced-grid span{display:block}.gm-advanced-grid span,.muted{color:#8993a5;font-size:12px;margin-top:4px}.gm-advanced-search{display:flex;gap:8px}.gm-advanced-search input{flex:1;padding:12px;border:1px solid #dce2ec;border-radius:12px}.gm-advanced-search button{padding:12px 16px;border:0;border-radius:12px;background:#536dfe;color:#fff}.gm-result,.gm-saved{display:block;width:100%;box-sizing:border-box;text-align:left;border:0;border-bottom:1px solid #edf0f5;background:transparent;padding:13px 4px}.gm-result{cursor:pointer}.gm-result b,.gm-result span,.gm-result small{display:block}.gm-result span{margin:4px 0}.gm-result small,.gm-saved small{color:#8b94a5;font-size:11px}.gm-saved p{margin:6px 0}.error{color:#dc3545}@media(max-width:600px){.gm-advanced-grid{grid-template-columns:1fr}.gm-advanced-card{border-radius:18px}}`;
-  document.head.appendChild(s);
-}
-
-function offlineIndicator() {
-  const update = () => {
-    let el = document.getElementById('gm-offline-indicator');
-    if (!el) { el = document.createElement('div'); el.id = 'gm-offline-indicator'; document.body.appendChild(el); }
-    el.textContent = navigator.onLine ? '● Online' : '○ Offline — messages will sync when you reconnect';
-    el.style.cssText = `position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:99998;padding:7px 12px;border-radius:999px;background:${navigator.onLine ? '#0f766e' : '#b45309'};color:#fff;font:11px system-ui;box-shadow:0 8px 25px #0002;opacity:${navigator.onLine ? '0.72' : '1'}`;
-  };
-  addEventListener('online', update); addEventListener('offline', update); update();
-}
-
-function commandShortcut() {
-  document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); commandCenter(); } if (e.key === 'Escape') closePanel(); });
-  document.addEventListener('click', e => {
-    const target = e.target as HTMLElement;
-    if (target.closest('.sidebar-bottom button')) setTimeout(() => { const old = document.getElementById('gm-enhance-modal'); if (old && !document.getElementById('gm-advanced-center')) { const btn = document.createElement('button'); btn.textContent = '⚡ Advanced command center'; btn.style.cssText='display:block;width:100%;margin-top:8px;padding:10px;border:0;border-radius:10px;background:#eef1ff;color:#536dfe;font-weight:700;cursor:pointer'; btn.onclick = commandCenter; old.querySelector('.gm-enhance-actions')?.before(btn); } }, 50);
-  });
-}
-
-injectStyles(); offlineIndicator(); commandShortcut();
+function injectStyles() { if (document.getElementById('gm-advanced-style')) return; const s = document.createElement('style'); s.id = 'gm-advanced-style'; s.textContent = `#gm-advanced-center{position:fixed;inset:0;z-index:100001;background:rgba(2,6,23,.58);display:grid;place-items:center;padding:18px;font-family:system-ui}.gm-advanced-card{width:min(680px,96vw);max-height:86vh;overflow:auto;background:#fff;border-radius:24px;box-shadow:0 30px 100px #0005;color:#172033}.gm-advanced-head{display:flex;justify-content:space-between;padding:20px 22px;border-bottom:1px solid #e9edf4}.gm-advanced-head strong{font-size:19px}.gm-advanced-head small{display:block;color:#8993a5;margin-top:4px}.gm-advanced-head button{border:0;background:transparent;font-size:26px;cursor:pointer;color:#7b8495}.gm-advanced-body{padding:20px}.gm-advanced-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.gm-advanced-grid button{padding:16px;border:1px solid #e5e9f1;border-radius:15px;background:#fafbfe;text-align:left;cursor:pointer}.gm-advanced-grid b,.gm-advanced-grid span{display:block}.gm-advanced-grid span,.muted{color:#8993a5;font-size:12px;margin-top:4px}.gm-advanced-search{display:flex;gap:8px}.gm-advanced-search input{flex:1;padding:12px;border:1px solid #dce2ec;border-radius:12px}.gm-advanced-search button{padding:12px 16px;border:0;border-radius:12px;background:#536dfe;color:#fff}.gm-result,.gm-saved{display:block;width:100%;box-sizing:border-box;text-align:left;border:0;border-bottom:1px solid #edf0f5;background:transparent;padding:13px 4px}.gm-result{cursor:pointer}.gm-result b,.gm-result span,.gm-result small{display:block}.gm-result span{margin:4px 0}.gm-result small,.gm-saved small{color:#8b94a5;font-size:11px}.gm-saved p{margin:6px 0}.error{color:#dc3545}.gm-ai-button{display:block;margin-top:10px;width:100%;padding:12px;border:0;border-radius:12px;background:#536dfe;color:#fff;font-weight:700;cursor:pointer}.gm-ai-answer{white-space:pre-wrap;margin-top:14px;padding:14px;border-radius:14px;background:#f5f7fb;line-height:1.55}.gm-advanced-body textarea{width:100%;box-sizing:border-box;resize:vertical;padding:12px;border:1px solid #dce2ec;border-radius:12px;font:inherit}@media(max-width:600px){.gm-advanced-grid{grid-template-columns:1fr}.gm-advanced-card{border-radius:18px}}`; document.head.appendChild(s); }
+function commandShortcut() { document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); commandCenter(); } if (e.key === 'Escape') closePanel(); }); document.addEventListener('click', e => { const target = e.target as HTMLElement; if (target.closest('.sidebar-bottom button')) setTimeout(() => { const old = document.getElementById('gm-enhance-modal'); if (old && !document.getElementById('gm-advanced-center')) { const btn = document.createElement('button'); btn.textContent = '⚡ Advanced command center'; btn.style.cssText='display:block;width:100%;margin-top:8px;padding:10px;border:0;border-radius:10px;background:#eef1ff;color:#536dfe;font-weight:700;cursor:pointer'; btn.onclick = commandCenter; old.querySelector('.gm-enhance-actions')?.before(btn); } }, 50); }); }
+injectStyles(); commandShortcut();
