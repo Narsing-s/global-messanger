@@ -11,6 +11,7 @@
     "build": "npm run build -w apps/web && npm run build -w apps/server",
     "db:generate": "npm run db:generate -w apps/server",
     "db:migrate": "npm run db:migrate -w apps/server",
+    "db:deploy": "npm run db:deploy -w apps/server",
     "android:add": "npm run android:add -w apps/web",
     "android:sync": "npm run android:sync -w apps/web",
     "android:open": "npm run android:open -w apps/web",
