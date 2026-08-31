@@ -1,0 +1,75 @@
+name: Android Build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'apps/web/**'
+      - 'package.json'
+      - '.github/workflows/android-build.yml'
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web app
+        run: npm run build -w apps/web
+
+      - name: Add Android platform
+        working-directory: apps/web
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        working-directory: apps/web
+        run: npx cap sync android
+
+      - name: Configure Android permissions
+        shell: bash
+        run: |
+          MANIFEST="apps/web/android/app/src/main/AndroidManifest.xml"
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('apps/web/android/app/src/main/AndroidManifest.xml')
+          text = p.read_text()
+          permissions = [
+              'android.permission.INTERNET',
+              'android.permission.CAMERA',
+              'android.permission.RECORD_AUDIO',
+              'android.permission.POST_NOTIFICATIONS',
+          ]
+          for perm in permissions:
+              line = f'    <uses-permission android:name="{perm}" />\\n'
+              if perm not in text:
+                  text = text.replace('<application', line + '    <application', 1)
+          p.write_text(text)
+          PY
+
+      - name: Build debug APK
+        working-directory: apps/web/android
+        run: ./gradlew assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: global-messenger-debug-apk
+          path: apps/web/android/app/build/outputs/apk/debug/app-debug.apk
