@@ -7,7 +7,9 @@
     "apps/server"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev -w apps/server\" \"npm run dev -w apps/web\"",
+    "dev": "concurrently --raw \"npm --prefix apps/server run dev\" \"npm --prefix apps/web run dev\"",
+    "dev:server": "npm --prefix apps/server run dev",
+    "dev:web": "npm --prefix apps/web run dev",
     "build": "npm run build -w apps/web && npm run build -w apps/server",
     "db:generate": "npm run db:generate -w apps/server",
     "db:migrate": "npm run db:migrate -w apps/server",
