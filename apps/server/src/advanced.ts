@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 
 type AuthRequest = { user: { id: string; username: string } };
 type IdParams = { id: string };
@@ -61,7 +62,6 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     const email = parsed.data.email.toLowerCase();
     const user = await prisma.user.findUnique({ where: { email } });
 
-    // Always return the same response so account existence is not disclosed.
     if (!user) {
       return {
         ok: true,
@@ -125,8 +125,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
       return reply.badRequest('This password reset link is invalid or has expired.');
     }
 
-    const bcrypt = await import('bcryptjs');
-    const passwordHash = await bcrypt.default.hash(parsed.data.password, 12);
+    const passwordHash = await bcrypt.hash(parsed.data.password, 12);
 
     await prisma.user.update({
       where: { id: user.id },
