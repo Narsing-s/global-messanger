@@ -29,12 +29,14 @@ patch('apps/web/src/main.tsx', [
   ["useEffect(()=>{if(!active||!socket)return;const id=active.id;const requestId=++messageRequest.current;setOtherTyping(false);", "useEffect(()=>{activeConversationId.current=active?String(active.id):null;if(!active||!socket)return;const id=active.id;const requestId=++messageRequest.current;setOtherTyping(false);"],
   ["setEditing(null);setEmojiOpen(false);socket.emit('conversation:join',id);api.messages(id).then(data=>{", "setEditing(null);setEmojiOpen(false);setChats(p=>p.map(c=>c.id===id?{...c,unreadCount:0}:c));socket.emit('conversation:join',id);api.read(id).catch(()=>{});api.messages(id).then(data=>{"],
   ["s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>p.some(x=>x.id===m.id)?p:[...p,m]);setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[])]}:c))});", "s.on('message:new',(m:Message)=>{if(!m?.id||!m?.conversationId)return;const incoming=m.senderId!==me.id;if(incoming)messagePing();setMessages(p=>m.conversationId===activeConversationId.current?(p.some(x=>x.id===m.id)?p:[...p,m]):p);setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[])],unreadCount:incoming&&activeConversationId.current!==m.conversationId?(c.unreadCount||0)+1:c.unreadCount}:c))});"],
-  ["<p>{c.messages?.[0]?.body||'Start a conversation'}</p>", "<p>{c.messages?.[0]?.body||'Start a conversation'}</p>{Boolean(c.unreadCount)&&<span className=\"unread-badge\">{c.unreadCount!>99?'99+':c.unreadCount}</span>}"],
+  ["<div className=\"avatar c1\">{initials(chatName(c,user.id))}</div><div className=\"chat-copy\">", "<div className=\"avatar c1 chat-avatar\">{initials(chatName(c,user.id))}{Boolean(c.unreadCount)&&<span className=\"unread-badge\">{c.unreadCount!>99?'99+':c.unreadCount}</span>}</div><div className=\"chat-copy\">"],
+  ["<p>{c.messages?.[0]?.body||'Start a conversation'}</p>{Boolean(c.unreadCount)&&<span className=\"unread-badge\">{c.unreadCount!>99?'99+':c.unreadCount}</span>}", "<p>{c.messages?.[0]?.body||'Start a conversation'}</p>"],
   ["onClick={()=>{setResults([]);setQuery('');setActive(c)}}", "onClick={()=>{setResults([]);setQuery('');setChats(p=>p.map(x=>x.id===c.id?{...x,unreadCount:0}:x));setActive(c)}}"]
 ]);
 
 patch('apps/web/src/styles.css', [
-  [".chat-item{", ".unread-badge{position:absolute;right:8px;bottom:8px;min-width:20px;height:20px;padding:0 6px;border-radius:999px;display:grid;place-items:center;background:#536dfe;color:#fff;font-size:11px;font-weight:800;z-index:2}.chat-item{"]
+  [".chat-item{", ".chat-item{position:relative;"],
+  [".chat-copy{min-width:0;flex:1}", ".chat-avatar{position:relative}.unread-badge{position:absolute;right:-4px;bottom:-3px;min-width:20px;height:20px;padding:0 5px;border:2px solid #fbfcff;border-radius:999px;display:grid;place-items:center;background:#536dfe;color:#fff;font-size:10px;font-weight:800;line-height:1;box-shadow:0 2px 7px #18203330}.chat-item.selected .unread-badge{border-color:#f0f2f8}.chat-copy{min-width:0;flex:1}"]
 ]);
 
 patch('apps/server/src/index.ts', [
