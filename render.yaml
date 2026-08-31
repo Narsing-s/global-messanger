@@ -21,8 +21,11 @@ services:
       - key: UPLOAD_DIR
         value: /tmp/global-messenger/uploads
 
-  - type: static
+  - type: web
     name: global-messenger-web
+    runtime: static
+    plan: free
+    region: singapore
     rootDir: apps/web
     buildCommand: cd ../.. && npm ci --include=dev && npm run build -w apps/web
     staticPublishPath: dist
