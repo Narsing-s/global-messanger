@@ -1,11 +1,11 @@
 services:
   - type: web
     name: global-messenger-api
-    runtime: docker
+    runtime: node
     plan: free
     region: singapore
-    dockerfilePath: ./apps/server/Dockerfile
-    dockerContext: .
+    buildCommand: npm install --include=dev --include=optional && npm run db:generate && npm run build -w apps/server
+    startCommand: npm run start -w apps/server
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -21,12 +21,11 @@ services:
       - key: UPLOAD_DIR
         value: /tmp/global-messenger/uploads
 
-  - type: web
+  - type: static_site
     name: global-messenger-web
-    runtime: static
     plan: free
     region: singapore
-    buildCommand: rm -rf node_modules && npm install --include=dev --include=optional && npm run build -w apps/web
+    buildCommand: rm -rf node_modules apps/web/node_modules apps/web/dist && npm install --include=dev --include=optional && npm install -w apps/web --include=optional @rollup/rollup-linux-x64-gnu@4.63.1 @rollup/rollup-linux-x64-musl@4.63.1 && npm run build -w apps/web
     staticPublishPath: apps/web/dist
     envVars:
       - key: VITE_API_URL
