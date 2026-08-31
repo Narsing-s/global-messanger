@@ -1,71 +1,57 @@
 # 🌍 Global Messenger
 
-![Global Messenger](./apps/web/public/global-messenger-icon.svg)
+**Free, realtime messaging built for web, mobile and desktop.**
 
-**Global Messenger** is a free realtime messaging product designed for simple, fast conversations across web, Android, iPhone/iPad, Windows and macOS.
+Global Messenger is an open-source messaging application focused on fast conversations, reliable realtime presence, media sharing, profiles, groups and calling across modern devices.
 
-> **Release focus:** realtime reliability, presence accuracy, profile visibility, mobile readiness and a clean user experience.
+![License](https://img.shields.io/badge/license-MIT-green)
+![Node](https://img.shields.io/badge/node-22%2B-blue)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Prisma-316192)
 
-## ✨ Product features
+## ✨ Features
 
 - 💬 Realtime one-to-one messaging
 - 👥 Group conversations
-- 🟢 Online/offline presence
-- 🕐 Last-seen information when offline
-- 👤 Profile photo viewing and management
-- 😊 Emoji picker and reactions
+- 🟢 Online/offline presence and last seen
+- 👤 Profile photos and user profiles
+- 😊 Emoji picker and message reactions
 - ⌨️ Typing indicators
-- 🔔 Notification sounds and incoming-call ringtone
 - 📎 Image and file sharing
 - ↩️ Message replies
-- ✏️ Message editing controls
-- 🗑️ Delete for me / delete for everyone
+- ✏️ Message editing
+- 🗑️ Delete for me / everyone
 - 🧹 Clear chat
 - 💾 Conversation export
-- 📞 Voice calls
-- 📹 Video calls
-- 🎙️ Microphone controls
-- 📷 Camera controls
-- 🔐 JWT authentication + bcrypt passwords
-- 📱 Responsive mobile and desktop UI
+- 📞 Voice and video calling foundation
+- 🎙️ Microphone and camera controls
+- 🔔 Notification sounds
+- 🔐 JWT authentication with bcrypt passwords
+- 📱 Responsive mobile UI
+- 🖥️ Desktop-ready experience
 - 🤖 Capacitor Android packaging
 
-## 🎯 User experience goals
+## 🖼️ Chat screenshots
 
-Global Messenger is intended to be **free for end users**. The interface should stay understandable for a first-time user while remaining useful for people who have many active conversations.
+> Screenshots should represent the real application build, not mocked statistics or fake activity. Place approved screenshots in `docs/screenshots/` using the filenames below.
 
-### Welcome experience
-- New account: **Welcome to Global Messenger**
-- Existing account: **Welcome to Global Messenger — welcome back**
-- Time-aware greeting: **Good morning / Good afternoon / Good evening / Good night**
-- No misleading online/offline indicator on the login screen
+### Chat
 
-### Profiles
-Tap a contact's avatar/name in a conversation to view:
-- Profile photo, when available
-- Display name
-- Username
-- Online status
-- Last seen information when offline
+![Global Messenger chat](./docs/screenshots/chat.png)
 
-## 🖼️ Product screenshots
+### Conversations
 
-Store screenshots should be captured from a real production build after the two-account QA pass. Recommended screenshots:
+![Global Messenger conversations](./docs/screenshots/conversations.png)
 
-| Screen | What it should demonstrate |
-|---|---|
-| Welcome | Clean first impression and sign-in flow |
-| Register | Fast account creation |
-| Chats | Multiple active conversations |
-| Conversation | Realtime messaging |
-| Profile | Photo + online/offline + last seen |
-| Group | Group conversation |
-| Media | Image/file sharing |
-| Calls | Voice/video call UI |
-| Mobile | Android/iPhone responsive layout |
-| Desktop | Windows/macOS wide layout |
+### Profile
 
-Do not use development URLs, fake statistics, fake reviews or mocked user activity in store assets.
+![Global Messenger profile](./docs/screenshots/profile.png)
+
+### Mobile
+
+![Global Messenger mobile](./docs/screenshots/mobile.png)
+
+If a screenshot is not available yet, simply remove its image line until the real screenshot is added.
 
 ## 🏗️ Architecture
 
@@ -74,8 +60,9 @@ Global Messenger
 ├── apps/
 │   ├── web/          React + TypeScript + Vite + Capacitor
 │   └── server/       Fastify API + Socket.IO
-├── prisma/           PostgreSQL + Prisma
-├── docs/             Development, deployment and store guides
+├── apps/server/prisma/
+│   └── schema.prisma PostgreSQL data model
+├── docs/             Development and release documentation
 ├── .github/
 │   └── workflows/   CI workflows
 └── package.json
@@ -83,13 +70,17 @@ Global Messenger
 
 ## 🧰 Technology stack
 
-- Frontend: React, TypeScript, Vite, Lucide
-- Mobile: Capacitor
-- Backend: Node.js, Fastify, Socket.IO
-- Database: PostgreSQL + Prisma
-- Authentication: JWT + bcrypt
-- Calls: WebRTC
-- Deployment: Docker-compatible hosting
+| Layer | Technology |
+|---|---|
+| Frontend | React + TypeScript + Vite |
+| UI | Modern responsive CSS + Lucide |
+| Backend | Node.js + Fastify |
+| Realtime | Socket.IO |
+| Database | PostgreSQL + Prisma |
+| Authentication | JWT + bcrypt |
+| Calls | WebRTC foundation |
+| Mobile | Capacitor |
+| Containers | Docker Compose |
 
 ## 🚀 Run locally
 
@@ -97,92 +88,200 @@ Global Messenger
 
 - Node.js 22+
 - npm
-- PostgreSQL or Docker Desktop
+- Docker Desktop (recommended for PostgreSQL)
 - Git
 
-### Install
+### 1. Clone
 
 ```bash
 git clone https://github.com/Narsing-s/global-messanger.git
 cd global-messanger
+```
+
+### 2. Install dependencies
+
+```bash
 npm install
+```
+
+### 3. Start PostgreSQL
+
+```bash
+docker compose up -d postgres
+```
+
+### 4. Generate Prisma Client and sync the database
+
+```bash
 npm run db:generate
-npm run build
+npm run db:push
+```
+
+If the workspace scripts differ, run the equivalent commands from `apps/server`:
+
+```bash
+cd apps/server
+npx prisma generate --schema ./prisma/schema.prisma
+npx prisma db push --schema ./prisma/schema.prisma
+```
+
+### 5. Start the application
+
+From the repository root:
+
+```bash
 npm run dev
 ```
 
-Typical local ports:
+The API normally listens on:
 
-- Web: `5173`
-- API: `4000`
+```text
+http://localhost:4000
+```
 
-### Health check
+The web application normally runs on the Vite development port shown by the terminal.
 
-```bash
+### API health check
+
+PowerShell:
+
+```powershell
+Invoke-RestMethod http://localhost:4000/health
+```
+
+Command Prompt:
+
+```cmd
 curl http://localhost:4000/health
 ```
 
-Expected response contains `"ok":true`.
+A healthy server should return a successful health response.
 
-## 📱 Cross-platform release
+## 🔐 Authentication
 
-Global Messenger uses a shared web client so the product can be delivered consistently across:
+Protected API routes require a valid JWT access token. A `401 No Authorization was found in request.headers` response from a protected endpoint such as `/api/conversations` means the server is running but the request does not contain an access token. This is expected for unauthenticated requests.
 
-- Android / Google Play
-- iPhone / iPad / App Store
-- Windows desktop
-- macOS desktop
-- Modern browsers
+The login endpoint should be used first, after which the client must persist and send the returned token using the `Authorization: Bearer <token>` header.
 
-See [`docs/STORE_RELEASE.md`](./docs/STORE_RELEASE.md) for the release path, signing, privacy and store requirements.
+## 🗄️ Database
 
-## 🧪 Realtime two-account QA
+The application uses PostgreSQL through Prisma. Current core models include:
 
-Before calling a release production-ready, test with two independent accounts and preferably two browsers/devices:
+- User
+- Conversation
+- ConversationMember
+- Message
+- MessageReaction
+- MessageBookmark
+- PinnedMessage
+- PushDevice
+- UserBlock
 
-1. Login Account A.
-2. Login Account B.
-3. Confirm A sees B online.
-4. Confirm B sees A online.
-5. Open several conversations from A.
-6. Switch quickly between conversations.
-7. Send messages from both accounts at the same time.
-8. Confirm no blank/white chat screen appears.
-9. Disconnect/reconnect one client.
-10. Confirm presence does not incorrectly flip offline while another session is still connected.
-11. Confirm the final disconnect marks the user offline.
+Useful commands:
+
+```bash
+npx prisma validate --schema ./apps/server/prisma/schema.prisma
+npx prisma generate --schema ./apps/server/prisma/schema.prisma
+npx prisma db push --schema ./apps/server/prisma/schema.prisma
+```
+
+## 🧪 Realtime QA checklist
+
+Use two independent accounts and preferably two browsers/devices:
+
+1. Login Account A and Account B.
+2. Confirm both users can see each other online.
+3. Send messages in both directions.
+4. Switch between several conversations quickly.
+5. Verify messages appear without a refresh.
+6. Verify typing indicators.
+7. Test reactions, replies, editing and deletion.
+8. Test image/file sharing.
+9. Disconnect and reconnect one client.
+10. Verify presence only becomes offline after the user's final active connection disconnects.
+11. Verify last-seen information after disconnect.
 12. Test profile photo viewing.
-13. Test last-seen display after disconnect.
-14. Test groups, reactions, replies, files and calls.
+13. Test group conversations.
+14. Test microphone/camera permissions and calling UI.
+15. Confirm there are no blank or white chat screens.
 
-## 🛡️ Production requirements
+## 🛡️ Production checklist
 
-Before public launch:
+Before a public launch, configure:
 
-- HTTPS/WSS everywhere
+- HTTPS and secure WebSockets
 - Strong production JWT secret
-- PostgreSQL backups and restore testing
+- Production PostgreSQL backups and restore testing
 - Rate limiting and abuse protection
-- Safe persistent media storage
+- Persistent media/object storage
 - Restricted production CORS
-- Error monitoring and structured logs
+- Structured logs and error monitoring
 - Privacy Policy and Terms of Service
-- Account/data deletion workflow
-- Accurate Google Play Data Safety declaration
-- Camera/microphone/notification permission handling
-- Production STUN/TURN for reliable calls
+- Account and data deletion workflow
+- Camera, microphone and notification permission handling
+- Production STUN/TURN infrastructure for reliable WebRTC calls
 - Secure environment variables
-- Signed mobile/desktop packages
+- Signed Android/desktop packages
+
+Never commit `.env` files, passwords, private keys, JWT secrets or database credentials.
+
+## 📱 Platforms
+
+The shared web client is designed to support:
+
+- 🌐 Modern browsers
+- 🤖 Android through Capacitor
+- 🍎 iPhone/iPad through Capacitor
+- 🪟 Windows desktop packaging
+- 🍎 macOS desktop packaging
+
+Platform-specific signing, store metadata and release procedures should be documented under `docs/` as the release process matures.
 
 ## 💰 Pricing
 
 **Free for end users.**
 
-Infrastructure, storage and third-party service costs are operational concerns; they must never be presented to users as a mandatory subscription unless the product strategy is intentionally changed later.
+Operational infrastructure costs are separate from the product's user-facing pricing model.
+
+## 🤝 Contributing
+
+Contributions are welcome — bug fixes, accessibility improvements, UI improvements, documentation, testing and new features.
+
+### Contribution workflow
+
+```bash
+git checkout -b feature/my-improvement
+npm install
+npm run build
+# run relevant tests / QA
+git add .
+git commit -m "feat: describe the change"
+git push origin feature/my-improvement
+```
+
+Then open a pull request with:
+
+- What changed
+- Why it changed
+- Screenshots for UI changes
+- Testing performed
+- Any migration or environment-variable requirements
+
+## 🐛 Feedback and issues
+
+Please report reproducible bugs with:
+
+- Browser/device and OS
+- Steps to reproduce
+- Expected behavior
+- Actual behavior
+- Relevant console/server logs
+- Screenshot or short recording when useful
+
+Do not post passwords, tokens, private keys, personal messages or other sensitive information in an issue.
 
 ## 📚 Documentation
 
-- [`docs/STORE_RELEASE.md`](./docs/STORE_RELEASE.md) — Android, iOS, Windows, macOS and store release plan
 - [`docs/01-getting-started.md`](./docs/01-getting-started.md)
 - [`docs/02-architecture.md`](./docs/02-architecture.md)
 - [`docs/03-features.md`](./docs/03-features.md)
@@ -191,10 +290,11 @@ Infrastructure, storage and third-party service costs are operational concerns; 
 - [`docs/06-android-play-store.md`](./docs/06-android-play-store.md)
 - [`docs/07-release-checklist.md`](./docs/07-release-checklist.md)
 - [`docs/08-contributing.md`](./docs/08-contributing.md)
+- [`docs/STORE_RELEASE.md`](./docs/STORE_RELEASE.md)
 
-## 🤝 Contributing
+## 📄 License
 
-Bug reports, feature requests, documentation improvements and pull requests are welcome. Keep changes focused, tested and documented.
+Global Messenger is released under the **MIT License**. See [`LICENSE`](./LICENSE).
 
 ## 🌐 Repository
 
@@ -203,14 +303,17 @@ https://github.com/Narsing-s/global-messanger
 ## 📝 Store copy
 
 ### Short description
+
 **Free realtime messaging for everyone — chat, share, react and connect without borders.**
 
 ### Long description
+
 **Global Messenger is a free, friendly messaging app built for fast conversations without unnecessary complexity.**
 
 Chat privately or create group conversations, share images and files, see when people are online, and keep conversations moving with realtime delivery. Global Messenger is designed for phones, tablets and desktop users with a responsive experience across platforms.
 
 **Highlights**
+
 - Free messaging
 - Private one-to-one conversations
 - Group chats
