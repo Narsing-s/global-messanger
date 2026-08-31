@@ -1,11 +1,11 @@
 services:
   - type: web
     name: global-messenger-api
-    runtime: node
-    plan: starter
+    runtime: docker
+    plan: free
     region: singapore
-    buildCommand: npm ci --include=dev && npm run db:generate && npm run build -w apps/server
-    startCommand: npm run db:deploy && node apps/server/dist/index.js
+    dockerfilePath: ./apps/server/Dockerfile
+    dockerContext: .
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -14,20 +14,12 @@ services:
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
-      - key: PORT
-        value: 10000
-      - key: HOST
-        value: 0.0.0.0
       - key: NODE_ENV
         value: production
       - key: WEB_ORIGIN
         value: https://global-messenger-web.onrender.com
       - key: UPLOAD_DIR
-        value: /var/data/uploads
-    disk:
-      name: global-messenger-uploads
-      mountPath: /var/data
-      sizeGB: 1
+        value: /tmp/global-messenger/uploads
 
   - type: static
     name: global-messenger-web
