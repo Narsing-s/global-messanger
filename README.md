@@ -1,31 +1,71 @@
 # 🌍 Global Messenger
 
-A modern realtime messaging and calling platform built for fast conversations, voice/video calls, media sharing and a clean cross-device experience.
+![Global Messenger](./apps/web/public/global-messenger-icon.svg)
 
-> **Status:** Active development. Web features are being hardened while the Android/Google Play release pipeline is being prepared.
+**Global Messenger** is a free realtime messaging product designed for simple, fast conversations across web, Android, iPhone/iPad, Windows and macOS.
 
-## ✨ Features
+> **Release focus:** realtime reliability, presence accuracy, profile visibility, mobile readiness and a clean user experience.
+
+## ✨ Product features
 
 - 💬 Realtime one-to-one messaging
 - 👥 Group conversations
+- 🟢 Online/offline presence
+- 🕐 Last-seen information when offline
+- 👤 Profile photo viewing and management
 - 😊 Emoji picker and reactions
-- ⌨️ Typing indicators and typing sounds
-- 🔔 Notification sounds and incoming call ringtones
+- ⌨️ Typing indicators
+- 🔔 Notification sounds and incoming-call ringtone
 - 📎 Image and file sharing
 - ↩️ Message replies
-- ✏️ Message editing with a one-hour window
-- 🗑️ Delete for me / delete for everyone with a one-hour everyone window
+- ✏️ Message editing controls
+- 🗑️ Delete for me / delete for everyone
 - 🧹 Clear chat
-- 💾 Conversation backup/export
-- 👤 Profile photo support
+- 💾 Conversation export
 - 📞 Voice calls
 - 📹 Video calls
-- 🎙️ Microphone mute/unmute
-- 📷 Camera on/off
-- 🔐 JWT authentication and bcrypt password hashing
-- 📋 Call logs in conversations
-- 📱 Responsive desktop/mobile web UI
-- 🤖 Android packaging with Capacitor
+- 🎙️ Microphone controls
+- 📷 Camera controls
+- 🔐 JWT authentication + bcrypt passwords
+- 📱 Responsive mobile and desktop UI
+- 🤖 Capacitor Android packaging
+
+## 🎯 User experience goals
+
+Global Messenger is intended to be **free for end users**. The interface should stay understandable for a first-time user while remaining useful for people who have many active conversations.
+
+### Welcome experience
+- New account: **Welcome to Global Messenger**
+- Existing account: **Welcome to Global Messenger — welcome back**
+- Time-aware greeting: **Good morning / Good afternoon / Good evening / Good night**
+- No misleading online/offline indicator on the login screen
+
+### Profiles
+Tap a contact's avatar/name in a conversation to view:
+- Profile photo, when available
+- Display name
+- Username
+- Online status
+- Last seen information when offline
+
+## 🖼️ Product screenshots
+
+Store screenshots should be captured from a real production build after the two-account QA pass. Recommended screenshots:
+
+| Screen | What it should demonstrate |
+|---|---|
+| Welcome | Clean first impression and sign-in flow |
+| Register | Fast account creation |
+| Chats | Multiple active conversations |
+| Conversation | Realtime messaging |
+| Profile | Photo + online/offline + last seen |
+| Group | Group conversation |
+| Media | Image/file sharing |
+| Calls | Voice/video call UI |
+| Mobile | Android/iPhone responsive layout |
+| Desktop | Windows/macOS wide layout |
+
+Do not use development URLs, fake statistics, fake reviews or mocked user activity in store assets.
 
 ## 🏗️ Architecture
 
@@ -34,18 +74,17 @@ Global Messenger
 ├── apps/
 │   ├── web/          React + TypeScript + Vite + Capacitor
 │   └── server/       Fastify API + Socket.IO
-├── prisma/           PostgreSQL/Prisma data layer
-├── docs/             Development, deployment and release guides
+├── prisma/           PostgreSQL + Prisma
+├── docs/             Development, deployment and store guides
 ├── .github/
-│   └── workflows/
-│       └── android-build.yml
+│   └── workflows/   CI workflows
 └── package.json
 ```
 
 ## 🧰 Technology stack
 
 - Frontend: React, TypeScript, Vite, Lucide
-- Mobile: Capacitor Android
+- Mobile: Capacitor
 - Backend: Node.js, Fastify, Socket.IO
 - Database: PostgreSQL + Prisma
 - Authentication: JWT + bcrypt
@@ -54,9 +93,9 @@ Global Messenger
 
 ## 🚀 Run locally
 
-### Prerequisites
+### Requirements
 
-- Node.js 22 recommended
+- Node.js 22+
 - npm
 - PostgreSQL or Docker Desktop
 - Git
@@ -68,139 +107,119 @@ git clone https://github.com/Narsing-s/global-messanger.git
 cd global-messanger
 npm install
 npm run db:generate
+npm run build
 npm run dev
 ```
 
-Typical development ports:
+Typical local ports:
 
 - Web: `5173`
 - API: `4000`
 
-## 🤖 Build the Android app
+### Health check
 
-The Android application uses Capacitor around the existing React/Vite client. Capacitor supports adding Android to an existing web application and syncing the built web assets into the native project. citeturn1search0turn1search1
-
-### First Android build on Windows
-
-Install Android Studio and Android SDK/API 36+, then:
-
-```powershell
-cd C:\Users\91938\Desktop\global-messanger
-npm install
-npm run build -w apps/web
-npm run android:add
-npm run android:sync
-npm run android:open
+```bash
+curl http://localhost:4000/health
 ```
 
-The generated native project is:
+Expected response contains `"ok":true`.
 
-```text
-apps/web/android
-```
+## 📱 Cross-platform release
 
-To run on a connected Android phone:
+Global Messenger uses a shared web client so the product can be delivered consistently across:
 
-```powershell
-npm run android:run
-```
+- Android / Google Play
+- iPhone / iPad / App Store
+- Windows desktop
+- macOS desktop
+- Modern browsers
 
-### Android application identity
+See [`docs/STORE_RELEASE.md`](./docs/STORE_RELEASE.md) for the release path, signing, privacy and store requirements.
 
-```text
-App name:       Global Messenger
-Application ID: com.globalmessenger.app
-Web directory:  apps/web/dist
-```
+## 🧪 Realtime two-account QA
 
-### CI Android build
+Before calling a release production-ready, test with two independent accounts and preferably two browsers/devices:
 
-`.github/workflows/android-build.yml` automatically creates the Capacitor Android project and produces a debug APK artifact on matching pushes or manual workflow runs.
-
-The CI APK is for testing. A Play Store release must be a properly signed Android App Bundle (`.aab`).
-
-## 🏪 Google Play release
-
-Google's current requirement is that, starting **August 31, 2026**, new apps and updates submitted to Google Play target **Android 16 / API 36 or higher**. citeturn0search0
-
-Recommended release path:
-
-```text
-Production backend
-      ↓
-Android build
-      ↓
-Real-device QA
-      ↓
-Signed .aab
-      ↓
-Play internal testing
-      ↓
-Closed testing
-      ↓
-Production review
-      ↓
-🌍 Global Messenger on Google Play
-```
-
-Before public release, complete the Privacy Policy, Terms of Service, Data Safety, account deletion, production HTTPS/WSS, WebRTC TURN and media-storage requirements.
-
-## 🧪 Two-account QA
-
-Always test with separate Account A and Account B:
-
-1. Register/login.
-2. Start one-to-one chat.
-3. Send text and emoji.
-4. Confirm realtime delivery.
-5. Test typing indicator and typing sound.
-6. Test edit within one hour.
-7. Test delete for me.
-8. Test delete for everyone within one hour.
-9. Confirm older messages cannot be deleted for everyone.
-10. Test group chat.
-11. Test voice/video call.
-12. Test camera/microphone permissions.
-13. Test ringtone, accept, decline and end call.
-14. Confirm call logs appear in chat.
-15. Change/cancel profile photo.
-16. Export chat backup.
-17. Test Clear Chat.
-18. Test network loss and reconnect.
-
-## 📚 Documentation
-
-- [Getting Started](./docs/01-getting-started.md)
-- [Architecture](./docs/02-architecture.md)
-- [Features](./docs/03-features.md)
-- [Testing & QA](./docs/04-testing.md)
-- [Production Deployment](./docs/05-production-deployment.md)
-- [Android & Play Store](./docs/06-android-play-store.md)
-- [Release Checklist](./docs/07-release-checklist.md)
-- [Contributing](./docs/08-contributing.md)
+1. Login Account A.
+2. Login Account B.
+3. Confirm A sees B online.
+4. Confirm B sees A online.
+5. Open several conversations from A.
+6. Switch quickly between conversations.
+7. Send messages from both accounts at the same time.
+8. Confirm no blank/white chat screen appears.
+9. Disconnect/reconnect one client.
+10. Confirm presence does not incorrectly flip offline while another session is still connected.
+11. Confirm the final disconnect marks the user offline.
+12. Test profile photo viewing.
+13. Test last-seen display after disconnect.
+14. Test groups, reactions, replies, files and calls.
 
 ## 🛡️ Production requirements
 
 Before public launch:
 
 - HTTPS/WSS everywhere
-- Strong JWT secrets
-- PostgreSQL backup/restore testing
+- Strong production JWT secret
+- PostgreSQL backups and restore testing
 - Rate limiting and abuse protection
-- Safe media storage and validation
-- Restricted CORS
-- Error monitoring
-- Privacy Policy and Terms
-- Account/data deletion
-- Accurate Play Data Safety declaration
-- Android camera/microphone/notification permission handling
-- Production STUN/TURN configuration
+- Safe persistent media storage
+- Restricted production CORS
+- Error monitoring and structured logs
+- Privacy Policy and Terms of Service
+- Account/data deletion workflow
+- Accurate Google Play Data Safety declaration
+- Camera/microphone/notification permission handling
+- Production STUN/TURN for reliable calls
 - Secure environment variables
+- Signed mobile/desktop packages
+
+## 💰 Pricing
+
+**Free for end users.**
+
+Infrastructure, storage and third-party service costs are operational concerns; they must never be presented to users as a mandatory subscription unless the product strategy is intentionally changed later.
+
+## 📚 Documentation
+
+- [`docs/STORE_RELEASE.md`](./docs/STORE_RELEASE.md) — Android, iOS, Windows, macOS and store release plan
+- [`docs/01-getting-started.md`](./docs/01-getting-started.md)
+- [`docs/02-architecture.md`](./docs/02-architecture.md)
+- [`docs/03-features.md`](./docs/03-features.md)
+- [`docs/04-testing.md`](./docs/04-testing.md)
+- [`docs/05-production-deployment.md`](./docs/05-production-deployment.md)
+- [`docs/06-android-play-store.md`](./docs/06-android-play-store.md)
+- [`docs/07-release-checklist.md`](./docs/07-release-checklist.md)
+- [`docs/08-contributing.md`](./docs/08-contributing.md)
 
 ## 🤝 Contributing
 
-Issues, bug reports, feature ideas and pull requests are welcome. See [Contributing](./docs/08-contributing.md).
+Bug reports, feature requests, documentation improvements and pull requests are welcome. Keep changes focused, tested and documented.
 
 ## 🌐 Repository
 
 https://github.com/Narsing-s/global-messanger
+
+## 📝 Store copy
+
+### Short description
+**Free realtime messaging for everyone — chat, share, react and connect without borders.**
+
+### Long description
+**Global Messenger is a free, friendly messaging app built for fast conversations without unnecessary complexity.**
+
+Chat privately or create group conversations, share images and files, see when people are online, and keep conversations moving with realtime delivery. Global Messenger is designed for phones, tablets and desktop users with a responsive experience across platforms.
+
+**Highlights**
+- Free messaging
+- Private one-to-one conversations
+- Group chats
+- Realtime online/offline presence
+- Profile photos
+- Image and file sharing
+- Replies and reactions
+- Message editing and deletion controls
+- Voice and video calling foundation
+- Android, iPhone/iPad, Windows and macOS experience
+
+Global Messenger is intended to remain free for end users.
