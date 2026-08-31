@@ -1,3 +1,6 @@
+import { installEnhancements } from './enhancements';
+import { initPushNotifications } from './push';
+
 let ctx: AudioContext | null = null;
 let audioUnlocked = false;
 let ringtoneTimer: number | undefined;
@@ -69,19 +72,23 @@ if (typeof document !== 'undefined') {
   document.addEventListener('pointerdown', unlock, { passive: true, once: true });
   document.addEventListener('keydown', unlock, { passive: true, once: true });
 
-  // Typing feedback is intentionally local-only. It never sends or plays
-  // sounds merely because another user is typing.
+  // Typing feedback is local-only and throttled so fast typing stays comfortable.
   document.addEventListener('input', event => {
     const target = event.target as HTMLInputElement | HTMLTextAreaElement | null;
     if (!target || target.type === 'file' || target.disabled || target.readOnly) return;
     if (!target.matches('input:not([type="hidden"]), textarea')) return;
 
-    // A real keyboard/input gesture is enough to unlock audio in supported browsers.
+    // Keyboard/input interaction is a user gesture in supported browsers.
     if (!audioUnlocked) enableSounds();
 
     const now = Date.now();
     if (now - lastTypingAt < 90) return;
     lastTypingAt = now;
     typingTick();
+  });
+
+  queueMicrotask(() => {
+    installEnhancements();
+    if (localStorage.getItem('gm_token')) void initPushNotifications();
   });
 }
