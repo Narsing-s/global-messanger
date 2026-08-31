@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import crypto from 'node:crypto';
 
 type AuthRequest = { user: { id: string; username: string } };
 type IdParams = { id: string };
@@ -10,8 +11,138 @@ type MuteBody = { minutes?: number | null };
 
 const idSchema = z.string().min(1).max(128);
 
+const hashResetToken = (token: string) =>
+  crypto.createHash('sha256').update(token).digest('hex');
+
+async function sendPasswordResetEmail(to: string, resetUrl: string) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.MAIL_FROM;
+
+  if (!apiKey || !from) {
+    throw new Error('Password reset email is not configured. Set RESEND_API_KEY and MAIL_FROM.');
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: 'Reset your Global Messenger password',
+      html: `<!doctype html><html><body style="font-family:Arial,sans-serif;line-height:1.6;color:#172033"><div style="max-width:560px;margin:40px auto;padding:32px;border:1px solid #e5e7eb;border-radius:16px"><h2>Reset your Global Messenger password</h2><p>We received a request to reset your password.</p><p><a href="${resetUrl}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px">Reset password</a></p><p>This link expires in 30 minutes and can only be used once.</p><p>If you did not request this, you can safely ignore this email.</p><p style="font-size:12px;color:#6b7280">Global Messenger</p></div></body></html>`
+    })
+  });
+
+  if (!response.ok) {
+    const data: any = await response.json().catch(() => ({}));
+    throw new Error(data?.message || 'Email provider rejected the reset email');
+  }
+}
+
 export async function registerAdvancedRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const auth = { preHandler: [app.authenticate] };
+
+  /* ------------------------------------------------------------------------ */
+  /* Password recovery                                                        */
+  /* ------------------------------------------------------------------------ */
+
+  app.post('/api/auth/forgot-password', async (request, reply) => {
+    const parsed = z.object({
+      email: z.string().trim().email().max(320)
+    }).safeParse(request.body ?? {});
+
+    if (!parsed.success) {
+      return reply.badRequest('A valid email address is required');
+    }
+
+    const email = parsed.data.email.toLowerCase();
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    // Always return the same response so account existence is not disclosed.
+    if (!user) {
+      return {
+        ok: true,
+        message: 'If an account exists for that email, a password reset link has been sent.'
+      };
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashResetToken(token);
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const webOrigin = (process.env.PASSWORD_RESET_WEB_ORIGIN || process.env.WEB_ORIGIN || 'http://localhost:5173').split(',')[0].trim().replace(/\/$/, '');
+    const resetUrl = `${webOrigin}/?resetToken=${encodeURIComponent(token)}`;
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetTokenHash: tokenHash,
+        resetTokenExpiresAt: expiresAt
+      }
+    });
+
+    try {
+      await sendPasswordResetEmail(email, resetUrl);
+    } catch (error) {
+      app.log.error(error, 'Password reset email failed');
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          resetTokenHash: null,
+          resetTokenExpiresAt: null
+        }
+      });
+      return reply.serviceUnavailable('Password reset email could not be sent. Please try again later.');
+    }
+
+    return {
+      ok: true,
+      message: 'If an account exists for that email, a password reset link has been sent.'
+    };
+  });
+
+  app.post('/api/auth/reset-password', async (request, reply) => {
+    const parsed = z.object({
+      token: z.string().min(32).max(128),
+      password: z.string().min(8).max(128)
+    }).safeParse(request.body ?? {});
+
+    if (!parsed.success) {
+      return reply.badRequest('A valid reset token and password of at least 8 characters are required');
+    }
+
+    const tokenHash = hashResetToken(parsed.data.token);
+    const user = await prisma.user.findFirst({
+      where: {
+        resetTokenHash: tokenHash,
+        resetTokenExpiresAt: { gt: new Date() }
+      }
+    });
+
+    if (!user) {
+      return reply.badRequest('This password reset link is invalid or has expired.');
+    }
+
+    const bcrypt = await import('bcryptjs');
+    const passwordHash = await bcrypt.default.hash(parsed.data.password, 12);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        resetTokenHash: null,
+        resetTokenExpiresAt: null,
+        lastSeenAt: new Date()
+      }
+    });
+
+    return {
+      ok: true,
+      message: 'Password reset successfully. You can now log in with your new password.'
+    };
+  });
 
   async function getMessageAccess(request: FastifyRequestWithId, reply: any) {
     const userId = (request.user as AuthRequest['user']).id;
