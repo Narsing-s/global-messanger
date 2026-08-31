@@ -7,9 +7,11 @@
     "apps/server"
   ],
   "scripts": {
-    "dev": "concurrently --raw --kill-others-on-fail \"npm run dev:server\" \"npm run dev:web\"",
+    "dev": "concurrently -n SERVER,WEB \"npm run dev:server\" \"npm run dev:web\"",
     "dev:server": "npm --prefix apps/server run dev",
     "dev:web": "npm --prefix apps/web run dev",
+    "dev:server:direct": "npm --prefix apps/server run dev",
+    "dev:web:direct": "npm --prefix apps/web run dev -- --host 127.0.0.1 --strictPort",
     "build": "npm run build -w apps/web && npm run build -w apps/server",
     "db:generate": "npm run db:generate -w apps/server",
     "db:migrate": "npm run db:migrate -w apps/server",
