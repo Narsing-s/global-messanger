@@ -1,6 +1,3 @@
-import { installEnhancements } from './enhancements';
-import { initPushNotifications } from './push';
-
 let ctx: AudioContext | null = null;
 let audioUnlocked = false;
 let ringtoneTimer: number | undefined;
@@ -8,21 +5,25 @@ let lastTypingAt = 0;
 
 function audio() {
   if (!audioUnlocked) return null;
-  if (!ctx) ctx = new AudioContext();
-  if (ctx.state === 'suspended') void ctx.resume();
-  return ctx;
+  try {
+    if (!ctx) ctx = new AudioContext();
+    if (ctx.state === 'suspended') void ctx.resume();
+    return ctx;
+  } catch {
+    return null;
+  }
 }
 
-function tone(freq: number, duration = .12, volume = .035) {
+function tone(freq: number, duration = 0.12, volume = 0.035) {
   try {
     const c = audio();
-    if (!c) return;
+    if (!c || c.state !== 'running') return;
     const o = c.createOscillator();
     const g = c.createGain();
     o.frequency.value = freq;
     o.type = 'sine';
     g.gain.setValueAtTime(volume, c.currentTime);
-    g.gain.exponentialRampToValueAtTime(.001, c.currentTime + duration);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + duration);
     o.connect(g);
     g.connect(c.destination);
     o.start(c.currentTime);
@@ -39,16 +40,16 @@ export function enableSounds() {
 }
 
 export function messagePing() {
-  tone(880, .09);
-  setTimeout(() => tone(1175, .12), 80);
+  tone(880, 0.09);
+  window.setTimeout(() => tone(1175, 0.12), 80);
 }
 
 export function typingTick() {
-  tone(520, .055, .024);
+  tone(520, 0.055, 0.024);
 }
 
 export function stopRingtone() {
-  if (ringtoneTimer) window.clearInterval(ringtoneTimer);
+  if (ringtoneTimer !== undefined) window.clearInterval(ringtoneTimer);
   ringtoneTimer = undefined;
 }
 
@@ -56,8 +57,8 @@ export function startRingtone(video = false) {
   enableSounds();
   stopRingtone();
   const play = () => {
-    tone(video ? 660 : 540, .25, .055);
-    setTimeout(() => tone(video ? 880 : 680, .3, .055), 280);
+    tone(video ? 660 : 540, 0.25, 0.055);
+    window.setTimeout(() => tone(video ? 880 : 680, 0.3, 0.055), 280);
   };
   play();
   ringtoneTimer = window.setInterval(play, 1800);
@@ -68,21 +69,19 @@ if (typeof document !== 'undefined') {
   document.addEventListener('pointerdown', unlock, { passive: true, once: true });
   document.addEventListener('keydown', unlock, { passive: true, once: true });
 
-  // Play a lightweight typing tick while the user types in the messenger.
-  // Throttling keeps fast typing from becoming noisy.
+  // Typing feedback is intentionally local-only. It never sends or plays
+  // sounds merely because another user is typing.
   document.addEventListener('input', event => {
     const target = event.target as HTMLInputElement | HTMLTextAreaElement | null;
     if (!target || target.type === 'file' || target.disabled || target.readOnly) return;
     if (!target.matches('input:not([type="hidden"]), textarea')) return;
-    if (!audioUnlocked) return;
+
+    // A real keyboard/input gesture is enough to unlock audio in supported browsers.
+    if (!audioUnlocked) enableSounds();
+
     const now = Date.now();
-    if (now - lastTypingAt < 85) return;
+    if (now - lastTypingAt < 90) return;
     lastTypingAt = now;
     typingTick();
-  });
-
-  queueMicrotask(() => {
-    installEnhancements();
-    if (localStorage.getItem('gm_token')) void initPushNotifications();
   });
 }
