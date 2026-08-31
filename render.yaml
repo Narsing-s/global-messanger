@@ -6,6 +6,7 @@ services:
     region: singapore
     dockerfilePath: ./apps/server/Dockerfile
     dockerContext: .
+    healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -22,20 +23,15 @@ services:
 
   - type: web
     name: global-messenger-web
-    runtime: static
+    runtime: docker
     plan: free
-    rootDir: apps/web
-    buildCommand: cd ../.. && npm ci --include=dev && npm run build -w apps/web
-    staticPublishPath: dist
+    region: singapore
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: .
     envVars:
       - key: VITE_API_URL
         value: https://global-messenger-api.onrender.com
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
 
-databases:
   - name: global-messenger-db
     databaseName: global_messenger
     plan: free
