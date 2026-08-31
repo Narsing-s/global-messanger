@@ -4,6 +4,7 @@ import { initPushNotifications } from './push';
 let ctx: AudioContext | null = null;
 let audioUnlocked = false;
 let ringtoneTimer: number | undefined;
+let lastTypingAt = 0;
 
 function audio() {
   if (!audioUnlocked) return null;
@@ -34,7 +35,6 @@ export function enableSounds() {
   try {
     if (!ctx) ctx = new AudioContext();
     if (ctx.state === 'suspended') void ctx.resume();
-    tone(760, .04, .012);
   } catch {}
 }
 
@@ -67,6 +67,20 @@ if (typeof document !== 'undefined') {
   const unlock = () => enableSounds();
   document.addEventListener('pointerdown', unlock, { passive: true, once: true });
   document.addEventListener('keydown', unlock, { passive: true, once: true });
+
+  // Play a lightweight typing tick while the user types in the messenger.
+  // Throttling keeps fast typing from becoming noisy.
+  document.addEventListener('input', event => {
+    const target = event.target as HTMLInputElement | HTMLTextAreaElement | null;
+    if (!target || target.type === 'file' || target.disabled || target.readOnly) return;
+    if (!target.matches('input:not([type="hidden"]), textarea')) return;
+    if (!audioUnlocked) return;
+    const now = Date.now();
+    if (now - lastTypingAt < 85) return;
+    lastTypingAt = now;
+    typingTick();
+  });
+
   queueMicrotask(() => {
     installEnhancements();
     if (localStorage.getItem('gm_token')) void initPushNotifications();
