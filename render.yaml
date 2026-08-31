@@ -4,8 +4,8 @@ services:
     runtime: node
     plan: starter
     region: singapore
-    buildCommand: npm install && npm run db:generate && npm run db:deploy && npm run build -w apps/server
-    startCommand: node apps/server/dist/index.js
+    buildCommand: npm ci && npm run db:generate && npm run build -w apps/server
+    startCommand: npm run db:deploy && node apps/server/dist/index.js
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -21,7 +21,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: WEB_ORIGIN
-        sync: false
+        value: https://global-messenger-web.onrender.com
       - key: UPLOAD_DIR
         value: /var/data/uploads
     disk:
@@ -32,11 +32,11 @@ services:
   - type: static
     name: global-messenger-web
     rootDir: apps/web
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        sync: false
+        value: https://global-messenger-api.onrender.com
     routes:
       - type: rewrite
         source: /*
