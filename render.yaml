@@ -22,11 +22,11 @@ services:
         value: /tmp/global-messenger/uploads
 
   - type: web
-    runtime: static
     name: global-messenger-web
+    runtime: static
     plan: free
     region: singapore
-    buildCommand: rm -rf node_modules apps/web/node_modules apps/web/dist && npm install --include=dev --include=optional && npm install -w apps/web --include=optional @rollup/rollup-linux-x64-gnu@4.63.1 @rollup/rollup-linux-x64-musl@4.63.1 && npm run build -w apps/web
+    buildCommand: rm -rf node_modules apps/web/node_modules apps/web/dist && npm install --include=dev --include=optional && npm run build -w apps/web
     staticPublishPath: apps/web/dist
     envVars:
       - key: VITE_API_URL
