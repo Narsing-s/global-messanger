@@ -27,8 +27,9 @@ services:
 
   - type: static
     name: global-messenger-web
-    buildCommand: npm install && npm run build -w apps/web
-    staticPublishPath: apps/web/dist
+    rootDir: apps/web
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
         sync: false
