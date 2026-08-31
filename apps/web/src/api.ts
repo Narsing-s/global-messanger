@@ -4,11 +4,11 @@ declare global {
   }
 }
 
-// Use Render's backend automatically in production. VITE_API_URL can still override it.
+// Use the Render backend automatically in production. VITE_API_URL can override it.
 const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
 const API = configuredApi || (import.meta.env.DEV
   ? 'http://localhost:4000'
-  : 'https://global-messanger-backend.onrender.com');
+  : 'https://global-messenger-api.onrender.com');
 
 async function request(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem('gm_token');
