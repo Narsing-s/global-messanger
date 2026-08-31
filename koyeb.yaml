@@ -1,4 +1,4 @@
-name: global-messenger-api
+name: global-messenger
 services:
   - name: global-messenger-api
     type: web
@@ -21,3 +21,21 @@ services:
         secret: JWT_SECRET
       - key: WEB_ORIGIN
         secret: WEB_ORIGIN
+
+  - name: global-messenger-web
+    type: web
+    instance_type: free
+    regions:
+      - fra
+    ports:
+      - port: 8080
+        protocol: http
+    health_checks:
+      - port: 8080
+        path: /health
+        protocol: http
+    docker:
+      dockerfile: apps/web/Dockerfile
+    env:
+      - key: VITE_API_URL
+        secret: VITE_API_URL
