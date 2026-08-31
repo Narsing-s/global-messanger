@@ -7,6 +7,8 @@
     "apps/server"
   ],
   "scripts": {
+    "predev": "node scripts/harden-app.mjs",
+    "prebuild": "node scripts/harden-app.mjs",
     "dev": "concurrently -n SERVER,WEB \"npm run dev:server\" \"npm run dev:web\"",
     "dev:server": "npm --prefix apps/server run dev",
     "dev:web": "npm --prefix apps/web run dev",
