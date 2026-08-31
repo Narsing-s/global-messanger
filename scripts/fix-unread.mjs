@@ -6,20 +6,16 @@ const server = 'apps/server/src/index.ts';
 
 let s = fs.readFileSync(server, 'utf8');
 
-// GET /api/conversations: return each chat with the recipient's unread total.
+// GET /api/conversations: return an unreadCount for every conversation.
 if (!s.includes('/* unread-counts */')) {
   const routeStart = s.indexOf("app.get(\n  '/api/conversations'");
   if (routeStart >= 0) {
     const routeEnd = s.indexOf("\n);", routeStart);
     if (routeEnd >= 0) {
       const route = s.slice(routeStart, routeEnd + 3);
-      const find = /return prisma\.conversation\.findMany\(\{[\s\S]*?include: conversationInclude\n    \}\);/;
+      const find = /return prisma\.conversation\.findMany\(\{[\s\S]*?include:\s*conversationInclude\s*\}\);/;
       const replacement = `const conversations = await prisma.conversation.findMany({
-      where: {
-        members: {
-          some: { userId: id }
-        }
-      },
+      where: { members: { some: { userId: id } } },
       orderBy: { updatedAt: 'desc' },
       include: conversationInclude
     });
@@ -44,10 +40,16 @@ if (!s.includes('/* unread-counts */')) {
   }
 }
 
-// Emit unread updates after a new message.
+// Realtime unread badge update after message persistence/broadcast.
 if (!s.includes("emit('unread:update'")) {
-  const marker = ".emit(\n              'message:new',\n              {\n                ...message,\n\n                clientId:\n                  data.clientId\n              }\n            );";
-  const replacement = `.emit(\n              'message:new',\n              {\n                ...message,\n                clientId: data.clientId\n              }\n            );
+  const marker = `              clientId:
+                  data.clientId
+              }
+            );`;
+  const replacement = `              clientId:
+                  data.clientId
+              }
+            );
 
           const recipients = await prisma.conversationMember.findMany({
             where: { conversationId: data.conversationId, userId: { not: userId } },
@@ -66,15 +68,8 @@ if (!s.includes("emit('unread:update'")) {
               unreadCount
             });
           }`;
+  // This exact block occurs in the message:new broadcast in the current server.
   if (s.includes(marker)) s = s.replace(marker, replacement);
-}
-
-// Put each authenticated socket into a private user room.
-if (!s.includes("socket.join(`user:${userId}`)")) {
-  const marker = 'io.on(\'connection\', socket => {';
-  if (s.includes(marker)) {
-    s = s.replace(marker, `${marker}\n  const userId = String(socket.data.user?.id ?? socket.handshake.auth?.userId ?? '');\n  if (userId) socket.join(\`user:\${userId}\`);`);
-  }
 }
 fs.writeFileSync(server, s);
 
