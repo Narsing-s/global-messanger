@@ -4,10 +4,11 @@ declare global {
   }
 }
 
-// Use the Render backend automatically in production. VITE_API_URL can override it.
+// In development use the Vite origin so /api and /socket.io can be proxied to Fastify.
+// Production can still override the backend with VITE_API_URL or runtime config.
 const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
 const API = configuredApi || (import.meta.env.DEV
-  ? 'http://localhost:4000'
+  ? window.location.origin
   : 'https://global-messenger-api.onrender.com');
 
 type ConversationResponse = {
@@ -60,27 +61,37 @@ function normalizeMessages(value: any, conversationId: string): any[] {
 
 async function request(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem('gm_token');
-  const res = await fetch(`${API}${path}`, {
-    ...options,
-    headers: {
-      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(`${API}${path}`, {
+      ...options,
+      signal: options.signal || controller.signal,
+      headers: {
+        ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    });
+
+    const contentType = res.headers.get('content-type') || '';
+    const text = await res.text();
+    let data: any = {};
+    if (text && contentType.includes('application/json')) {
+      try { data = JSON.parse(text); } catch { data = { message: text }; }
+    } else if (text) {
+      data = { message: text };
     }
-  });
 
-  const contentType = res.headers.get('content-type') || '';
-  const text = await res.text();
-  let data: any = {};
-  if (text && contentType.includes('application/json')) {
-    try { data = JSON.parse(text); } catch { data = { message: text }; }
-  } else if (text) {
-    data = { message: text };
+    if (!res.ok) {
+      throw new Error(data?.message || `Request failed (${res.status})`);
+    }
+    return data;
+  } catch (error: any) {
+    if (error?.name === 'AbortError') throw new Error('Request timed out. Please check your connection.');
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
   }
-
-  if (!res.ok) {
-    throw new Error(data?.message || `Request failed (${res.status})`);
-  }
-  return data;
 }
 
 export const api = {
