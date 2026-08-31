@@ -9,11 +9,17 @@
     "android:add": "cap add android",
     "android:sync": "cap sync android",
     "android:open": "cap open android",
-    "android:run": "cap run android"
+    "android:run": "cap run android",
+    "ios:add": "cap add ios",
+    "ios:sync": "cap sync ios",
+    "ios:open": "cap open ios",
+    "ios:run": "cap run ios",
+    "mobile:sync": "cap sync"
   },
   "dependencies": {
     "@capacitor/core": "^7.4.0",
     "@capacitor/android": "^7.4.0",
+    "@capacitor/ios": "^7.4.0",
     "@vitejs/plugin-react": "^4.4.1",
     "socket.io-client": "^4.8.1",
     "vite": "^6.1.0",
