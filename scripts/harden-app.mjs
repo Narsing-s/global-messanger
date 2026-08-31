@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+﻿import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -36,7 +36,8 @@ patch('apps/web/src/main.tsx', [
   ],
   [
     "return <div className={`bubble-row ${own?'own':''}`}>",
-    "return <div data-message-id={message.id} className={`bubble-row ${own?'own':''}`}>")
+    "return <div data-message-id={message.id} className={`bubble-row ${own?'own':''}`}>"
+  ],
 ]);
 
 // When a new socket connects, send it a snapshot of users already online.
@@ -53,3 +54,5 @@ patch('apps/server/src/index.ts', [
 ]);
 
 console.log('[harden] runtime hardening complete');
+
+

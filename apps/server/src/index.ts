@@ -1227,6 +1227,15 @@ io.on(
       }
     );
 
+    for (const [onlineUserId] of online) {
+      if (onlineUserId !== userId) {
+        socket.emit('presence:update', {
+          userId: onlineUserId,
+          online: true
+        });
+      }
+    }
+
     /* ------------------------- Conversation Join -------------------------- */
 
     socket.on(
@@ -1246,6 +1255,10 @@ io.on(
         }
       }
     );
+
+    socket.on('conversation:leave', (conversationId: string) => {
+      if (conversationId) socket.leave(`conversation:${conversationId}`);
+    });
 
     /* ---------------------------- Typing ---------------------------------- */
 
