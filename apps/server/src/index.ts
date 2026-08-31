@@ -9,6 +9,7 @@ import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
+import { registerAdvancedRoutes } from './advanced.js';
 import { Server } from 'socket.io';
 import { z } from 'zod';
 import path from 'node:path';
@@ -1141,6 +1142,8 @@ app.delete(
 /* -------------------------------------------------------------------------- */
 /* HTTP Server                                                                */
 /* -------------------------------------------------------------------------- */
+
+await registerAdvancedRoutes(app, prisma);
 
 const httpServer =
   await app.listen({
