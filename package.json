@@ -7,7 +7,11 @@
     "dev": "concurrently \"npm run dev -w apps/server\" \"npm run dev -w apps/web\"",
     "build": "npm run build -w apps/web && npm run build -w apps/server",
     "db:generate": "npm run db:generate -w apps/server",
-    "db:migrate": "npm run db:migrate -w apps/server"
+    "db:migrate": "npm run db:migrate -w apps/server",
+    "android:add": "npm run android:add -w apps/web",
+    "android:sync": "npm run android:sync -w apps/web",
+    "android:open": "npm run android:open -w apps/web",
+    "android:run": "npm run android:run -w apps/web"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
