@@ -29,7 +29,9 @@ function normalizeConversation(value: any): ConversationResponse {
     members: Array.isArray(conversation.members)
       ? conversation.members.filter((member: any) => member?.user?.id)
       : [],
-    messages: Array.isArray(conversation.messages) ? conversation.messages : []
+    messages: Array.isArray(conversation.messages)
+      ? conversation.messages.filter(Boolean)
+      : []
   };
 }
 
@@ -38,6 +40,22 @@ function normalizeConversations(value: any): ConversationResponse[] {
   return Array.isArray(list)
     ? list.map(normalizeConversation).filter(conversation => conversation.id)
     : [];
+}
+
+function normalizeMessages(value: any, conversationId: string): any[] {
+  const list = Array.isArray(value) ? value : value?.messages;
+  if (!Array.isArray(list)) return [];
+
+  return list
+    .filter((message: any) => message && typeof message === 'object')
+    .map((message: any) => ({
+      ...message,
+      id: String(message.id ?? `${conversationId}-${message.createdAt ?? Math.random()}`),
+      conversationId: String(message.conversationId ?? conversationId),
+      senderId: String(message.senderId ?? ''),
+      body: typeof message.body === 'string' ? message.body : '',
+      createdAt: message.createdAt ?? new Date().toISOString()
+    }));
 }
 
 async function request(path: string, options: RequestInit = {}) {
@@ -66,7 +84,10 @@ async function request(path: string, options: RequestInit = {}) {
 }
 
 export const api = {
-  searchUsers: (q: string) => request(`/api/users/search?q=${encodeURIComponent(q)}`),
+  searchUsers: async (q: string) => {
+    const value = await request(`/api/users/search?q=${encodeURIComponent(q)}`);
+    return Array.isArray(value) ? value.filter(Boolean) : [];
+  },
   conversations: async () => normalizeConversations(await request('/api/conversations')),
   direct: async (userId: string) => normalizeConversation(await request('/api/conversations/direct', {
     method: 'POST',
@@ -76,7 +97,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ title, userIds })
   })),
-  messages: (id: string, limit = 100) => request(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`),
+  messages: async (id: string, limit = 100) => normalizeMessages(
+    await request(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`),
+    id
+  ),
   read: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }),
   editMessage: (id: string, body: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ body }) }),
   deleteMessage: (id: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'DELETE' }),
