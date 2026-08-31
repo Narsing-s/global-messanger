@@ -6,7 +6,6 @@ services:
     region: singapore
     dockerfilePath: ./apps/server/Dockerfile
     dockerContext: .
-    healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -25,7 +24,6 @@ services:
     name: global-messenger-web
     runtime: static
     plan: free
-    region: singapore
     rootDir: apps/web
     buildCommand: cd ../.. && npm ci --include=dev && npm run build -w apps/web
     staticPublishPath: dist
