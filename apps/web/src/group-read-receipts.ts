@@ -110,3 +110,5 @@ export function installGroupReadReceipts() {
   refreshTimer = window.setInterval(() => void refresh(), 3500);
   window.addEventListener('beforeunload', () => { if (refreshTimer) window.clearInterval(refreshTimer); socket?.disconnect(); });
 }
+
+installGroupReadReceipts();
