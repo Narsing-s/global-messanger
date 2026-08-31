@@ -46,7 +46,6 @@ jobs:
       - name: Configure Android permissions
         shell: bash
         run: |
-          MANIFEST="apps/web/android/app/src/main/AndroidManifest.xml"
           python - <<'PY'
           from pathlib import Path
           p = Path('apps/web/android/app/src/main/AndroidManifest.xml')
@@ -58,8 +57,8 @@ jobs:
               'android.permission.POST_NOTIFICATIONS',
           ]
           for perm in permissions:
-              line = f'    <uses-permission android:name="{perm}" />\\n'
               if perm not in text:
+                  line = f'    <uses-permission android:name="{perm}" />\n'
                   text = text.replace('<application', line + '    <application', 1)
           p.write_text(text)
           PY
