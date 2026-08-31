@@ -21,7 +21,8 @@ services:
       - key: UPLOAD_DIR
         value: /tmp/global-messenger/uploads
 
-  - type: static_site
+  - type: web
+    runtime: static
     name: global-messenger-web
     plan: free
     region: singapore
