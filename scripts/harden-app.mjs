@@ -29,7 +29,14 @@ patch('apps/web/src/main.tsx', [
   [
     'const requestId=++messageRequest.current;setMessages([]);setOtherTyping(false);',
     'const requestId=++messageRequest.current;setOtherTyping(false);'
-  ]
+  ],
+  [
+    "s.on('presence:update',(d:any)=>{if(d?.userId)setPresence(p=>({...p,[String(d.userId)]:Boolean(d.online)}))});",
+    "s.on('presence:update',(d:any)=>{if(d?.userId){const uid=String(d.userId);const online=Boolean(d.online);setPresence(p=>({...p,[uid]:online}));(window as any).__gmPresence={...((window as any).__gmPresence||{}),[uid]:online};}});"
+  ],
+  [
+    "return <div className={`bubble-row ${own?'own':''}`}>",
+    "return <div data-message-id={message.id} className={`bubble-row ${own?'own':''}`}>")
 ]);
 
 // When a new socket connects, send it a snapshot of users already online.
@@ -38,6 +45,10 @@ patch('apps/server/src/index.ts', [
   [
     "    io.emit(\n      'presence:update',\n      {\n        userId,\n        online: true\n      }\n    );",
     "    io.emit(\n      'presence:update',\n      {\n        userId,\n        online: true\n      }\n    );\n\n    for (const [onlineUserId] of online) {\n      if (onlineUserId !== userId) {\n        socket.emit('presence:update', {\n          userId: onlineUserId,\n          online: true\n        });\n      }\n    }"
+  ],
+  [
+    "    /* ---------------------------- Typing ---------------------------------- */",
+    "    socket.on('conversation:leave', (conversationId: string) => {\n      if (conversationId) socket.leave(`conversation:${conversationId}`);\n    });\n\n    /* ---------------------------- Typing ---------------------------------- */"
   ]
 ]);
 
