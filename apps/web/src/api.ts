@@ -12,10 +12,10 @@ const API = configuredApi || (import.meta.env.DEV
 
 type ConversationResponse = {
   id: string;
-  isGroup?: boolean;
-  title?: string | null;
-  members?: Array<{ user?: any }>;
-  messages?: any[];
+  isGroup: boolean;
+  title: string | null;
+  members: Array<{ user: any }>;
+  messages: any[];
   [key: string]: any;
 };
 
