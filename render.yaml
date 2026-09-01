@@ -43,6 +43,12 @@ services:
         source: /reset-password/
         destination: /reset-password/index.html
       - type: rewrite
+        source: /reset-password.html
+        destination: /reset-password.html
+      - type: rewrite
+        source: /reset-password.html/*
+        destination: /reset-password.html
+      - type: rewrite
         source: /reset-password/*
         destination: /reset-password/index.html
       - type: rewrite
