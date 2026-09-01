@@ -34,6 +34,14 @@ services:
       - key: VITE_API_URL
         value: https://global-messenger-api.onrender.com
     routes:
+      # Password reset must be handled by the Global Messenger reset page,
+      # not the SPA fallback. Keep these before the catch-all rewrite.
+      - type: rewrite
+        source: /reset-password
+        destination: /reset-password/index.html
+      - type: rewrite
+        source: /reset-password/
+        destination: /reset-password/index.html
       - type: rewrite
         source: /reset-password/*
         destination: /reset-password/index.html
