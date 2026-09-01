@@ -18,6 +18,8 @@ services:
         value: production
       - key: WEB_ORIGIN
         value: https://global-messenger-web.onrender.com
+      - key: PASSWORD_RESET_WEB_ORIGIN
+        value: https://global-messenger-web.onrender.com
       - key: UPLOAD_DIR
         value: /tmp/global-messenger/uploads
 
