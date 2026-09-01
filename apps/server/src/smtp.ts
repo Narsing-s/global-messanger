@@ -127,11 +127,11 @@ export async function sendPasswordResetEmail(to: string, displayName: string, re
   const secure = String(process.env.SMTP_SECURE ?? '').toLowerCase() === 'true' || port === 465;
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('SMTP_PORT must be a valid TCP port');
 
-  // Global Messenger owns localhost:5180 in local development. If an older
-  // application is still occupying localhost:5173, never send users into it.
+  // Global Messenger uses port 5180 for local web development. Rewrite any
+  // localhost reset URL away from another local application on a different port.
   let normalizedResetUrl = resetUrl.replace(/\/reset-password(?:\.html)?(?:\/)?(?=\?)/, '/reset-password/');
-  if (/^https?:\/\/(localhost|127\.0\.0\.1):5173(?:\/|$)/i.test(normalizedResetUrl)) {
-    normalizedResetUrl = normalizedResetUrl.replace(/^(https?:\/\/(?:localhost|127\.0\.0\.1)):5173/i, '$1:5180');
+  if (/^https?:\/\/(localhost|127\.0\.0\.1):\d+(?:\/|$)/i.test(normalizedResetUrl)) {
+    normalizedResetUrl = normalizedResetUrl.replace(/^(https?:\/\/(?:localhost|127\.0\.0\.1)):\d+/i, '$1:5180');
   }
 
   const safeName = htmlEscape(displayName || 'there');
