@@ -16,6 +16,12 @@ const idSchema = z.string().min(1).max(128);
 const hashResetToken = (token: string) =>
   crypto.createHash('sha256').update(token).digest('hex');
 
+function smtpErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  return 'Unknown SMTP error.';
+}
+
 export async function registerAdvancedRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const auth = { preHandler: [app.authenticate] };
 
@@ -46,7 +52,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     const tokenHash = hashResetToken(token);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
     const webOrigin = (process.env.PASSWORD_RESET_WEB_ORIGIN || process.env.WEB_ORIGIN || 'http://localhost:5173').split(',')[0].trim().replace(/\/$/, '');
-    const resetUrl = `${webOrigin}/?resetToken=${encodeURIComponent(token)}`;
+    const resetUrl = `${webOrigin}/reset-password/?token=${encodeURIComponent(token)}`;
 
     await prisma.user.update({
       where: { id: user.id },
@@ -67,12 +73,12 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
           resetTokenExpiresAt: null
         }
       });
-      return reply.serviceUnavailable('Password reset email could not be sent. Please try again later.');
+      return reply.serviceUnavailable(`Password reset email could not be sent: ${smtpErrorMessage(error)}`);
     }
 
     return {
       ok: true,
-      message: 'If an account exists for that email, a password reset link has been sent.'
+      message: `Password reset link sent successfully to ${email}. Please check your inbox (and spam folder).`
     };
   });
 
@@ -95,7 +101,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     });
 
     if (!user) {
-      return reply.badRequest('This password reset link is invalid or has expired.');
+      return reply.badRequest('This password reset link is invalid or has expired. Please request a new reset link.');
     }
 
     const passwordHash = await bcrypt.hash(parsed.data.password, 12);
