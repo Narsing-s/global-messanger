@@ -19,7 +19,14 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
     await app.prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt } });
 
     const configuredWebUrl = process.env.PASSWORD_RESET_WEB_ORIGIN?.trim().replace(/\/$/, '');
-    const webUrl = configuredWebUrl || (process.env.NODE_ENV === 'production' ? PRODUCTION_WEB_URL : LOCAL_WEB_URL);
+    let webUrl = configuredWebUrl || (process.env.NODE_ENV === 'production' ? PRODUCTION_WEB_URL : LOCAL_WEB_URL);
+
+    // Never send a reset link to another local application (for example NEXORA on :5173).
+    // Global Messenger's Vite server is intentionally on :5180.
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(webUrl)) {
+      webUrl = LOCAL_WEB_URL;
+    }
+
     const resetUrl = `${webUrl}/reset-password.html?token=${encodeURIComponent(token)}`;
 
     try {
