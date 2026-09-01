@@ -1,0 +1,7 @@
+name = "global-messenger-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-02"
+
+[vars]
+UPSTREAM_API = "https://global-messenger-api.onrender.com"
+ALLOWED_ORIGIN = "https://global-messenger-web.narsingbeesetti006.workers.dev"
