@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sendPasswordResetEmail } from './smtp.js';
+import { registerEmailAuthRoutes } from './email-auth-routes.js';
 
 type AuthRequest = { user: { id: string; username: string } };
 type IdParams = { id: string };
@@ -39,6 +40,8 @@ function localResetPage(): string {
 export async function registerAdvancedRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const auth = { preHandler: [app.authenticate] };
 
+  await registerEmailAuthRoutes(app, prisma);
+
   app.get('/reset-password', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage()));
   app.get('/reset-password/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage()));
 
@@ -52,8 +55,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     const tokenHash = hashResetToken(token);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
     const configuredOrigin = (process.env.PASSWORD_RESET_WEB_ORIGIN || process.env.WEB_ORIGIN || '').split(',')[0].trim().replace(/\/$/, '');
-    const isLocalOrigin = !configuredOrigin || /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?$/i.test(configuredOrigin);
-    const webOrigin = isLocalOrigin ? `http://127.0.0.1:${process.env.PORT ?? 4000}` : configuredOrigin;
+    const webOrigin = configuredOrigin || `http://127.0.0.1:${process.env.PORT ?? 4000}`;
     const resetUrl = `${webOrigin}/reset-password/?token=${encodeURIComponent(token)}`;
     await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt } });
     try {
@@ -77,7 +79,6 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     return { ok: true, message: 'Password reset successfully. You can now log in with your new password.' };
   });
 
-  // Permanently delete the authenticated user's account and all owned data.
   app.delete('/api/auth/account', auth, async (request, reply) => {
     const userId = (request.user as AuthRequest['user']).id;
     const parsed = z.object({ password: z.string().min(1).max(128) }).safeParse(request.body ?? {});
