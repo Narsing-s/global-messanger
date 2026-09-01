@@ -17,9 +17,9 @@ services:
       - key: NODE_ENV
         value: production
       - key: WEB_ORIGIN
-        value: https://global-messenger-web.onrender.com
+        value: https://web.narsingbeesetti006.workers.dev
       - key: PASSWORD_RESET_WEB_ORIGIN
-        value: https://global-messenger-web.onrender.com
+        value: https://web.narsingbeesetti006.workers.dev
       - key: UPLOAD_DIR
         value: /tmp/global-messenger/uploads
 
