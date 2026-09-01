@@ -24,7 +24,7 @@ function smtpErrorMessage(error: unknown): string {
   return 'Unknown SMTP error.';
 }
 
-function localResetPage(webOrigin: string): string {
+function localResetPage(): string {
   const candidates = [
     path.resolve(process.cwd(), '../web/reset-password.html'),
     path.resolve(process.cwd(), '../web/public/reset-password.html'),
@@ -32,32 +32,27 @@ function localResetPage(webOrigin: string): string {
     path.resolve(process.cwd(), 'apps/web/public/reset-password.html')
   ];
   for (const file of candidates) {
-    if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8').replaceAll('__WEB_ORIGIN__', webOrigin);
+    if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8');
   }
   return '<!doctype html><html><body><h1>Global Messenger</h1><p>Password reset page is unavailable.</p></body></html>';
 }
 
-function normalizeWebOrigin(value: string): string {
-  const origin = value.split(',')[0].trim().replace(/\/$/, '');
-  // The local Vite app is intentionally fixed to 5180. Older .env files in
-  // existing checkouts may still contain localhost:5173; never generate a
-  // reset email that points at that stale port.
-  if (/^https?:\/\/(localhost|127\.0\.0\.1):5173$/i.test(origin)) {
-    return origin.replace(/:5173$/i, ':5180');
-  }
-  return origin;
+function requestOrigin(request: any): string {
+  const forwardedProto = String(request.headers?.['x-forwarded-proto'] || '').split(',')[0].trim();
+  const protocol = forwardedProto || (request.protocol || 'http');
+  const host = String(request.headers?.host || `localhost:${process.env.PORT || 4000}`);
+  return `${protocol}://${host}`.replace(/\/$/, '');
 }
 
 export async function registerAdvancedRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const auth = { preHandler: [app.authenticate] };
   await registerEmailAuthRoutes(app, prisma);
 
-  const configuredWebOrigin = normalizeWebOrigin(
-    process.env.PASSWORD_RESET_WEB_ORIGIN || process.env.WEB_ORIGIN || 'http://127.0.0.1:5180'
-  );
-
-  app.get('/reset-password', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage(configuredWebOrigin)));
-  app.get('/reset-password/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage(configuredWebOrigin)));
+  // The reset page is served by the SAME Fastify server that owns the reset API.
+  // This removes all localhost/Vite/Render port mismatches from password recovery.
+  app.get('/reset-password', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store, no-cache, must-revalidate').send(localResetPage()));
+  app.get('/reset-password/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store, no-cache, must-revalidate').send(localResetPage()));
+  app.get('/reset-password.html', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store, no-cache, must-revalidate').send(localResetPage()));
 
   app.post('/api/auth/forgot-password', async (request, reply) => {
     const parsed = z.object({ email: z.string().trim().email().max(320) }).safeParse(request.body ?? {});
@@ -65,10 +60,18 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     const email = parsed.data.email.toLowerCase();
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return { ok: true, message: 'If an account exists for that email, a password reset link has been sent.' };
+
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = hashResetToken(token);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    const resetUrl = `${configuredWebOrigin}/reset-password.html?token=${encodeURIComponent(token)}`;
+
+    // Generate the link from the request that created it. Locally this is
+    // http://localhost:4000; in production it is the public API hostname.
+    // Therefore clicking the Gmail button always reaches the server that can
+    // render the reset page and accept /api/auth/reset-password.
+    const resetOrigin = requestOrigin(request);
+    const resetUrl = `${resetOrigin}/reset-password.html?token=${encodeURIComponent(token)}`;
+
     await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt } });
     try {
       await sendPasswordResetEmail(email, user.displayName || user.username || 'there', resetUrl);
@@ -100,7 +103,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   app.get('/api/bookmarks', auth, async request => { const userId = (request.user as AuthRequest['user']).id; return prisma.messageBookmark.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 200, include: { message: { include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } } }); });
   app.post<{ Params: IdParams }>('/api/messages/:id/pin', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; if (access.message.deletedAt) return reply.badRequest('Deleted messages cannot be pinned'); return prisma.pinnedMessage.upsert({ where: { conversationId_messageId: { conversationId: access.message.conversationId, messageId: access.message.id } }, create: { conversationId: access.message.conversationId, messageId: access.message.id, pinnedById: access.userId }, update: { pinnedById: access.userId } }); });
   app.delete<{ Params: IdParams }>('/api/messages/:id/pin', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; await prisma.pinnedMessage.deleteMany({ where: { conversationId: access.message.conversationId, messageId: access.message.id } }); return { ok: true }; });
-  app.get<{ Params: IdParams }>('/api/conversations/:id/pins', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.forbidden('Not a conversation member'); return prisma.pinnedMessage.findMany({ where: { conversationId }, orderBy: { createdAt: 'desc' }, include: { message: { include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } } } }); });
+  app.get<{ Params: IdParams }>('/api/conversations/:id/pins', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.forbidden('Not a conversation member'); return prisma.pinnedMessage.findMany({ where: { conversationId }, orderBy: { createdAt: 'desc' }, include: { message: { include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } } }); });
   app.post<{ Params: IdParams; Body: ForwardBody }>('/api/messages/:id/forward', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; const parsed = z.object({ conversationId: idSchema }).safeParse(request.body); if (!parsed.success) return reply.badRequest('conversationId is required'); const target = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: parsed.data.conversationId, userId: access.userId } } }); if (!target) return reply.forbidden('You are not a member of the target conversation'); const copy = await prisma.message.create({ data: { conversationId: parsed.data.conversationId, senderId: access.userId, body: access.message.body, type: access.message.type === 'text' ? 'forwarded' : access.message.type, attachmentUrl: access.message.attachmentUrl, attachmentName: access.message.attachmentName, attachmentMime: access.message.attachmentMime, attachmentSize: access.message.attachmentSize } }); await prisma.conversation.update({ where: { id: parsed.data.conversationId }, data: { updatedAt: new Date() } }); return copy; });
   app.post<{ Params: IdParams; Body: MuteBody }>('/api/conversations/:id/mute', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const parsed = z.object({ minutes: z.number().int().min(0).max(525600).nullable().optional() }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('minutes must be between 0 and 525600'); const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.forbidden('Not a conversation member'); const minutes = parsed.data.minutes ?? 0; const mutedUntil = minutes > 0 ? new Date(Date.now() + minutes * 60000) : null; return prisma.conversationMember.update({ where: { conversationId_userId: { conversationId, userId } }, data: { mutedUntil } }); });
   app.post<{ Params: IdParams }>('/api/users/:id/block', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const blockedUserId = request.params.id; if (userId === blockedUserId) return reply.badRequest('You cannot block yourself'); const target = await prisma.user.findUnique({ where: { id: blockedUserId }, select: { id: true } }); if (!target) return reply.notFound('User not found'); return prisma.userBlock.upsert({ where: { userId_blockedUserId: { userId, blockedUserId } }, create: { userId, blockedUserId }, update: {} }); });
