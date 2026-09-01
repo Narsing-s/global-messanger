@@ -31,6 +31,30 @@ Global Messenger is an open-source messaging application focused on fast convers
 - 🖥️ Desktop-ready experience
 - 🤖 Capacitor Android packaging
 
+## 🧭 Local-first development
+
+The repository now uses deterministic local development: `dev` and `build` no longer rewrite application source files through patch scripts. Run the environment check and build before testing the chat UI:
+
+```bash
+npm ci
+npm run doctor
+npm run verify:local
+```
+
+Then start the application:
+
+```bash
+npm run dev
+```
+
+In another terminal:
+
+```bash
+npm run smoke
+```
+
+See [`docs/LOCAL_TESTING.md`](./docs/LOCAL_TESTING.md) for the complete Windows/macOS/Linux two-account testing checklist.
+
 ## 🖼️ Chat screenshot
 
 The screenshot below shows the real Global Messenger chat landing experience and empty-conversation state.
@@ -87,7 +111,7 @@ cd global-messanger
 ### 2. Install dependencies
 
 ```bash
-npm install
+npm ci
 ```
 
 ### 3. Start PostgreSQL
@@ -96,52 +120,50 @@ npm install
 docker compose up -d postgres
 ```
 
-### 4. Generate Prisma Client and sync the database
+### 4. Configure the server
+
+Copy `apps/server/.env.example` to `apps/server/.env`. The example is configured for local PostgreSQL and includes a placeholder development JWT secret. Never use that placeholder in production.
+
+### 5. Generate Prisma Client and migrate the database
 
 ```bash
 npm run db:generate
-npm run db:push
+npm run db:migrate
 ```
 
-If the workspace scripts differ, run the equivalent commands from `apps/server`:
+### 6. Verify and build
 
 ```bash
-cd apps/server
-npx prisma generate --schema ./prisma/schema.prisma
-npx prisma db push --schema ./prisma/schema.prisma
+npm run verify:local
 ```
 
-### 5. Start the application
-
-From the repository root:
+### 7. Start the application
 
 ```bash
 npm run dev
 ```
 
-The API normally listens on:
-
-```text
-http://localhost:4000
-```
-
-The web application normally runs on the Vite development port shown by the terminal.
+The API normally listens on `http://127.0.0.1:4000` and the web application on `http://127.0.0.1:5173`.
 
 ### API health check
 
 PowerShell:
 
 ```powershell
-Invoke-RestMethod http://localhost:4000/health
+Invoke-RestMethod http://127.0.0.1:4000/health
 ```
 
 Command Prompt:
 
 ```cmd
-curl http://localhost:4000/health
+curl http://127.0.0.1:4000/health
 ```
 
-A healthy server should return a successful health response.
+Then run the combined smoke test:
+
+```bash
+npm run smoke
+```
 
 ## 🔐 Authentication
 
@@ -167,8 +189,8 @@ Useful commands:
 
 ```bash
 npx prisma validate --schema ./apps/server/prisma/schema.prisma
-npx prisma generate --schema ./apps/server/prisma/schema.prisma
-npx prisma db push --schema ./apps/server/prisma/schema.prisma
+npm run db:generate
+npm run db:migrate
 ```
 
 ## 🧪 Realtime QA checklist
@@ -208,6 +230,7 @@ Before a public launch, configure:
 - Production STUN/TURN infrastructure for reliable WebRTC calls
 - Secure environment variables
 - Signed Android/desktop packages
+- End-to-end encryption and secure device/session management
 
 Never commit `.env` files, passwords, private keys, JWT secrets or database credentials.
 
@@ -237,9 +260,10 @@ Contributions are welcome — bug fixes, accessibility improvements, UI improvem
 
 ```bash
 git checkout -b feature/my-improvement
-npm install
-npm run build
-# run relevant tests / QA
+npm ci
+npm run verify:local
+npm run dev
+# run smoke + relevant QA
 git add .
 git commit -m "feat: describe the change"
 git push origin feature/my-improvement
@@ -268,6 +292,7 @@ Do not post passwords, tokens, private keys, personal messages or other sensitiv
 
 ## 📚 Documentation
 
+- [`docs/LOCAL_TESTING.md`](./docs/LOCAL_TESTING.md)
 - [`docs/01-getting-started.md`](./docs/01-getting-started.md)
 - [`docs/02-architecture.md`](./docs/02-architecture.md)
 - [`docs/03-features.md`](./docs/03-features.md)
