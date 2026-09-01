@@ -37,11 +37,25 @@ function localResetPage(): string {
   return '<!doctype html><html><body><h1>Global Messenger</h1><p>Password reset page is unavailable.</p></body></html>';
 }
 
-function requestOrigin(request: any): string {
+function resetOrigin(request: any): string {
+  // Password recovery must open on the server that serves the reset page and
+  // owns /api/auth/reset-password. Do NOT use request.host here: when the
+  // forgot-password call comes through the Vite /api proxy, request.host is
+  // the web port (5173), which causes Gmail to open a page on the wrong server.
+  const configured = String(process.env.PASSWORD_RESET_WEB_ORIGIN || '').trim();
+  if (configured) return configured.replace(/\/$/, '');
+
   const forwardedProto = String(request.headers?.['x-forwarded-proto'] || '').split(',')[0].trim();
-  const protocol = forwardedProto || (request.protocol || 'http');
-  const host = String(request.headers?.host || `localhost:${process.env.PORT || 4000}`);
-  return `${protocol}://${host}`.replace(/\/$/, '');
+  const forwardedHost = String(request.headers?.['x-forwarded-host'] || '').split(',')[0].trim();
+  // In production, a forwarded public host is preferable to the internal
+  // Fastify port. In local development, always use Fastify's 4000 endpoint.
+  if (process.env.NODE_ENV === 'production' && forwardedHost) {
+    return `${forwardedProto || 'https'}://${forwardedHost}`.replace(/\/$/, '');
+  }
+  if (process.env.NODE_ENV === 'production' && request.hostname) {
+    return `${forwardedProto || request.protocol || 'https'}://${request.hostname}${request.port ? `:${request.port}` : ''}`.replace(/\/$/, '');
+  }
+  return `http://127.0.0.1:${process.env.PORT || 4000}`;
 }
 
 export async function registerAdvancedRoutes(app: FastifyInstance, prisma: PrismaClient) {
@@ -49,7 +63,6 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   await registerEmailAuthRoutes(app, prisma);
 
   // The reset page is served by the SAME Fastify server that owns the reset API.
-  // This removes all localhost/Vite/Render port mismatches from password recovery.
   app.get('/reset-password', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store, no-cache, must-revalidate').send(localResetPage()));
   app.get('/reset-password/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store, no-cache, must-revalidate').send(localResetPage()));
   app.get('/reset-password.html', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store, no-cache, must-revalidate').send(localResetPage()));
@@ -64,13 +77,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = hashResetToken(token);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-
-    // Generate the link from the request that created it. Locally this is
-    // http://localhost:4000; in production it is the public API hostname.
-    // Therefore clicking the Gmail button always reaches the server that can
-    // render the reset page and accept /api/auth/reset-password.
-    const resetOrigin = requestOrigin(request);
-    const resetUrl = `${resetOrigin}/reset-password.html?token=${encodeURIComponent(token)}`;
+    const resetUrl = `${resetOrigin(request)}/reset-password.html?token=${encodeURIComponent(token)}`;
 
     await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt } });
     try {
@@ -108,5 +115,5 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   app.post<{ Params: IdParams; Body: MuteBody }>('/api/conversations/:id/mute', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const parsed = z.object({ minutes: z.number().int().min(0).max(525600).nullable().optional() }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('minutes must be between 0 and 525600'); const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.forbidden('Not a conversation member'); const minutes = parsed.data.minutes ?? 0; const mutedUntil = minutes > 0 ? new Date(Date.now() + minutes * 60000) : null; return prisma.conversationMember.update({ where: { conversationId_userId: { conversationId, userId } }, data: { mutedUntil } }); });
   app.post<{ Params: IdParams }>('/api/users/:id/block', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const blockedUserId = request.params.id; if (userId === blockedUserId) return reply.badRequest('You cannot block yourself'); const target = await prisma.user.findUnique({ where: { id: blockedUserId }, select: { id: true } }); if (!target) return reply.notFound('User not found'); return prisma.userBlock.upsert({ where: { userId_blockedUserId: { userId, blockedUserId } }, create: { userId, blockedUserId }, update: {} }); });
   app.delete<{ Params: IdParams }>('/api/users/:id/block', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; await prisma.userBlock.deleteMany({ where: { userId, blockedUserId: request.params.id } }); return { ok: true }; });
-  app.get('/api/users/blocked', auth, async request => { const userId = (request.user as AuthRequest['user']).id; return prisma.userBlock.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, include: { blockedUser: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } }); });
+  app.get('/api/users/blocked', auth, async request => { const userId = (request.user as AuthRequest['user']).id; return prisma.userBlock.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, include: { blockedUser: { select: { id: true, username: true, displayName: true, avatarUrl: true } } }); });
 }
