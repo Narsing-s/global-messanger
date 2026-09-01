@@ -31,7 +31,8 @@ const app = Fastify({
 const PORT = Number(process.env.PORT ?? 4000);
 
 const WEB_ORIGIN =
-  process.env.WEB_ORIGIN ?? 'http://localhost:5173';
+  process.env.WEB_ORIGIN ??
+  'http://localhost:5173,https://web.narsingbeesetti006.workers.dev';
 
 const isAllowedOrigin = (origin?: string | null) => {
   if (!origin) return true;
