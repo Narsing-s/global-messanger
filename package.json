@@ -7,21 +7,24 @@
     "apps/server"
   ],
   "scripts": {
-    "predev": "node scripts/harden-app.mjs && node scripts/fix-chat-switch.mjs && node scripts/fix-unread.mjs && node scripts/error-boundary.mjs",
-    "prebuild": "node scripts/harden-app.mjs && node scripts/fix-chat-switch.mjs && node scripts/fix-unread.mjs && node scripts/error-boundary.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "predev": "npm run doctor",
+    "prebuild": "npm run doctor",
     "dev": "node scripts/dev.mjs",
-    "dev:server": "node scripts/harden-app.mjs && node scripts/fix-chat-switch.mjs && node scripts/fix-unread.mjs && node scripts/error-boundary.mjs && npm --prefix apps/server run dev",
-    "dev:web": "node scripts/harden-app.mjs && node scripts/fix-chat-switch.mjs && node scripts/fix-unread.mjs && node scripts/error-boundary.mjs && npm --prefix apps/web run dev",
+    "dev:server": "npm run doctor && npm --prefix apps/server run dev",
+    "dev:web": "npm run doctor && npm --prefix apps/web run dev -- --host 127.0.0.1 --strictPort",
     "dev:server:direct": "npm --prefix apps/server run dev",
     "dev:web:direct": "npm --prefix apps/web run dev -- --host 127.0.0.1 --strictPort",
     "build": "npm run build -w apps/web && npm run build -w apps/server",
+    "verify:local": "node scripts/local-verify.mjs",
+    "smoke": "node scripts/local-smoke.mjs",
     "db:generate": "npm run db:generate -w apps/server",
     "db:migrate": "npm run db:migrate -w apps/server",
+    "db:deploy": "prisma migrate deploy --schema apps/server/prisma/schema.prisma",
     "android:add": "npm run android:add -w apps/web",
     "android:sync": "npm run android:sync -w apps/web",
     "android:open": "npm run android:open -w apps/web",
-    "android:run": "npm run android:run -w apps/web",
-    "db:deploy": "prisma migrate deploy --schema apps/server/prisma/schema.prisma"
+    "android:run": "npm run android:run -w apps/web"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
