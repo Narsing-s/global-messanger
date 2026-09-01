@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
+import { sendPasswordResetEmail } from './smtp.js';
 
 type AuthRequest = { user: { id: string; username: string } };
 type IdParams = { id: string };
@@ -14,34 +15,6 @@ const idSchema = z.string().min(1).max(128);
 
 const hashResetToken = (token: string) =>
   crypto.createHash('sha256').update(token).digest('hex');
-
-async function sendPasswordResetEmail(to: string, resetUrl: string) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.MAIL_FROM;
-
-  if (!apiKey || !from) {
-    throw new Error('Password reset email is not configured. Set RESEND_API_KEY and MAIL_FROM.');
-  }
-
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject: 'Reset your Global Messenger password',
-      html: `<!doctype html><html><body style="font-family:Arial,sans-serif;line-height:1.6;color:#172033"><div style="max-width:560px;margin:40px auto;padding:32px;border:1px solid #e5e7eb;border-radius:16px"><h2>Reset your Global Messenger password</h2><p>We received a request to reset your password.</p><p><a href="${resetUrl}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px">Reset password</a></p><p>This link expires in 30 minutes and can only be used once.</p><p>If you did not request this, you can safely ignore this email.</p><p style="font-size:12px;color:#6b7280">Global Messenger</p></div></body></html>`
-    })
-  });
-
-  if (!response.ok) {
-    const data: any = await response.json().catch(() => ({}));
-    throw new Error(data?.message || 'Email provider rejected the reset email');
-  }
-}
 
 export async function registerAdvancedRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const auth = { preHandler: [app.authenticate] };
@@ -84,7 +57,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     });
 
     try {
-      await sendPasswordResetEmail(email, resetUrl);
+      await sendPasswordResetEmail(email, user.displayName || user.username || 'there', resetUrl);
     } catch (error) {
       app.log.error(error, 'Password reset email failed');
       await prisma.user.update({

@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import type { FastifyInstance } from 'fastify';
 import { createPasswordResetToken, consumePasswordResetToken } from './auth-reset';
-import { sendPasswordResetEmail } from './email';
+import { sendPasswordResetEmail } from './smtp.js';
 
 export async function registerPasswordResetRoutes(app: FastifyInstance) {
   app.post('/api/auth/forgot-password', async (request, reply) => {
@@ -10,7 +10,6 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
     if (!email) return reply.code(400).send({ message: 'Email is required' });
 
     const user = await app.prisma.user.findUnique({ where: { email } });
-    // Do not reveal whether an account exists.
     if (!user) return reply.send({ message: 'If an account exists for this email, a reset link has been sent.' });
 
     const { token, tokenHash, expiresAt } = createPasswordResetToken();
