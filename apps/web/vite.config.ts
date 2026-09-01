@@ -27,7 +27,9 @@ export default defineConfig({
   ],
   server: {
     host: '127.0.0.1',
-    port: 5180,
+    // Keep the local web URL aligned with the reset links already generated
+    // by the development environment and .env.example.
+    port: 5173,
     strictPort: true,
     proxy: {
       '/api': {
@@ -42,7 +44,7 @@ export default defineConfig({
     },
     hmr: {
       host: '127.0.0.1',
-      port: 5180
+      port: 5173
     }
   }
 });
