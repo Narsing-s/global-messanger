@@ -4,6 +4,7 @@ import { createPasswordResetToken, consumePasswordResetToken } from './auth-rese
 import { sendPasswordResetEmail } from './smtp.js';
 
 const PRODUCTION_WEB_URL = 'https://global-messenger-web.onrender.com';
+const LOCAL_WEB_URL = 'http://127.0.0.1:5180';
 
 export async function registerPasswordResetRoutes(app: FastifyInstance) {
   app.post('/api/auth/forgot-password', async (request, reply) => {
@@ -18,7 +19,7 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
     await app.prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt } });
 
     const configuredWebUrl = process.env.PASSWORD_RESET_WEB_ORIGIN?.trim().replace(/\/$/, '');
-    const webUrl = configuredWebUrl || (process.env.NODE_ENV === 'production' ? PRODUCTION_WEB_URL : 'http://127.0.0.1:5173');
+    const webUrl = configuredWebUrl || (process.env.NODE_ENV === 'production' ? PRODUCTION_WEB_URL : LOCAL_WEB_URL);
     const resetUrl = `${webUrl}/reset-password.html?token=${encodeURIComponent(token)}`;
 
     try {
@@ -36,11 +37,16 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
     const body = request.body as { token?: string; password?: string };
     const token = body?.token?.trim();
     const password = body?.password || '';
-    if (!token || password.length < 8) return reply.code(400).send({ message: 'A valid reset token and password of at least 8 characters are required.' });
+    if (!token || password.length < 8) {
+      return reply.code(400).send({ message: 'A valid reset token and password of at least 8 characters are required.' });
+    }
 
     const passwordHash = await bcrypt.hash(password, 12);
     const consumed = await consumePasswordResetToken(app.prisma, token, passwordHash);
-    if (!consumed) return reply.code(400).send({ message: 'This reset link is invalid or expired. Please request a new one.' });
+    if (!consumed) {
+      return reply.code(400).send({ message: 'This reset link is invalid or expired. Please request a new one.' });
+    }
+
     return reply.send({ message: 'Password reset successfully. You can now log in.' });
   });
 }
