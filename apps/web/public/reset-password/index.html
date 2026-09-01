@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <title>Reset password — Global Messenger</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1020;color:#eef2ff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px}.card{width:min(440px,100%);background:#121a2b;border:1px solid #26324d;border-radius:22px;padding:32px;box-shadow:0 20px 70px rgba(0,0,0,.35)}.logo{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;background:#1d4ed8;font-size:25px;margin-bottom:20px}.title{font-size:28px;font-weight:750;margin:0 0 8px}.sub{color:#aab6cf;line-height:1.55;margin:0 0 24px}label{display:block;font-size:14px;font-weight:650;margin:15px 0 7px}input{width:100%;padding:13px 14px;border-radius:12px;border:1px solid #34425f;background:#0d1526;color:#fff;font-size:15px;outline:none}input:focus{border-color:#5b8cff}button{width:100%;margin-top:20px;padding:13px 16px;border:0;border-radius:12px;background:#2563eb;color:white;font-size:15px;font-weight:700;cursor:pointer}button:disabled{opacity:.6;cursor:not-allowed}.msg{margin-top:16px;padding:12px 14px;border-radius:11px;line-height:1.45;font-size:14px}.error{background:#3a1820;color:#ffb4bd;border:1px solid #74313d}.success{background:#123425;color:#a7f3c2;border:1px solid #236441}.back{display:block;text-align:center;margin-top:18px;color:#9fb5e9;text-decoration:none;font-size:14px}.hidden{display:none}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="logo">🔐</div>
+    <h1 class="title" id="title">Create a new password</h1>
+    <p class="sub" id="sub">Choose a new password for your Global Messenger account. The reset link is valid for 30 minutes and can only be used once.</p>
+    <form id="form">
+      <label for="password">New password</label>
+      <input id="password" type="password" minlength="8" autocomplete="new-password" required placeholder="At least 8 characters">
+      <label for="confirm">Confirm password</label>
+      <input id="confirm" type="password" minlength="8" autocomplete="new-password" required placeholder="Enter the password again">
+      <div id="message" class="msg hidden"></div>
+      <button id="button" type="submit">Reset password</button>
+    </form>
+    <a class="back" href="/">← Back to Global Messenger</a>
+  </main>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token') || params.get('resetToken') || '';
+  const API = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+    ? 'http://127.0.0.1:4000'
+    : 'https://global-messenger-api.onrender.com';
+  const form = document.getElementById('form');
+  const password = document.getElementById('password');
+  const confirm = document.getElementById('confirm');
+  const message = document.getElementById('message');
+  const button = document.getElementById('button');
+
+  function show(text, type) {
+    message.textContent = text;
+    message.className = 'msg ' + type;
+  }
+
+  if (!token) {
+    form.classList.add('hidden');
+    document.getElementById('title').textContent = 'Invalid reset link';
+    document.getElementById('sub').textContent = 'This password reset link does not contain a valid token. Please request a new reset link from Global Messenger.';
+    show('No password reset token was provided.', 'error');
+    return;
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    message.className = 'msg hidden';
+    const next = password.value;
+    const again = confirm.value;
+    if (next.length < 8) return show('Password must be at least 8 characters.', 'error');
+    if (next !== again) return show('Passwords do not match.', 'error');
+
+    button.disabled = true;
+    button.textContent = 'Updating password…';
+    try {
+      const response = await fetch(API + '/api/auth/reset-password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({token, password: next})
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || ('Password reset failed (' + response.status + ').'));
+      form.classList.add('hidden');
+      document.getElementById('title').textContent = 'Password reset complete';
+      document.getElementById('sub').textContent = 'Your new password has been saved. You can now sign in to Global Messenger.';
+      show(data.message || 'Password reset successfully. You can now log in with your new password.', 'success');
+      setTimeout(() => { location.href = '/'; }, 1800);
+    } catch (error) {
+      show(error && error.message ? error.message : 'Unable to reset password. Please try again.', 'error');
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Reset password';
+    }
+  });
+})();
+</script>
+</body>
+</html>
