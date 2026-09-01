@@ -139,7 +139,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     const limit = Math.min(Math.max(Number(request.query.limit ?? 50), 1), 100);
     if (q.length < 2) return [];
     const memberships = await prisma.conversationMember.findMany({ where: { userId, ...(conversationId ? { conversationId } : {}) }, select: { conversationId: true } });
-    const allowed = memberships.map(x => x.conversationId);
+    const allowed: string[] = memberships.map((x: { conversationId: string }) => x.conversationId);
     if (!allowed.length) return [];
     return prisma.message.findMany({ where: { conversationId: { in: allowed }, deletedAt: null, body: { contains: q, mode: 'insensitive' } }, orderBy: { createdAt: 'desc' }, take: limit, include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } });
   });
