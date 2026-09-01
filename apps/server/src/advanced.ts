@@ -11,6 +11,8 @@ type MessageSearchQuery = { q?: string; conversationId?: string; limit?: string 
 type ForwardBody = { conversationId: string };
 type MuteBody = { minutes?: number | null };
 
+type FastifyRequestWithId = import('fastify').FastifyRequest<{ Params: IdParams }>;
+
 const idSchema = z.string().min(1).max(128);
 const hashResetToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
 
@@ -130,7 +132,5 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   app.post<{ Params: IdParams; Body: MuteBody }>('/api/conversations/:id/mute', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const parsed = z.object({ minutes: z.number().int().min(0).max(525600).nullable().optional() }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('minutes must be between 0 and 525600'); const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.forbidden('Not a conversation member'); const minutes = parsed.data.minutes ?? 0; const mutedUntil = minutes > 0 ? new Date(Date.now() + minutes * 60000) : null; return prisma.conversationMember.update({ where: { conversationId_userId: { conversationId, userId } }, data: { mutedUntil } }); });
   app.post<{ Params: IdParams }>('/api/users/:id/block', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const blockedUserId = request.params.id; if (userId === blockedUserId) return reply.badRequest('You cannot block yourself'); const target = await prisma.user.findUnique({ where: { id: blockedUserId }, select: { id: true } }); if (!target) return reply.notFound('User not found'); return prisma.userBlock.upsert({ where: { userId_blockedUserId: { userId, blockedUserId } }, create: { userId, blockedUserId }, update: {} }); });
   app.delete<{ Params: IdParams }>('/api/users/:id/block', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; await prisma.userBlock.deleteMany({ where: { userId, blockedUserId: request.params.id } }); return { ok: true }; });
-  app.get('/api/users/blocked', auth, async request => { const userId = (request.user as AuthRequest['user']).id; return prisma.userBlock.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, include: { blockedUser: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } });
+  app.get('/api/users/blocked', auth, async request => { const userId = (request.user as AuthRequest['user']).id; return prisma.userBlock.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, include: { blockedUser: { select: { id: true, username: true, displayName: true, avatarUrl: true } } });
 }
-
-type FastifyRequestWithId = import('fastify').FastifyRequest<{ Params: IdParams }>;
