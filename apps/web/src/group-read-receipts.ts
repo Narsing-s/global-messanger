@@ -68,6 +68,7 @@ function decorate() {
 }
 
 async function refresh() {
+  if (!localStorage.getItem('gm_token')) return;
   try {
     const data = await api.conversations();
     conversations = Array.isArray(data) ? data : [];
@@ -98,6 +99,7 @@ function connectRealtime() {
 }
 
 function watch() {
+  if (!localStorage.getItem('gm_token')) return;
   const title = document.querySelector('.chat-heading b')?.textContent?.trim() || '';
   if (title !== lastTitle) { lastTitle = title; document.getElementById('gm-seen-modal')?.remove(); void refresh(); }
   decorate();
