@@ -3,6 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
+import fs from 'node:fs';
+import path from 'node:path';
 import { sendPasswordResetEmail } from './smtp.js';
 
 type AuthRequest = { user: { id: string; username: string } };
@@ -21,8 +23,28 @@ function smtpErrorMessage(error: unknown): string {
   return 'Unknown SMTP error.';
 }
 
+function localResetPage(): string {
+  const candidates = [
+    path.resolve(process.cwd(), '../web/public/reset-password.html'),
+    path.resolve(process.cwd(), 'apps/web/public/reset-password.html')
+  ];
+  for (const file of candidates) {
+    if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8');
+  }
+  return '<!doctype html><html><body><h1>Global Messenger</h1><p>Password reset page is unavailable.</p></body></html>';
+}
+
 export async function registerAdvancedRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const auth = { preHandler: [app.authenticate] };
+
+  // Local development reset page is served by the Global Messenger API itself.
+  // This deliberately avoids localhost:5173/5180, where another local SPA may be running.
+  app.get('/reset-password', async (_request, reply) => {
+    return reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage());
+  });
+  app.get('/reset-password/', async (_request, reply) => {
+    return reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage());
+  });
 
   app.post('/api/auth/forgot-password', async (request, reply) => {
     const parsed = z.object({ email: z.string().trim().email().max(320) }).safeParse(request.body ?? {});
@@ -37,8 +59,9 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = hashResetToken(token);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    const webOrigin = (process.env.PASSWORD_RESET_WEB_ORIGIN || process.env.WEB_ORIGIN || 'http://localhost:5173')
-      .split(',')[0].trim().replace(/\/$/, '');
+    const configuredOrigin = (process.env.PASSWORD_RESET_WEB_ORIGIN || process.env.WEB_ORIGIN || '').split(',')[0].trim().replace(/\/$/, '');
+    const isLocalOrigin = !configuredOrigin || /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?$/i.test(configuredOrigin);
+    const webOrigin = isLocalOrigin ? `http://127.0.0.1:${process.env.PORT ?? 4000}` : configuredOrigin;
     const resetUrl = `${webOrigin}/reset-password/?token=${encodeURIComponent(token)}`;
 
     await prisma.user.update({
