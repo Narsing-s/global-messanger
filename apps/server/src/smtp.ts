@@ -127,9 +127,13 @@ export async function sendPasswordResetEmail(to: string, displayName: string, re
   const secure = String(process.env.SMTP_SECURE ?? '').toLowerCase() === 'true' || port === 465;
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('SMTP_PORT must be a valid TCP port');
 
-  // Always send the dedicated static reset page. This prevents the reset link from
-  // falling through to the SPA/search application when a web server rewrites routes.
-  const normalizedResetUrl = resetUrl.replace(/\/reset-password(?:\.html)?(?:\/)?(?=\?)/, '/reset-password/');
+  // Global Messenger owns localhost:5180 in local development. If an older
+  // application is still occupying localhost:5173, never send users into it.
+  let normalizedResetUrl = resetUrl.replace(/\/reset-password(?:\.html)?(?:\/)?(?=\?)/, '/reset-password/');
+  if (/^https?:\/\/(localhost|127\.0\.0\.1):5173(?:\/|$)/i.test(normalizedResetUrl)) {
+    normalizedResetUrl = normalizedResetUrl.replace(/^(https?:\/\/(?:localhost|127\.0\.0\.1)):5173/i, '$1:5180');
+  }
+
   const safeName = htmlEscape(displayName || 'there');
   const safeUrl = htmlEscape(normalizedResetUrl);
   const html = `<!doctype html><html><body style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;background:#f6f7fb;padding:32px"><div style="max-width:560px;margin:0 auto;background:#fff;padding:32px;border:1px solid #e5e7eb;border-radius:16px"><h2>Reset your Global Messenger password</h2><p>Hello ${safeName},</p><p>We received a request to reset your Global Messenger password.</p><p><a href="${safeUrl}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px">Reset password</a></p><p>This link expires in 30 minutes and can only be used once.</p><p>If you did not request this, you can safely ignore this email.</p><p style="font-size:12px;color:#6b7280">Global Messenger</p></div></body></html>`;
