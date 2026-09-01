@@ -25,7 +25,9 @@ function smtpErrorMessage(error: unknown): string {
 
 function localResetPage(): string {
   const candidates = [
+    path.resolve(process.cwd(), '../web/reset-password.html'),
     path.resolve(process.cwd(), '../web/public/reset-password.html'),
+    path.resolve(process.cwd(), 'apps/web/reset-password.html'),
     path.resolve(process.cwd(), 'apps/web/public/reset-password.html')
   ];
   for (const file of candidates) {
@@ -37,25 +39,15 @@ function localResetPage(): string {
 export async function registerAdvancedRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const auth = { preHandler: [app.authenticate] };
 
-  // Local development reset page is served by the Global Messenger API itself.
-  // This deliberately avoids localhost:5173/5180, where another local SPA may be running.
-  app.get('/reset-password', async (_request, reply) => {
-    return reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage());
-  });
-  app.get('/reset-password/', async (_request, reply) => {
-    return reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage());
-  });
+  app.get('/reset-password', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage()));
+  app.get('/reset-password/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage()));
 
   app.post('/api/auth/forgot-password', async (request, reply) => {
     const parsed = z.object({ email: z.string().trim().email().max(320) }).safeParse(request.body ?? {});
     if (!parsed.success) return reply.badRequest('A valid email address is required');
-
     const email = parsed.data.email.toLowerCase();
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      return { ok: true, message: 'If an account exists for that email, a password reset link has been sent.' };
-    }
-
+    if (!user) return { ok: true, message: 'If an account exists for that email, a password reset link has been sent.' };
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = hashResetToken(token);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
@@ -63,47 +55,39 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     const isLocalOrigin = !configuredOrigin || /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?$/i.test(configuredOrigin);
     const webOrigin = isLocalOrigin ? `http://127.0.0.1:${process.env.PORT ?? 4000}` : configuredOrigin;
     const resetUrl = `${webOrigin}/reset-password/?token=${encodeURIComponent(token)}`;
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt }
-    });
-
+    await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt } });
     try {
       await sendPasswordResetEmail(email, user.displayName || user.username || 'there', resetUrl);
     } catch (error) {
       app.log.error(error, 'Password reset email failed');
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { resetTokenHash: null, resetTokenExpiresAt: null }
-      });
+      await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: null, resetTokenExpiresAt: null } });
       return reply.serviceUnavailable(`Password reset email could not be sent: ${smtpErrorMessage(error)}`);
     }
-
-    return {
-      ok: true,
-      message: `Password reset link sent successfully to ${email}. Please check your inbox (and spam folder).`
-    };
+    return { ok: true, message: `Password reset link sent successfully to ${email}. Please check your inbox (and spam folder).` };
   });
 
   app.post('/api/auth/reset-password', async (request, reply) => {
-    const parsed = z.object({
-      token: z.string().min(32).max(128),
-      password: z.string().min(8).max(128)
-    }).safeParse(request.body ?? {});
+    const parsed = z.object({ token: z.string().min(32).max(128), password: z.string().min(8).max(128) }).safeParse(request.body ?? {});
     if (!parsed.success) return reply.badRequest('A valid reset token and password of at least 8 characters are required');
-
     const tokenHash = hashResetToken(parsed.data.token);
     const user = await prisma.user.findFirst({ where: { resetTokenHash: tokenHash, resetTokenExpiresAt: { gt: new Date() } } });
     if (!user) return reply.badRequest('This password reset link is invalid or has expired. Please request a new reset link.');
-
     const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash, resetTokenHash: null, resetTokenExpiresAt: null, lastSeenAt: new Date() }
-    });
-
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash, resetTokenHash: null, resetTokenExpiresAt: null, lastSeenAt: new Date() } });
     return { ok: true, message: 'Password reset successfully. You can now log in with your new password.' };
+  });
+
+  // Permanently delete the authenticated user's account and all owned data.
+  app.delete('/api/auth/account', auth, async (request, reply) => {
+    const userId = (request.user as AuthRequest['user']).id;
+    const parsed = z.object({ password: z.string().min(1).max(128) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.badRequest('Enter your current password to delete your account.');
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, passwordHash: true } });
+    if (!user) return reply.notFound('Account not found.');
+    const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
+    if (!valid) return reply.code(401).send({ message: 'Current password is incorrect.' });
+    await prisma.user.delete({ where: { id: userId } });
+    return { ok: true, message: 'Your Global Messenger account and associated database data have been permanently deleted.' };
   });
 
   async function getMessageAccess(request: FastifyRequestWithId, reply: any) {
