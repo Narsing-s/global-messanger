@@ -37,14 +37,24 @@ function localResetPage(webOrigin: string): string {
   return '<!doctype html><html><body><h1>Global Messenger</h1><p>Password reset page is unavailable.</p></body></html>';
 }
 
+function normalizeWebOrigin(value: string): string {
+  const origin = value.split(',')[0].trim().replace(/\/$/, '');
+  // The local Vite app is intentionally fixed to 5180. Older .env files in
+  // existing checkouts may still contain localhost:5173; never generate a
+  // reset email that points at that stale port.
+  if (/^https?:\/\/(localhost|127\.0\.0\.1):5173$/i.test(origin)) {
+    return origin.replace(/:5173$/i, ':5180');
+  }
+  return origin;
+}
+
 export async function registerAdvancedRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const auth = { preHandler: [app.authenticate] };
   await registerEmailAuthRoutes(app, prisma);
 
-  // Vite serves the web app on 5180 in local development. Keeping the same
-  // default here prevents reset emails from sending users to the old 5173 port.
-  const configuredWebOrigin = (process.env.PASSWORD_RESET_WEB_ORIGIN || process.env.WEB_ORIGIN || 'http://127.0.0.1:5180')
-    .split(',')[0].trim().replace(/\/$/, '');
+  const configuredWebOrigin = normalizeWebOrigin(
+    process.env.PASSWORD_RESET_WEB_ORIGIN || process.env.WEB_ORIGIN || 'http://127.0.0.1:5180'
+  );
 
   app.get('/reset-password', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage(configuredWebOrigin)));
   app.get('/reset-password/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage(configuredWebOrigin)));
@@ -58,7 +68,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = hashResetToken(token);
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    const resetUrl = `${configuredWebOrigin}/reset-password/?token=${encodeURIComponent(token)}`;
+    const resetUrl = `${configuredWebOrigin}/reset-password.html?token=${encodeURIComponent(token)}`;
     await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt } });
     try {
       await sendPasswordResetEmail(email, user.displayName || user.username || 'there', resetUrl);
@@ -87,7 +97,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   app.post('/api/ai/assist', auth, async (request, reply) => { const parsed = z.object({ prompt: z.string().trim().min(1).max(4000), context: z.string().trim().max(6000).optional() }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('prompt is required and must be 1-4000 characters'); const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY; if (!apiKey) return reply.serviceUnavailable('AI is not configured. Add GROQ_API_KEY to the server environment.'); const isGroq = Boolean(process.env.GROQ_API_KEY); const endpoint = isGroq ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'; const model = isGroq ? (process.env.GROQ_MODEL || 'llama-3.3-70b-versatile') : (process.env.OPENAI_MODEL || 'gpt-4o-mini'); const context = parsed.data.context ? `\nConversation context:\n${parsed.data.context}` : ''; try { const response = await fetch(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, temperature: 0.4, max_tokens: 700, messages: [{ role: 'system', content: 'You are Global Messenger AI. Be concise, helpful, friendly, and privacy-conscious. Never claim to have performed actions you cannot perform.' }, { role: 'user', content: `${parsed.data.prompt}${context}` }] }) }); const data: any = await response.json().catch(() => ({})); if (!response.ok) return reply.code(502).send({ message: data?.error?.message || 'AI provider request failed' }); const answer = data?.choices?.[0]?.message?.content; if (typeof answer !== 'string' || !answer.trim()) return reply.code(502).send({ message: 'AI returned an empty response' }); return { answer: answer.trim(), model }; } catch { return reply.code(502).send({ message: 'Unable to reach AI provider' }); } });
   app.post<{ Params: IdParams }>('/api/messages/:id/bookmark', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; return prisma.messageBookmark.upsert({ where: { messageId_userId: { messageId: access.message.id, userId: access.userId } }, create: { messageId: access.message.id, userId: access.userId }, update: {} }); });
   app.delete<{ Params: IdParams }>('/api/messages/:id/bookmark', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; await prisma.messageBookmark.deleteMany({ where: { messageId: access.message.id, userId: access.userId } }); return { ok: true }; });
-  app.get('/api/bookmarks', auth, async request => { const userId = (request.user as AuthRequest['user']).id; return prisma.messageBookmark.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 200, include: { message: { include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } } } }); });
+  app.get('/api/bookmarks', auth, async request => { const userId = (request.user as AuthRequest['user']).id; return prisma.messageBookmark.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 200, include: { message: { include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } } }); });
   app.post<{ Params: IdParams }>('/api/messages/:id/pin', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; if (access.message.deletedAt) return reply.badRequest('Deleted messages cannot be pinned'); return prisma.pinnedMessage.upsert({ where: { conversationId_messageId: { conversationId: access.message.conversationId, messageId: access.message.id } }, create: { conversationId: access.message.conversationId, messageId: access.message.id, pinnedById: access.userId }, update: { pinnedById: access.userId } }); });
   app.delete<{ Params: IdParams }>('/api/messages/:id/pin', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; await prisma.pinnedMessage.deleteMany({ where: { conversationId: access.message.conversationId, messageId: access.message.id } }); return { ok: true }; });
   app.get<{ Params: IdParams }>('/api/conversations/:id/pins', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.forbidden('Not a conversation member'); return prisma.pinnedMessage.findMany({ where: { conversationId }, orderBy: { createdAt: 'desc' }, include: { message: { include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } } } }); });
