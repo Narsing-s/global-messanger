@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
 
+const RESET_PAGE = path.resolve(process.cwd(), 'public/reset-password/index.html');
+
 export default defineConfig({
   plugins: [
     react(),
@@ -12,10 +14,10 @@ export default defineConfig({
         server.middlewares.use((req, res, next) => {
           const pathname = (req.url || '').split('?')[0];
           if (pathname === '/reset-password' || pathname === '/reset-password/') {
-            const file = path.resolve(process.cwd(), 'public/reset-password/index.html');
             res.statusCode = 200;
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
-            res.end(fs.readFileSync(file));
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+            res.end(fs.readFileSync(RESET_PAGE));
             return;
           }
           next();
@@ -25,7 +27,7 @@ export default defineConfig({
   ],
   server: {
     host: '127.0.0.1',
-    port: 5173,
+    port: 5180,
     strictPort: true,
     proxy: {
       '/api': {
@@ -40,7 +42,7 @@ export default defineConfig({
     },
     hmr: {
       host: '127.0.0.1',
-      port: 5173
+      port: 5180
     }
   }
 });
