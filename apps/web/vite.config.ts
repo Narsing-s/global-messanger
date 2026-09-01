@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const RESET_PAGE = path.resolve(process.cwd(), 'public/reset-password/index.html');
+const RESET_PAGE = path.resolve(process.cwd(), 'public/reset-password.html');
 
 export default defineConfig({
   plugins: [
@@ -12,8 +12,8 @@ export default defineConfig({
       name: 'global-messenger-reset-page',
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
-          const pathname = (req.url || '').split('?')[0];
-          if (pathname === '/reset-password' || pathname === '/reset-password/') {
+          const pathname = (req.url || '').split('?')[0].replace(/\/$/, '');
+          if (pathname === '/reset-password' || pathname === '/reset-password.html') {
             res.statusCode = 200;
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
