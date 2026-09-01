@@ -11,9 +11,6 @@ function write(file, value) { fs.writeFileSync(file, value, 'utf8'); }
 
 let advanced = read(advancedPath);
 
-// Keep password-reset links on the actual web application in local development.
-// The reset page is rendered by React at /?resetToken=..., so Gmail never has to
-// open a separate /reset-password.html static route that may be missing/stale.
 advanced = advanced.replace(
   "const resetUrl = `${resetOrigin(request)}/reset-password.html?token=${encodeURIComponent(token)}`;",
   "const resetUrl = `${resetOrigin(request)}/?resetToken=${encodeURIComponent(token)}`;"
@@ -68,20 +65,20 @@ const auth = `function Auth(p:any){
   async function submit(e:any){e.preventDefault();setError('');setMessage('');setLoading(true);try{
     if(mode==='register'){
       if(password!==confirm)throw Error('Passwords do not match');
-      const r=await fetch(\`${API}/api/auth/register-email\`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:identifier,displayName:displayName||identifier,email,password})});
+      const r=await fetch(\`\${API}/api/auth/register-email\`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:identifier,displayName:displayName||identifier,email,password})});
       const d=await r.json();if(!r.ok)throw Error(d.message||'Unable to create account');localStorage.setItem('gm_token',d.token);localStorage.setItem('gm_user',JSON.stringify(d.user));location.href='/';return;
     }
     if(mode==='login'){
-      const r=await fetch(\`${API}/api/auth/login-email\`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier,password})});
+      const r=await fetch(\`\${API}/api/auth/login-email\`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier,password})});
       const d=await r.json();if(!r.ok)throw Error(d.message||'Unable to sign in');localStorage.setItem('gm_token',d.token);localStorage.setItem('gm_user',JSON.stringify(d.user));location.href='/';return;
     }
     if(mode==='forgot'){
-      const r=await fetch(\`${API}/api/auth/forgot-password\`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+      const r=await fetch(\`\${API}/api/auth/forgot-password\`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
       const d=await r.json();if(!r.ok)throw Error(d.message||'Unable to send reset link');setMessage(d.message||'If an account exists for that email, a reset link has been sent.');return;
     }
     if(!resetToken)throw Error('This password reset link is missing its security token. Please request a new reset link.');
     if(password!==confirm)throw Error('Passwords do not match');
-    const r=await fetch(\`${API}/api/auth/reset-password\`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:resetToken,password})});
+    const r=await fetch(\`\${API}/api/auth/reset-password\`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:resetToken,password})});
     const d=await r.json();if(!r.ok)throw Error(d.message||'Unable to reset password');setMessage(d.message||'Password reset successfully.');history.replaceState({},'',location.pathname);setMode('login');setPassword('');setConfirm('');
   }catch(x:any){setError(x.message||'Something went wrong')}finally{setLoading(false)}}
   if(mode==='reset')return <div className="auth-page"><div className="auth-card"><div className="auth-logo"><KeyRound size={27}/></div><h1>Reset your password</h1><p>Choose a new password for your Global Messenger account.</p><form onSubmit={submit}><label>New password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required autoComplete="new-password" placeholder="At least 8 characters"/></label><label>Confirm password<input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} minLength={8} required autoComplete="new-password" placeholder="Repeat your password"/></label>{error&&<div className="error">{error}</div>}{message&&<div className="auth-success">{message}</div>}<button className="primary" disabled={loading}>{loading?'Resetting…':'Reset password'}</button></form>{message&&<button className="switch" onClick={()=>setMode('login')}>Back to sign in</button>}</div></div>;
@@ -102,5 +99,5 @@ if (!styles.includes('.auth-success')) {
 console.log('Global Messenger email authentication upgrade applied.');
 console.log('- Registration requires email');
 console.log('- Login accepts username or email');
-console.log('- Forgot password opens the React reset page on the web app');
+console.log('- Forgot password is available from the login page');
 console.log('- Reset links expire after 30 minutes and are single-use');
