@@ -6,6 +6,12 @@ let initialized = false;
 
 export async function initPushNotifications() {
   if (initialized || !localStorage.getItem('gm_token')) return;
+
+  // Capacitor's native push plugin is not a browser push implementation.
+  // Returning early keeps local web development quiet and avoids expected
+  // registration warnings in Chrome/Edge/Firefox.
+  if (Capacitor.getPlatform() === 'web') return;
+
   initialized = true;
 
   try {
@@ -17,13 +23,14 @@ export async function initPushNotifications() {
     PushNotifications.addListener('registration', async (token: Token) => {
       try {
         await api.registerDevice(token.value, Capacitor.getPlatform());
-      } catch (error) {
-        console.warn('Push device registration failed', error);
+      } catch {
+        // Push registration should never interrupt or spam the chat UI.
       }
     });
 
-    PushNotifications.addListener('registrationError', error => {
-      console.warn('Push registration error', error);
+    PushNotifications.addListener('registrationError', () => {
+      // Native push can fail because of device/store configuration. The app
+      // remains fully usable without push registration.
     });
 
     PushNotifications.addListener('pushNotificationActionPerformed', action => {
@@ -32,8 +39,7 @@ export async function initPushNotifications() {
         window.dispatchEvent(new CustomEvent('gm:open-conversation', { detail: { conversationId } }));
       }
     });
-  } catch (error) {
-    if (Capacitor.getPlatform() === 'web') return;
-    console.warn('Push notifications unavailable', error);
+  } catch {
+    // Push is an enhancement, not a dependency for messaging.
   }
 }
