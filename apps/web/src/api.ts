@@ -83,6 +83,12 @@ async function request(path: string, options: RequestInit = {}) {
     }
 
     if (!res.ok) {
+      if (res.status === 401) {
+        localStorage.removeItem('gm_token');
+        localStorage.removeItem('gm_user');
+        window.dispatchEvent(new CustomEvent('gm:auth-expired'));
+        throw new Error('Your session has expired. Please sign in again.');
+      }
       throw new Error(data?.message || `Request failed (${res.status})`);
     }
     return data;
