@@ -35,6 +35,9 @@ services:
         value: https://global-messenger-api.onrender.com
     routes:
       - type: rewrite
+        source: /reset-password/*
+        destination: /reset-password/index.html
+      - type: rewrite
         source: /*
         destination: /index.html
 
