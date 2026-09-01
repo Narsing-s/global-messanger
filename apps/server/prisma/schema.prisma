@@ -75,7 +75,7 @@ model Message {
   body            String
   type            String       @default("text")
   attachmentUrl   String?
-  attachmentName String?
+  attachmentName  String?
   attachmentMime  String?
   attachmentSize  Int?
   replyToId       String?
@@ -83,8 +83,8 @@ model Message {
   editedAt        DateTime?
   deletedAt       DateTime?
   conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender          User          @relation(fields: [senderId], references: [id])
-  replyTo         Message?     @relation("MessageReply", fields: [replyToId], references: [id])
+  sender          User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo         Message?     @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
   replies         Message[]    @relation("MessageReply")
   reactions       MessageReaction[]
   bookmarks       MessageBookmark[]
