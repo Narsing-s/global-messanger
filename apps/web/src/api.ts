@@ -9,7 +9,7 @@ declare global {
 const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
 const API = configuredApi || (import.meta.env.DEV
   ? window.location.origin
-  : 'https://global-messenger-api.onrender.com');
+  : 'https://global-messenger-api.narsingbeesetti006.workers.dev');
 
 type ConversationResponse = {
   id: string;
