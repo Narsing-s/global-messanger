@@ -44,17 +44,23 @@ function normalizeConversations(value: any): ConversationResponse[] {
 function normalizeMessages(value: any, conversationId: string): any[] {
   const list = Array.isArray(value) ? value : value?.messages;
   if (!Array.isArray(list)) return [];
-
   return list
     .filter((message: any) => message && typeof message === 'object')
-    .map((message: any) => ({
-      ...message,
-      id: String(message.id ?? `${conversationId}-${message.createdAt ?? Math.random()}`),
-      conversationId: String(message.conversationId ?? conversationId),
-      senderId: String(message.senderId ?? ''),
-      body: typeof message.body === 'string' ? message.body : '',
-      createdAt: message.createdAt ?? new Date().toISOString()
-    }))
+    .map((message: any) => {
+      const receipts = Array.isArray(message.receipts) ? message.receipts : [];
+      const delivered = receipts.some((receipt: any) => Boolean(receipt?.deliveredAt));
+      const read = receipts.some((receipt: any) => Boolean(receipt?.readAt));
+      return {
+        ...message,
+        id: String(message.id ?? `${conversationId}-${message.createdAt ?? Math.random()}`),
+        conversationId: String(message.conversationId ?? conversationId),
+        senderId: String(message.senderId ?? ''),
+        body: typeof message.body === 'string' ? message.body : '',
+        createdAt: message.createdAt ?? new Date().toISOString(),
+        __delivered: delivered || Boolean(message.__delivered),
+        __read: read || Boolean(message.__read)
+      };
+    })
     .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
