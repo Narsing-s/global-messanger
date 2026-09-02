@@ -1,0 +1,41 @@
+name: One-time account deletion email patch
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Send account deletion confirmation email after successful deletion'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch account deletion route
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('apps/server/src/advanced.ts')
+          s = p.read_text()
+          old_import = "import { sendPasswordResetEmail } from './smtp.js';"
+          new_import = "import { sendPasswordResetEmail, sendAccountDeletedEmail } from './smtp.js';"
+          if old_import not in s:
+              raise SystemExit('Expected SMTP import not found')
+          s = s.replace(old_import, new_import, 1)
+          old = "app.delete('/api/auth/account', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const parsed = z.object({ password: z.string().min(1).max(128) }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('Enter your current password to delete your account.'); const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, passwordHash: true } }); if (!user) return reply.notFound('Account not found.'); const valid = await bcrypt.compare(parsed.data.password, user.passwordHash); if (!valid) return reply.code(401).send({ message: 'Current password is incorrect.' }); await prisma.user.delete({ where: { id: userId } }); return { ok: true, message: 'Your Global Messenger account and associated database data have been permanently deleted.' }; });"
+          new = "app.delete('/api/auth/account', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const parsed = z.object({ password: z.string().min(1).max(128) }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('Enter your current password to delete your account.'); const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, displayName: true, username: true, passwordHash: true } }); if (!user) return reply.notFound('Account not found.'); const valid = await bcrypt.compare(parsed.data.password, user.passwordHash); if (!valid) return reply.code(401).send({ message: 'Current password is incorrect.' }); const deletionEmail = user.email; const deletionName = user.displayName || user.username || 'there'; await prisma.user.delete({ where: { id: userId } }); try { await sendAccountDeletedEmail(deletionEmail, deletionName); } catch (error) { app.log.error(error, 'Account deletion confirmation email failed'); } return { ok: true, message: 'Your Global Messenger account and associated database data have been permanently deleted. A confirmation email has been sent to your registered email address.' }; });"
+          if old not in s:
+              raise SystemExit('Expected account deletion route not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/server/src/advanced.ts
+          git commit -m 'Send account deletion confirmation email after successful deletion'
+          git push
