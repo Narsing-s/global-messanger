@@ -4,8 +4,11 @@
     const sidebar = document.querySelector('.sidebar');
     const sidebarBottom = document.querySelector('.sidebar-bottom');
     if (!button || !sidebar || !sidebarBottom) return;
-    if (button.parentElement === sidebarBottom) {
-      sidebar.appendChild(button);
+
+    // Keep Delete account exactly in the original account/settings area,
+    // directly below the existing sidebar-bottom controls.
+    if (button.parentElement !== sidebarBottom) {
+      sidebarBottom.appendChild(button);
     }
   };
 
