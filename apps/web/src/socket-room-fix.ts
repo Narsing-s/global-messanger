@@ -3,7 +3,7 @@ import { Socket } from 'socket.io-client';
 const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
 const API = configuredApi || (import.meta.env.DEV
   ? window.location.origin
-  : 'https://global-messenger-api.narsingbeesetti006.workers.dev');
+  : 'https://global-messanger-backend.onrender.com');
 
 const originalConnect = Socket.prototype.connect;
 
