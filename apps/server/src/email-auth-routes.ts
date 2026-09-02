@@ -2,9 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import { sendWelcomeEmail } from './smtp.js';
+import { sendWelcomeEmail, sendReportEmail } from './smtp.js';
 
 const emailSchema = z.string().trim().email().max(320);
+const auth = { preHandler: [] as any[] };
 
 export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: PrismaClient) {
   app.post('/api/auth/register-email', async (request, reply) => {
@@ -45,8 +46,6 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
       data: { username, displayName: parsed.data.displayName, email, passwordHash }
     });
 
-    // Registration succeeds only after the welcome email has been accepted by SMTP.
-    // This prevents the UI from reporting success while the mail server is silently failing.
     try {
       await sendWelcomeEmail(email, user.displayName || user.username || 'there');
     } catch (error) {
@@ -85,5 +84,37 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
       token,
       user: { id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl }
     };
+  });
+
+  app.delete('/api/conversations/:id/permanent', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const userId = String((request.user as any).id);
+    const conversationId = String((request.params as any).id);
+    const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } });
+    if (!membership) return reply.notFound('Chat not found.');
+    await prisma.conversation.delete({ where: { id: conversationId } });
+    return { ok: true, conversationId };
+  });
+
+  app.post('/api/conversations/:id/clear', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const userId = String((request.user as any).id);
+    const conversationId = String((request.params as any).id);
+    const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } });
+    if (!membership) return reply.notFound('Chat not found.');
+    await prisma.message.deleteMany({ where: { conversationId } });
+    return { ok: true, conversationId };
+  });
+
+  app.post('/api/conversations/:id/report', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const userId = String((request.user as any).id);
+    const conversationId = String((request.params as any).id);
+    const parsed = z.object({ reason: z.string().trim().min(1).max(100), details: z.string().trim().max(2000).optional() }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.badRequest('Choose a report reason.');
+    const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } });
+    if (!membership) return reply.notFound('Chat not found.');
+    const me = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, displayName: true, username: true } });
+    const conversation = await prisma.conversation.findUnique({ where: { id: conversationId }, include: { members: { include: { user: { select: { id: true, displayName: true, username: true } } } } } });
+    const reported = conversation?.members.find(m => m.userId !== userId)?.user;
+    await sendReportEmail({ reporterEmail: me?.email || undefined, reporterName: me?.displayName || me?.username, reportedName: reported?.displayName || reported?.username, conversationId, reason: parsed.data.reason, details: parsed.data.details });
+    return { ok: true, message: 'Report submitted to Global Messenger support.' };
   });
 }
