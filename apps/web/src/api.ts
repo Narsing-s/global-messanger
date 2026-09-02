@@ -5,11 +5,11 @@ declare global {
 }
 
 // In development use the Vite origin so /api and /socket.io can be proxied to Fastify.
-// Production can still override the backend with VITE_API_URL or runtime config.
+// Production uses the Render backend unless explicitly overridden by runtime/Vite config.
 const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
 const API = configuredApi || (import.meta.env.DEV
   ? window.location.origin
-  : 'https://global-messenger-api.narsingbeesetti006.workers.dev');
+  : 'https://global-messanger-backend.onrender.com');
 
 type ConversationResponse = {
   id: string;
