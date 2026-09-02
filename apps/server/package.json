@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "dev": "node scripts/apply-blocking-patch.mjs && tsx watch src/index.ts",
+    "build": "node scripts/apply-blocking-patch.mjs && tsc",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -14,7 +14,7 @@
   "dependencies": {
     "@fastify/cors": "^10.0.2",
     "@fastify/jwt": "^9.1.0",
-    "@fastify/multipart": "^9.2.1",
+    "@fastify/multipart": "^9.2.0",
     "@fastify/sensible": "^6.0.3",
     "@fastify/static": "^8.2.0",
     "@prisma/client": "^6.3.1",
