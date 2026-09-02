@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-reliability-patch.mjs && vite",
-    "build": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-reliability-patch.mjs && tsc -b && vite build",
+    "dev": "node scripts/apply-chat-stability-patch.mjs && vite",
+    "build": "node scripts/apply-chat-stability-patch.mjs && tsc -b && vite build",
     "android:add": "cap add android",
     "android:sync": "cap sync",
     "android:open": "cap open android",
