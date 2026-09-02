@@ -38,24 +38,14 @@ if (!source.includes('allowed-upload-mime-types')) {
 }
 
 if (!source.includes('message-idempotency-and-rate-limit')) {
-  const sendPatterns = [
-    /        try \{\n          if \([\s\S]*?\/\* -------------------------- Persist ----------------------------- \*\//,
-    /        try \{\n          if \([\s\S]*?\/\* -------------------------- Persist ----------------------------- \*\//
-  ];
-  const hardening = `        try {\n          /* ---------------- message-idempotency-and-rate-limit ---------------- */\n          const now = Date.now();\n          if (messageRate.size > 50000) {\n            for (const [key, value] of messageRate) {\n              if (now - value.startedAt > MESSAGE_WINDOW_MS) messageRate.delete(key);\n            }\n          }\n          const bucket = messageRate.get(userId);\n          if (!bucket || now - bucket.startedAt >= MESSAGE_WINDOW_MS) messageRate.set(userId, { startedAt: now, count: 1 });\n          else if (bucket.count >= MESSAGE_WINDOW_LIMIT) {\n            socket.emit('message:failed', { clientId: data?.clientId, conversationId: data?.conversationId, error: 'Too many messages. Please slow down.' });\n            return;\n          } else bucket.count += 1;\n\n          const clientId = typeof data?.clientId === 'string' ? data.clientId.trim().slice(0, MESSAGE_CLIENT_ID_MAX) : '';\n          if (!clientId) {\n            socket.emit('message:failed', { clientId: data?.clientId, conversationId: data?.conversationId, error: 'A client message id is required' });\n            return;\n          }\n          if (!data?.conversationId || !data?.body?.trim()) {\n            socket.emit('message:failed', { clientId, conversationId: data?.conversationId, error: 'Message body is required' });\n            return;\n          }\n\n          const isMember = await member(userId, data.conversationId);\n          if (!isMember) {\n            socket.emit('message:failed', { clientId, conversationId: data.conversationId, error: 'You are not a member of this conversation' });\n            return;\n          }\n\n          const existingMessage = await prisma.message.findFirst({\n            where: { senderId: userId, clientId, conversationId: data.conversationId },\n            include: messageInclude\n          });\n          if (existingMessage) {\n            socket.emit('message:ack', { messageId: existingMessage.id, conversationId: existingMessage.conversationId, clientId, createdAt: existingMessage.createdAt });\n            return;\n          }\n\n          /* -------------------------- Persist ----------------------------- */`;
-  let replaced = false;
-  for (const pattern of sendPatterns) {
-    const match = source.match(pattern);
-    if (match) {
-      source = source.replace(pattern, hardening);
-      replaced = true;
-      break;
-    }
-  }
-  if (!replaced) {
-    // Newer server revisions already contain the reliability logic under a different surrounding block.
-    // Do not fail the Render build; the other reliability patches remain safe and idempotent.
-    console.warn('Reliability patch: message send anchor changed; skipping send hardening because the source may already contain equivalent logic.');
+  const messageSendStart = source.indexOf("socket.on(\n      'message:send',");
+  const persistMarker = '          /* -------------------------- Persist ----------------------------- */';
+  const persistIndex = messageSendStart >= 0 ? source.indexOf(persistMarker, messageSendStart) : -1;
+  if (messageSendStart < 0 || persistIndex < 0) {
+    console.warn('Reliability patch: message send anchor changed; skipping send hardening.');
+  } else {
+    const hardening = `          /* ---------------- message-idempotency-and-rate-limit ---------------- */\n          const now = Date.now();\n          if (messageRate.size > 50000) {\n            for (const [key, value] of messageRate) {\n              if (now - value.startedAt > MESSAGE_WINDOW_MS) messageRate.delete(key);\n            }\n          }\n          const bucket = messageRate.get(userId);\n          if (!bucket || now - bucket.startedAt >= MESSAGE_WINDOW_MS) messageRate.set(userId, { startedAt: now, count: 1 });\n          else if (bucket.count >= MESSAGE_WINDOW_LIMIT) {\n            socket.emit('message:failed', { clientId: data?.clientId, conversationId: data?.conversationId, error: 'Too many messages. Please slow down.' });\n            return;\n          } else bucket.count += 1;\n\n          const clientId = typeof data?.clientId === 'string' ? data.clientId.trim().slice(0, MESSAGE_CLIENT_ID_MAX) : '';\n          if (!clientId) {\n            socket.emit('message:failed', { clientId: data?.clientId, conversationId: data?.conversationId, error: 'A client message id is required' });\n            return;\n          }\n          if (!data?.conversationId || !data?.body?.trim()) {\n            socket.emit('message:failed', { clientId, conversationId: data?.conversationId, error: 'Message body is required' });\n            return;\n          }\n\n          const isMember = await member(userId, data.conversationId);\n          if (!isMember) {\n            socket.emit('message:failed', { clientId, conversationId: data.conversationId, error: 'You are not a member of this conversation' });\n            return;\n          }\n\n          const existingMessage = await prisma.message.findFirst({\n            where: { senderId: userId, clientId, conversationId: data.conversationId },\n            include: messageInclude\n          });\n          if (existingMessage) {\n            socket.emit('message:ack', { messageId: existingMessage.id, conversationId: existingMessage.conversationId, clientId, createdAt: existingMessage.createdAt });\n            return;\n          }\n\n`;
+    source = source.slice(0, persistIndex) + hardening + source.slice(persistIndex);
   }
 }
 
