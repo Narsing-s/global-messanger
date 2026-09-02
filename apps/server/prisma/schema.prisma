@@ -71,7 +71,7 @@ model ConversationMember {
 
 model Message {
   id              String       @id @default(cuid())
-  clientId        String?      @unique
+  clientId        String?
   conversationId  String
   senderId        String
   body            String
@@ -95,6 +95,7 @@ model Message {
   @@index([conversationId, createdAt])
   @@index([senderId, createdAt])
   @@index([conversationId, type, createdAt])
+  @@unique([senderId, clientId])
 }
 
 model MessageReceipt {
