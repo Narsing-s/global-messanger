@@ -40,7 +40,11 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
     const userId = String((request.user as any).id); const conversationId = String((request.params as any).id);
     const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } });
     if (!membership) return reply.notFound('Chat not found.');
-    await prisma.conversation.delete({ where: { id: conversationId } });
+    await prisma.$transaction(async tx => {
+      await tx.conversationMember.delete({ where: { conversationId_userId: { conversationId, userId } } });
+      const remainingMembers = await tx.conversationMember.count({ where: { conversationId } });
+      if (remainingMembers === 0) await tx.conversation.delete({ where: { id: conversationId } });
+    });
     return { ok: true, conversationId };
   });
 
