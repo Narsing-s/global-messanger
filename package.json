@@ -7,9 +7,7 @@
     "apps/server"
   ],
   "scripts": {
-    "doctor": "node scripts/doctor.mjs",
-    "predev": "npm run doctor",
-    "prebuild": "npm run doctor",
+    "doctor": "npm run doctor",
     "dev": "node scripts/dev.mjs",
     "dev:server": "npm run doctor && node scripts/upgrade-auth.mjs && npm --prefix apps/server run dev",
     "dev:web": "npm run doctor && node scripts/upgrade-auth.mjs && npm --prefix apps/web run dev -- --host 127.0.0.1 --strictPort",
@@ -33,7 +31,6 @@
   },
   "allowScripts": {
     "esbuild": true,
-    "@firebase/util@1.15.3": true,
     "@firebase/util@1.15.3": true,
     "@prisma/client": true,
     "@prisma/engines": true,
