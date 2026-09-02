@@ -1,5 +1,5 @@
 (() => {
-  const API = window.__GM_CONFIG__?.API_URL || ((location.hostname === '127.0.0.1' || location.hostname === 'localhost') ? location.origin : 'https://global-messenger-api.narsingbeesetti006.workers.dev');
+  const API = window.__GM_CONFIG__?.API_URL || ((location.hostname === '127.0.0.1' || location.hostname === 'localhost') ? location.origin : 'https://global-messanger-backend.onrender.com');
   const token = () => localStorage.getItem('gm_token') || '';
   const headers = () => ({ Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' });
   const conversations = async () => {
@@ -56,7 +56,6 @@
   };
   const closeMenu = () => document.getElementById('gm-modern-menu')?.remove();
 
-  // Read the conversation immediately when the user selects it. This keeps the unread badge in sync without reloading.
   document.addEventListener('click', e => {
     const item = e.target instanceof Element ? e.target.closest('.chat-item') : null;
     if (!item) return;
@@ -66,7 +65,6 @@
     }, 120);
   }, true);
 
-  // The old block action reloaded the entire application. Handle it here so blocking is instant and the chat stays open.
   document.addEventListener('click', async e => {
     const button = e.target instanceof Element ? e.target.closest('[data-act="block"]') : null;
     if (!button) return;
@@ -90,7 +88,6 @@
     }
   }, true);
 
-  // Never allow a selected chat to retain a stale unread badge after its read request succeeds.
   window.addEventListener('gm:chat-read', e => {
     const id = e.detail?.conversationId;
     if (!id) return;
