@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm install --include=dev --include=optional && npm run db:generate && npm run build -w apps/server
+    buildCommand: rm -rf apps/server/dist && npm install --include=dev --include=optional && npm run db:generate && npm run build -w apps/server
     startCommand: npm run start -w apps/server
     healthCheckPath: /health
     envVars:
