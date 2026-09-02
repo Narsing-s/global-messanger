@@ -2,7 +2,9 @@
   const API = window.__GM_CONFIG__?.API_URL || (location.hostname === '127.0.0.1' || location.hostname === 'localhost' ? location.origin : 'https://global-messenger-api.narsingbeesetti006.workers.dev');
   const token = () => localStorage.getItem('gm_token') || '';
   const request = async (path, options = {}) => {
-    const res = await fetch(`${API}${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}`, ...(options.headers || {}) } });
+    const hasBody = options.body !== undefined && options.body !== null;
+    const headers = { ...(hasBody ? { 'Content-Type': 'application/json' } : {}), ...(token() ? { Authorization: `Bearer ${token()}` } : {}), ...(options.headers || {}) };
+    const res = await fetch(`${API}${path}`, { ...options, headers });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
     return data;
@@ -16,7 +18,6 @@
       for (const item of document.querySelectorAll('.chat-item')) {
         const id = item.getAttribute('data-gm-conversation-id'); if (!id) continue;
         const info = map.get(id); item.querySelector('.gm-unread-badge')?.remove();
-        if (item.classList.contains('selected') && info?.archived) { try { await request(`/api/conversations/${encodeURIComponent(id)}/restore`, { method: 'POST' }); info.archived = false; } catch {} }
         if (info?.unreadCount > 0) item.appendChild(badge(info.unreadCount));
         item.style.display = info?.archived && !(info?.unreadCount > 0) ? 'none' : '';
       }
@@ -24,9 +25,9 @@
   }
   function addDeleteButton(item) {
     if (item.querySelector('.gm-delete-chat')) return;
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'gm-delete-chat'; button.title = 'Remove chat'; button.textContent = '×';
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'gm-delete-chat'; button.title = 'Delete chat'; button.textContent = '×';
     Object.assign(button.style, { marginLeft: '4px', width: '24px', height: '24px', flex: '0 0 24px', border: '0', borderRadius: '8px', background: 'transparent', color: 'inherit', opacity: '0.55', cursor: 'pointer', fontSize: '18px', lineHeight: '24px' });
-    button.addEventListener('click', async e => { e.preventDefault(); e.stopPropagation(); const id = item.getAttribute('data-gm-conversation-id'); if (!id) return; if (!confirm('Remove this chat from your account? Messages are kept for the other person. If they message you again, this chat will return with an unread count.')) return; try { await request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }); item.style.display = 'none'; } catch (err) { alert(err.message || 'Unable to remove chat'); } });
+    button.addEventListener('click', async e => { e.preventDefault(); e.stopPropagation(); const id = item.getAttribute('data-gm-conversation-id'); if (!id) return; if (!confirm('Delete this chat and all messages in it? This removes the chat for everyone.')) return; try { await request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }); item.remove(); } catch (err) { alert(err.message || 'Unable to delete chat'); } });
     item.appendChild(button);
   }
   function enhance() { document.querySelectorAll('.chat-item').forEach(item => { if (!item.dataset.gmEnhanced) { item.dataset.gmEnhanced = '1'; item.addEventListener('contextmenu', async e => { e.preventDefault(); item.querySelector('.gm-delete-chat')?.click(); }); } addDeleteButton(item); }); }
