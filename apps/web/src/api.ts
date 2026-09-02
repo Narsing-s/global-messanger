@@ -111,10 +111,26 @@ export const api = {
     return Array.isArray(value) ? value.filter(Boolean) : [];
   },
   conversations: async () => normalizeConversations(await request('/api/conversations')),
-  direct: async (userId: string) => normalizeConversation(await request('/api/conversations/direct', {
-    method: 'POST',
-    body: JSON.stringify({ userId })
-  })),
+  direct: async (userId: string) => {
+    const conversation = normalizeConversation(await request('/api/conversations/direct', {
+      method: 'POST',
+      body: JSON.stringify({ userId })
+    }));
+
+    // Starting a chat from Search should reopen an archived chat instead of
+    // leaving the user with a conversation that is immediately hidden again.
+    if (conversation.id) {
+      try {
+        await request(`/api/conversations/${encodeURIComponent(conversation.id)}/restore`, {
+          method: 'POST'
+        });
+      } catch {
+        // A brand-new conversation has nothing to restore. Do not block chat creation.
+      }
+    }
+
+    return conversation;
+  },
   group: async (title: string, userIds: string[]) => normalizeConversation(await request('/api/conversations/group', {
     method: 'POST',
     body: JSON.stringify({ title, userIds })
