@@ -124,7 +124,8 @@ export const api = {
   upload: (file: File) => { const f = new FormData(); f.append('file', file); return request('/api/uploads', { method: 'POST', body: f }); },
   react: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }),
   unreact: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'DELETE', body: JSON.stringify({ emoji }) }),
-  registerDevice: (token: string, platform: string) => request('/api/devices', { method: 'POST', body: JSON.stringify({ token, platform }) })
+  registerDevice: (token: string, platform: string) => request('/api/devices', { method: 'POST', body: JSON.stringify({ token, platform }) }),
+  aiAssist: (prompt: string, context?: string) => request('/api/ai/assist', { method: 'POST', body: JSON.stringify({ prompt, context }) })
 };
 
 export { API };
