@@ -66,7 +66,7 @@ jobs:
 
       - name: Build debug APK
         working-directory: apps/web/android
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Prepare release signing
         if: ${{ env.ANDROID_SIGNING_READY == 'true' }}
@@ -107,29 +107,36 @@ jobs:
 
       - name: Build release APK
         working-directory: apps/web/android
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease --stacktrace
 
       - name: Build release AAB
         working-directory: apps/web/android
-        run: ./gradlew bundleRelease
+        run: ./gradlew bundleRelease --stacktrace
+
+      - name: Locate Android artifacts
+        shell: bash
+        run: |
+          echo "Android output files:"
+          find apps/web/android/app/build/outputs -type f \( -name '*.apk' -o -name '*.aab' \) -print -exec ls -lh {} \;
 
       - name: Verify Android artifacts
         shell: bash
         run: |
-          test -f apps/web/android/app/build/outputs/apk/debug/app-debug.apk
-          test -f apps/web/android/app/build/outputs/apk/release/app-release.apk
-          test -f apps/web/android/app/build/outputs/bundle/release/app-release.aab
-          ls -lh \
-            apps/web/android/app/build/outputs/apk/debug/app-debug.apk \
-            apps/web/android/app/build/outputs/apk/release/app-release.apk \
-            apps/web/android/app/build/outputs/bundle/release/app-release.aab
+          DEBUG_APK=$(find apps/web/android/app/build/outputs/apk -type f -name '*.apk' | grep '/debug/' | head -n 1 || true)
+          RELEASE_APK=$(find apps/web/android/app/build/outputs/apk -type f -name '*.apk' | grep '/release/' | head -n 1 || true)
+          RELEASE_AAB=$(find apps/web/android/app/build/outputs/bundle -type f -name '*.aab' | grep '/release/' | head -n 1 || true)
+          test -n "$DEBUG_APK"
+          test -n "$RELEASE_APK"
+          test -n "$RELEASE_AAB"
+          echo "Debug APK: $DEBUG_APK"
+          echo "Release APK: $RELEASE_APK"
+          echo "Release AAB: $RELEASE_AAB"
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
           name: global-messenger-android
           path: |
-            apps/web/android/app/build/outputs/apk/debug/app-debug.apk
-            apps/web/android/app/build/outputs/apk/release/app-release.apk
-            apps/web/android/app/build/outputs/bundle/release/app-release.aab
+            apps/web/android/app/build/outputs/apk/**/*.apk
+            apps/web/android/app/build/outputs/bundle/**/*.aab
           if-no-files-found: error
