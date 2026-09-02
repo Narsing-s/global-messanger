@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
+import { sendWelcomeEmail } from './smtp.js';
 
 const emailSchema = z.string().trim().email().max(320);
 
@@ -43,6 +44,13 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
     const user = await prisma.user.create({
       data: { username, displayName: parsed.data.displayName, email, passwordHash }
     });
+
+    try {
+      await sendWelcomeEmail(email, user.displayName || user.username || 'there');
+    } catch (error) {
+      // Welcome email is non-blocking: account creation must still succeed if SMTP is unavailable.
+      app.log.error(error, 'Welcome email failed');
+    }
 
     const token = app.jwt.sign({ id: user.id, username: user.username });
     return reply.code(201).send({
