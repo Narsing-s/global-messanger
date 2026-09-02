@@ -1,7 +1,7 @@
--- Durable per-recipient delivery/read state and client idempotency.
+-- Durable per-recipient delivery/read state and sender-scoped client idempotency.
 ALTER TABLE "Message" ADD COLUMN "clientId" TEXT;
 
-CREATE UNIQUE INDEX "Message_clientId_key" ON "Message"("clientId");
+CREATE UNIQUE INDEX "Message_senderId_clientId_key" ON "Message"("senderId", "clientId");
 
 CREATE TABLE "MessageReceipt" (
   "messageId" TEXT NOT NULL,
