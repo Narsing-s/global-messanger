@@ -48,7 +48,7 @@ const activeLoad = "api.messages(id).then(data=>{if(requestId!==messageRequest.c
 if (!source.includes('incremental-sync-on-open')) {
   replaceOnce(
     activeLoad,
-    "api.messages(id).then(data=>{if(requestId!==messageRequest.current||active?.id!==id)return;const ordered=Array.isArray(data)?data.filter(m=>m?.conversationId===id).sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()):[];setMessages(ordered);const last=ordered[ordered.length-1]?.createdAt;return api.syncMessages(id,last).then(extra=>{if(requestId!==messageRequest.current||active?.id!==id)return;setMessages(p=>[...p.filter(x=>x.conversationId!==id||!extra.some(y=>y.id===x.id)),...extra].sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()));}).catch(()=>{});}).catch",
+    "api.messages(id).then(data=>{if(requestId!==messageRequest.current||active?.id!==id)return;const ordered=Array.isArray(data)?data.filter(m=>m?.conversationId===id).sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()):[];setMessages(ordered);const last=ordered[ordered.length-1]?.createdAt;return api.syncMessages(id,last).then(extra=>{if(requestId!==messageRequest.current||active?.id!==id)return;const synced=Array.isArray(extra)?extra:(Array.isArray(extra?.messages)?extra.messages:[]);setMessages(p=>[...p.filter(x=>x.conversationId!==id||!synced.some(y=>y.id===x.id)),...synced].sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()));}).catch(()=>{});}).catch",
     'incremental-sync-on-open'
   );
 }
