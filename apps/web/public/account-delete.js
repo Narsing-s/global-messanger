@@ -3,29 +3,24 @@
   let installed = false;
 
   const install = () => {
-    if (installed) return;
-    if (!localStorage.getItem('gm_token')) return;
-
-    // The React sidebar always renders .profile. Use .sidebar-bottom only as a
-    // fallback so the account control cannot disappear when that optional area
-    // is not present.
-    const host = document.querySelector('.sidebar-bottom') || document.querySelector('.profile');
-    if (!host) return;
+    if (installed || !localStorage.getItem('gm_token')) return;
+    const profile = document.querySelector('.profile');
+    const sidebar = document.querySelector('.sidebar');
+    if (!profile || !sidebar) return;
+    if (document.querySelector('.gm-delete-account-entry')) { installed = true; return; }
 
     installed = true;
-    if (document.querySelector('.gm-delete-account-entry')) return;
-
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'gm-delete-account-entry';
     button.innerHTML = '<span aria-hidden="true">⚠️</span><span>Delete account</span>';
     button.title = 'Permanently delete your Global Messenger account';
-    host.appendChild(button);
 
     const style = document.createElement('style');
     style.textContent = `
-      .gm-delete-account-entry{width:100%;margin-top:6px;padding:9px 12px;border:0;border-radius:10px;background:transparent;color:#b42318;display:flex;align-items:center;gap:8px;font:inherit;font-size:12px;cursor:pointer;text-align:left}
-      .gm-delete-account-entry:hover{background:#fff1f0}
+      .gm-account-delete-slot{width:100%;padding:0 12px;box-sizing:border-box}
+      .gm-delete-account-entry{width:100%;margin:7px 0 2px;padding:9px 12px;border:1px solid #f0c7c3;border-radius:10px;background:#fff8f7;color:#b42318;display:flex;align-items:center;gap:8px;font:inherit;font-size:12px;cursor:pointer;text-align:left;box-sizing:border-box}
+      .gm-delete-account-entry:hover{background:#fff1f0;border-color:#e7aaa5}
       .gm-delete-card{width:min(480px,94vw)!important}
       .gm-delete-warning{background:#fff5f4;border:1px solid #ffd6d2;border-radius:13px;padding:13px;color:#8f1d15;line-height:1.5;font-size:12px}
       .gm-delete-password{width:100%;box-sizing:border-box;margin-top:12px;padding:11px 12px;border:1px solid #d9dee8;border-radius:10px;font:inherit;outline:none}
@@ -38,6 +33,11 @@
       .gm-delete-status{margin-top:9px;font-size:11px;color:#b42318;min-height:15px}
     `;
     document.head.appendChild(style);
+
+    const slot = document.createElement('div');
+    slot.className = 'gm-account-delete-slot';
+    slot.appendChild(button);
+    profile.insertAdjacentElement('afterend', slot);
 
     const open = () => {
       document.getElementById('gm-account-delete-modal')?.remove();
@@ -62,17 +62,14 @@
           </div>
         </div>`;
       document.body.appendChild(overlay);
-
       const close = () => overlay.remove();
       overlay.querySelector('[data-delete-close]').onclick = close;
       overlay.querySelector('[data-delete-cancel]').onclick = close;
       overlay.addEventListener('mousedown', e => { if (e.target === overlay) close(); });
-
       const password = overlay.querySelector('#gm-delete-password');
       const status = overlay.querySelector('#gm-delete-status');
       const confirmButton = overlay.querySelector('[data-delete-confirm]');
       password.focus();
-
       confirmButton.onclick = async () => {
         const value = password.value;
         if (!value) { status.textContent = 'Enter your current password to continue.'; password.focus(); return; }
@@ -97,7 +94,6 @@
         }
       };
     };
-
     button.addEventListener('click', open);
   };
 
