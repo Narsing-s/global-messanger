@@ -8,13 +8,26 @@ const emailSchema = z.string().trim().email().max(320);
 export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: PrismaClient) {
   app.post('/api/auth/register-email', async (request, reply) => {
     const parsed = z.object({
-      username: z.string().trim().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
+      username: z.string().trim().min(3).max(24).regex(/^[a-zA-Z0-9_.-]+$/),
       displayName: z.string().trim().min(1).max(60),
       email: emailSchema,
       password: z.string().min(8).max(128)
     }).safeParse(request.body ?? {});
 
-    if (!parsed.success) return reply.badRequest('Username, display name, valid email and password are required.');
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const field = issue?.path?.[0];
+      const message = field === 'username'
+        ? 'Username must be 3-24 characters using letters, numbers, underscore, dot or hyphen.'
+        : field === 'displayName'
+          ? 'Display name is required and must be 1-60 characters.'
+          : field === 'email'
+            ? 'Please enter a valid email address.'
+            : field === 'password'
+              ? 'Password must be 8-128 characters.'
+              : 'Please check all registration fields.';
+      return reply.badRequest(message);
+    }
 
     const username = parsed.data.username.toLowerCase();
     const email = parsed.data.email.toLowerCase();
