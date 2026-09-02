@@ -1,7 +1,9 @@
 import { Socket } from 'socket.io-client';
 
-const configuredApi = import.meta.env.VITE_API_URL;
-const API = configuredApi || (import.meta.env.DEV ? 'http://localhost:4000' : '');
+const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
+const API = configuredApi || (import.meta.env.DEV
+  ? window.location.origin
+  : 'https://global-messenger-api.narsingbeesetti006.workers.dev');
 
 const originalConnect = Socket.prototype.connect;
 
@@ -9,10 +11,6 @@ Socket.prototype.connect = function (...args: any[]) {
   const result = originalConnect.apply(this, args as any);
   this.once('connect', async () => {
     try {
-      if (!API) {
-        console.error('Global Messenger API URL is not configured. Set VITE_API_URL in the frontend deployment.');
-        return;
-      }
       const token = localStorage.getItem('gm_token');
       if (!token) return;
       const response = await fetch(`${API}/api/conversations`, {
