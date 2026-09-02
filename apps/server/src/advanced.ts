@@ -113,7 +113,27 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   app.get('/api/bookmarks', auth, async request => { const userId = (request.user as AuthRequest['user']).id; return prisma.messageBookmark.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 200, include: { message: { include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } } } }); });
   app.post<{ Params: IdParams }>('/api/messages/:id/pin', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; if (access.message.deletedAt) return reply.badRequest('Deleted messages cannot be pinned'); return prisma.pinnedMessage.upsert({ where: { conversationId_messageId: { conversationId: access.message.conversationId, messageId: access.message.id } }, create: { conversationId: access.message.conversationId, messageId: access.message.id, pinnedById: access.userId }, update: { pinnedById: access.userId } }); });
   app.delete<{ Params: IdParams }>('/api/messages/:id/pin', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; await prisma.pinnedMessage.deleteMany({ where: { conversationId: access.message.conversationId, messageId: access.message.id } }); return { ok: true }; });
-  app.get<{ Params: IdParams }>('/api/conversations/:id/pins', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.forbidden('Not a conversation member'); return prisma.pinnedMessage.findMany({ where: { conversationId }, orderBy: { createdAt: 'desc' }, include: { message: { include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } } }); });
+  app.get<{ Params: IdParams }>('/api/conversations/:id/pins', auth, async (request, reply) => {
+    const userId = (request.user as AuthRequest['user']).id;
+    const conversationId = request.params.id;
+    const membership = await prisma.conversationMember.findUnique({
+      where: { conversationId_userId: { conversationId, userId } }
+    });
+    if (!membership) return reply.forbidden('Not a conversation member');
+    return prisma.pinnedMessage.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        message: {
+          include: {
+            sender: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true }
+            }
+          }
+        }
+      }
+    });
+  });
   app.post<{ Params: IdParams; Body: ForwardBody }>('/api/messages/:id/forward', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; const parsed = z.object({ conversationId: idSchema }).safeParse(request.body); if (!parsed.success) return reply.badRequest('conversationId is required'); const target = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: parsed.data.conversationId, userId: access.userId } } }); if (!target) return reply.forbidden('You are not a member of the target conversation'); const copy = await prisma.message.create({ data: { conversationId: parsed.data.conversationId, senderId: access.userId, body: access.message.body, type: access.message.type === 'text' ? 'forwarded' : access.message.type, attachmentUrl: access.message.attachmentUrl, attachmentName: access.message.attachmentName, attachmentMime: access.message.attachmentMime, attachmentSize: access.message.attachmentSize } }); await prisma.conversation.update({ where: { id: parsed.data.conversationId }, data: { updatedAt: new Date() } }); return copy; });
   app.post<{ Params: IdParams; Body: MuteBody }>('/api/conversations/:id/mute', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const parsed = z.object({ minutes: z.number().int().min(0).max(525600).nullable().optional() }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('minutes must be between 0 and 525600'); const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.forbidden('Not a conversation member'); const minutes = parsed.data.minutes ?? 0; const mutedUntil = minutes > 0 ? new Date(Date.now() + minutes * 60000) : null; return prisma.conversationMember.update({ where: { conversationId_userId: { conversationId, userId } }, data: { mutedUntil } }); });
   app.post<{ Params: IdParams }>('/api/users/:id/block', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const blockedUserId = request.params.id; if (userId === blockedUserId) return reply.badRequest('You cannot block yourself'); const target = await prisma.user.findUnique({ where: { id: blockedUserId }, select: { id: true } }); if (!target) return reply.notFound('User not found'); return prisma.userBlock.upsert({ where: { userId_blockedUserId: { userId, blockedUserId } }, create: { userId, blockedUserId }, update: {} }); });
