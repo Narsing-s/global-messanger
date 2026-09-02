@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/apply-blocking-patch.mjs && node scripts/apply-reliability-patch.mjs && node scripts/apply-e2ee-patch.mjs && tsx watch src/index.ts",
-    "build": "node scripts/apply-blocking-patch.mjs && node scripts/apply-reliability-patch.mjs && node scripts/apply-e2ee-patch.mjs && tsc",
+    "dev": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && tsx watch src/index.ts",
+    "build": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && tsc",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -22,7 +22,6 @@
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "firebase-admin": "^13.5.0",
-    "prisma": "^6.3.1",
     "socket.io": "^4.8.1",
     "zod": "^3.24.2"
   },
