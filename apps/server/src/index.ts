@@ -170,6 +170,14 @@ const conversationInclude = {
 /* Health                                                                     */
 /* -------------------------------------------------------------------------- */
 
+app.get('/', async () => {
+  return {
+    ok: true,
+    service: 'global-messenger-api',
+    health: '/health'
+  };
+});
+
 app.get(
   '/health',
   async () => {
