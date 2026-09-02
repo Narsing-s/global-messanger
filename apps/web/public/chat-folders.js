@@ -64,10 +64,10 @@
     const sep = document.createElement('div'); sep.className = 'gm-wa-separator';
     const pin = document.createElement('button'); pin.className = 'gm-wa-item'; pin.dataset.folderAction = 'pin'; pin.innerHTML = '<span class="gm-wa-icon">📌</span><span class="gm-wa-label">Pin chat</span>';
     const archive = document.createElement('button'); archive.className = 'gm-wa-item'; archive.dataset.folderAction = 'archive';
-    const activeId = document.querySelector('.chat-heading')?.getAttribute('data-conversation-id') || '';
     const archived = read('gm_chat_archived', []);
-    archive.innerHTML = `<span class="gm-wa-icon">▱</span><span class="gm-wa-label">${activeId && archived.includes(activeId) ? 'Restore chat' : 'Archive chat'}</span>`;
-    card.insertBefore(sep, card.firstElementChild); card.insertBefore(pin, card.firstElementChild); card.insertBefore(archive, pin.nextElementSibling);
+    archive.innerHTML = '<span class="gm-wa-icon">▱</span><span class="gm-wa-label">Archive chat</span>';
+    const del = document.createElement('button'); del.className = 'gm-wa-item danger'; del.dataset.folderAction = 'delete-chat'; del.innerHTML = '<span class="gm-wa-icon">🗑</span><span class="gm-wa-label">Delete chat</span>';
+    card.insertBefore(sep, card.firstElementChild); card.insertBefore(pin, card.firstElementChild); card.insertBefore(archive, pin.nextElementSibling); card.insertBefore(del, archive.nextElementSibling);
   };
 
   document.addEventListener('click', async e => {
@@ -76,6 +76,22 @@
     if (button.dataset.folderAction === 'pin') {
       const pinned = read('gm_chat_pinned', []), i = pinned.indexOf(id); if (i >= 0) pinned.splice(i, 1); else { if (pinned.length >= 3) return alert('You can pin a maximum of 3 chats.'); pinned.push(id); }
       write('gm_chat_pinned', pinned); document.getElementById('gm-modern-menu')?.remove(); refresh(); return;
+    }
+    if (button.dataset.folderAction === 'delete-chat') {
+      const me = read('gm_user', {});
+      const other = (c.members || []).find(m => m.user?.id !== me.id)?.user;
+      const label = c.isGroup ? (c.title || 'Group') : (other?.displayName || 'this chat');
+      if (!confirm(`Delete this chat and all messages? This permanently removes “${label}”.`)) return;
+      try {
+        await request(`/api/conversations/${encodeURIComponent(id)}/permanent`, { method: 'DELETE' });
+        const archived = read('gm_chat_archived', []);
+        write('gm_chat_archived', archived.filter(x => x !== id));
+        write('gm_chat_favorites', read('gm_chat_favorites', []).filter(x => x !== id));
+        write('gm_chat_pinned', read('gm_chat_pinned', []).filter(x => x !== id));
+        document.getElementById('gm-modern-menu')?.remove();
+        window.location.reload();
+      } catch (err) { alert(err?.message || 'Unable to delete chat.'); }
+      return;
     }
     try {
       const archived = read('gm_chat_archived', []);
