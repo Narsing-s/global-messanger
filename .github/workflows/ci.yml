@@ -1,13 +1,23 @@
-name: CI
+name: Web Build
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ci.yml'
 
 jobs:
-  build:
+  web:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,11 +34,5 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Generate Prisma client
-        run: npm run db:generate
-
       - name: Build web
         run: npm run build -w apps/web
-
-      - name: Build server
-        run: npm run build -w apps/server
