@@ -16,12 +16,19 @@ if (!source.includes('const OUTBOX_KEY=')) {
   );
 }
 
-const connectHandler = "s.on('connect',()=>setSocketError(''));";
 if (!source.includes('flush-outbox-on-connect')) {
   replaceOnce(
-    connectHandler,
-    "s.on('connect',()=>{setSocketError('');const q=readOutbox();if(q.length){q.forEach(item=>s.emit('message:send',item));writeOutbox([]);}});",
+    "s.on('connect',()=>setSocketError(''));",
+    "s.on('connect',()=>{setSocketError('');const q=readOutbox();q.forEach(item=>s.emit('message:send',item));});",
     'flush-outbox-on-connect'
+  );
+}
+
+if (!source.includes("s.on('message:ack'")) {
+  replaceOnce(
+    "s.on('message:delivered',()=>setSocketError(''));",
+    "s.on('message:ack',(d:any)=>{if(d?.clientId){writeOutbox(readOutbox().filter(x=>x.clientId!==d.clientId));}});s.on('message:delivered',()=>setSocketError(''));",
+    'message ack handler'
   );
 }
 
