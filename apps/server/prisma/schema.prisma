@@ -17,6 +17,8 @@ model User {
   passwordHash        String
   avatarUrl           String?
   lastSeenAt          DateTime             @default(now())
+  e2eePublicKey       String?
+  e2eeKeyVersion      Int                  @default(1)
   createdAt           DateTime             @default(now())
   messages            Message[]
   memberships         ConversationMember[]
