@@ -19,18 +19,18 @@
         const id = item.getAttribute('data-gm-conversation-id'); if (!id) continue;
         const info = map.get(id); item.querySelector('.gm-unread-badge')?.remove();
         if (info?.unreadCount > 0) item.appendChild(badge(info.unreadCount));
-        item.style.display = info?.archived && !(info?.unreadCount > 0) ? 'none' : '';
+        item.style.display = '';
       }
+      document.querySelectorAll('.chat-item.selected .gm-unread-badge').forEach(el => el.remove());
     } catch {}
   }
   function addDeleteButton(item) {
     if (item.querySelector('.gm-delete-chat')) return;
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'gm-delete-chat'; button.title = 'Delete chat'; button.textContent = '×';
-    Object.assign(button.style, { marginLeft: '4px', width: '24px', height: '24px', flex: '0 0 24px', border: '0', borderRadius: '8px', background: 'transparent', color: 'inherit', opacity: '0.55', cursor: 'pointer', fontSize: '18px', lineHeight: '24px' });
-    button.addEventListener('click', async e => { e.preventDefault(); e.stopPropagation(); const id = item.getAttribute('data-gm-conversation-id'); if (!id) return; if (!confirm('Delete this chat and all messages in it? This removes the chat for everyone.')) return; try { await request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }); item.remove(); } catch (err) { alert(err.message || 'Unable to delete chat'); } });
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'gm-delete-chat'; button.title = 'Chat options'; button.textContent = '';
+    Object.assign(button.style, { display: 'none' });
     item.appendChild(button);
   }
-  function enhance() { document.querySelectorAll('.chat-item').forEach(item => { if (!item.dataset.gmEnhanced) { item.dataset.gmEnhanced = '1'; item.addEventListener('contextmenu', async e => { e.preventDefault(); item.querySelector('.gm-delete-chat')?.click(); }); } addDeleteButton(item); }); }
+  function enhance() { document.querySelectorAll('.chat-item').forEach(item => { addDeleteButton(item); }); }
   async function mapConversationIds() {
     if (!token()) return;
     try {
@@ -40,6 +40,7 @@
     } catch {}
   }
   const observer = new MutationObserver(() => { void mapConversationIds().then(enhance); }); observer.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('click', e => { const item = e.target instanceof Element ? e.target.closest('.chat-item') : null; if (item) setTimeout(refresh, 250); });
   setInterval(() => { void mapConversationIds().then(enhance).then(refresh); }, 2500);
   setTimeout(() => { void mapConversationIds().then(enhance).then(refresh); }, 1200);
 })();
