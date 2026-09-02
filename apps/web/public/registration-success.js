@@ -1,5 +1,18 @@
 (() => {
   const originalFetch = window.fetch.bind(window);
+  const RENDER_API = 'https://global-messanger-backend.onrender.com';
+
+  const rewriteApiUrl = (input) => {
+    try {
+      const rawUrl = typeof input === 'string' ? input : input?.url || '';
+      if (!rawUrl.includes('global-messenger-api.narsingbeesetti006.workers.dev')) return input;
+      const url = rawUrl.replace('https://global-messenger-api.narsingbeesetti006.workers.dev', RENDER_API);
+      if (typeof input === 'string') return url;
+      return new Request(url, input);
+    } catch {
+      return input;
+    }
+  };
 
   function showSuccess(email) {
     if (document.getElementById('gm-registration-success')) return;
@@ -52,7 +65,9 @@
   }
 
   window.fetch = async (...args) => {
-    const response = await originalFetch(...args);
+    const rewrittenArgs = [...args];
+    rewrittenArgs[0] = rewriteApiUrl(rewrittenArgs[0]);
+    const response = await originalFetch(...rewrittenArgs);
     try {
       const request = args[0];
       const requestUrl = typeof request === 'string' ? request : request?.url || '';
