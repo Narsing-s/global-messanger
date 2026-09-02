@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,8 +68,31 @@ jobs:
         working-directory: apps/web/android
         run: ./gradlew assembleDebug
 
-      - name: Upload debug APK
+      - name: Build release APK
+        working-directory: apps/web/android
+        run: ./gradlew assembleRelease
+
+      - name: Build release AAB
+        working-directory: apps/web/android
+        run: ./gradlew bundleRelease
+
+      - name: Verify Android artifacts
+        shell: bash
+        run: |
+          test -f apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+          test -f apps/web/android/app/build/outputs/apk/release/app-release.apk
+          test -f apps/web/android/app/build/outputs/bundle/release/app-release.aab
+          ls -lh \
+            apps/web/android/app/build/outputs/apk/debug/app-debug.apk \
+            apps/web/android/app/build/outputs/apk/release/app-release.apk \
+            apps/web/android/app/build/outputs/bundle/release/app-release.aab
+
+      - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: global-messenger-debug-apk
-          path: apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+          name: global-messenger-android
+          path: |
+            apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/web/android/app/build/outputs/apk/release/app-release.apk
+            apps/web/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
