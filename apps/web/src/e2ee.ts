@@ -1,7 +1,7 @@
 const PREFIX = 'gm:e2ee:v1:';
 
 const configuredApi = (window as any).__GM_CONFIG__?.API_URL || (import.meta as any).env?.VITE_API_URL;
-const API = configuredApi || ((import.meta as any).env?.DEV) ? window.location.origin : 'https://global-messanger-backend.onrender.com';
+const API = configuredApi || ((import.meta as any).env?.DEV ? window.location.origin : 'https://global-messanger-backend.onrender.com');
 
 type Identity = { publicKey: JsonWebKey; privateKey: JsonWebKey; version: 1 };
 type KeyBundle = { userId: string; publicKey: JsonWebKey | null };
