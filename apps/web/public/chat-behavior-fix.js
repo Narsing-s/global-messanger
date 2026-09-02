@@ -20,12 +20,9 @@
     const data = await fetch(`${API}/api/conversations/${encodeURIComponent(c.id)}/messages?limit=100`, { headers: headers() }).then(r => r.ok ? r.json() : []).catch(() => []);
     const rows = Array.isArray(data) ? data : (data?.messages || []);
     const blockedMessageIds = new Set(rows.filter(m => blockedIds.has(String(m.senderId))).map(m => String(m.id)));
-    document.querySelectorAll('.messages .bubble-row[data-message-id]').forEach(row => {
-      const id = String(row.getAttribute('data-message-id') || '');
-      if (blockedMessageIds.has(id)) row.remove();
-    });
+    document.querySelectorAll('.messages .bubble-row[data-message-id]').forEach(row => { const id = String(row.getAttribute('data-message-id') || ''); if (blockedMessageIds.has(id)) row.remove(); });
   };
-  const scheduleBlockedSync = () => { window.clearTimeout(syncTimer); syncTimer = window.setTimeout(() => { void hideBlockedMessages(); }, 250); };
+  const scheduleBlockedSync = () => { window.clearTimeout(syncTimer); syncTimer = window.setTimeout(() => { void hideBlockedMessages(); }, 350); };
 
   document.addEventListener('click', e => { const item = e.target instanceof Element ? e.target.closest('.chat-item') : null; if (!item) return; window.setTimeout(() => { const id = item.getAttribute('data-gm-conversation-id'); if (id) void markRead(id); scheduleBlockedSync(); }, 120); }, true);
 
@@ -43,18 +40,18 @@
     } catch (err) { alert(err?.message || 'Unable to block user.'); }
   }, true);
 
-  // Blocked users cannot start audio/video calls with the blocker.
-  window.addEventListener('gm:call', e => {
-    const blocked = JSON.parse(localStorage.getItem('gm_blocked_ids') || '[]').map(String);
-    if (!blocked.length) return;
-    const detail = e.detail || {};
-    if (detail?.blockedByUserId && blocked.includes(String(detail.blockedByUserId))) {
-      e.preventDefault(); e.stopImmediatePropagation(); alert('This user is blocked. Calls are unavailable.');
-    }
+  // Stop the existing call handlers before they start when this account has blocked the chat contact.
+  document.addEventListener('click', async e => {
+    const button = e.target instanceof Element ? e.target.closest('.top-actions [title="Voice call"], .top-actions [title="Video call"]') : null;
+    if (!button) return;
+    const c = await currentConversation().catch(() => null); const me = JSON.parse(localStorage.getItem('gm_user') || '{}');
+    const other = c?.members?.find(m => m.user?.id !== me.id)?.user;
+    const blocked = new Set(JSON.parse(localStorage.getItem('gm_blocked_ids') || '[]').map(String));
+    if (other?.id && blocked.has(String(other.id))) { e.preventDefault(); e.stopImmediatePropagation(); alert('This user is blocked. Calls are unavailable.'); }
   }, true);
 
+  window.addEventListener('gm:call', e => { const blocked = JSON.parse(localStorage.getItem('gm_blocked_ids') || '[]').map(String); const detail = e.detail || {}; if (detail?.blockedByUserId && blocked.includes(String(detail.blockedByUserId))) { e.preventDefault(); e.stopImmediatePropagation(); alert('This user is blocked. Calls are unavailable.'); } }, true);
   window.addEventListener('gm:chat-read', e => { const id = e.detail?.conversationId; if (!id) return; document.querySelector(`.chat-item[data-gm-conversation-id="${CSS.escape(String(id))}"] .gm-unread-badge`)?.remove(); });
-
   const observer = new MutationObserver(() => { if (document.querySelector('.messages .bubble-row')) scheduleBlockedSync(); });
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.setTimeout(scheduleBlockedSync, 700);
