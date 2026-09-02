@@ -4,7 +4,7 @@
   const key = name => `gm_chat_${name}`;
   const read = (name, fallback) => { try { return JSON.parse(localStorage.getItem(key(name)) || JSON.stringify(fallback)); } catch { return fallback; } };
   const write = (name, value) => localStorage.setItem(key(name), JSON.stringify(value));
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const esc = s => String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
 
   const request = async (path, options = {}) => {
     const hasBody = options.body !== undefined && options.body !== null;
@@ -122,7 +122,7 @@
     const url = read('wallpapers', {})[id];
     const area = document.querySelector('.messages');
     if (!area) return;
-    area.style.backgroundImage = url ? `linear-gradient(rgba(5,10,20,.25),rgba(5,10,20,.25)),url("${url}")` : '';
+    area.style.backgroundImage = url ? `linear-gradient(rgba(5,10,20,.25),rgba(5,10,20,.25)),url(\"${url}\")` : '';
     area.style.backgroundSize = url ? 'cover' : '';
     area.style.backgroundPosition = url ? 'center' : '';
     area.style.backgroundAttachment = url ? 'fixed' : '';
@@ -174,9 +174,15 @@
 
   async function showMenu() {
     styles();
-    let c=null;
-    try { c=await activeConversation(); } catch (e) { console.warn('[Global Messenger] Render conversation lookup failed:', e); }
-    renderMenu(c);
+    // Open the WhatsApp-style menu immediately. Conversation lookup happens in the background
+    // so a slow Render API can never make the 3-dot UI appear stuck or time out.
+    renderMenu(null);
+    try {
+      const c = await activeConversation();
+      if (document.getElementById('gm-modern-menu')) renderMenu(c);
+    } catch (e) {
+      console.warn('[Global Messenger] Render conversation lookup failed:', e);
+    }
   }
 
   window.addEventListener('gm:options', () => { void showMenu(); });
