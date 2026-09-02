@@ -4,8 +4,6 @@ declare global {
   }
 }
 
-// In development use the Vite origin so /api and /socket.io can be proxied to Fastify.
-// Production uses the Render backend unless explicitly overridden by runtime/Vite config.
 const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
 const API = configuredApi || (import.meta.env.DEV
   ? window.location.origin
@@ -56,7 +54,8 @@ function normalizeMessages(value: any, conversationId: string): any[] {
       senderId: String(message.senderId ?? ''),
       body: typeof message.body === 'string' ? message.body : '',
       createdAt: message.createdAt ?? new Date().toISOString()
-    }));
+    }))
+    .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
 async function request(path: string, options: RequestInit = {}) {
@@ -118,10 +117,22 @@ export const api = {
     await request(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`),
     id
   ),
+  syncMessages: async (id: string, after?: string, limit = 100) => normalizeMessages(
+    await request(`/api/conversations/${encodeURIComponent(id)}/messages/sync?limit=${limit}${after ? `&after=${encodeURIComponent(after)}` : ''}`),
+    id
+  ),
   read: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }),
   editMessage: (id: string, body: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ body }) }),
   deleteMessage: (id: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  upload: (file: File) => { const f = new FormData(); f.append('file', file); return request('/api/uploads', { method: 'POST', body: f }); },
+  upload: async (file: File) => {
+    const f = new FormData();
+    f.append('file', file);
+    const result = await request('/api/uploads', { method: 'POST', body: f });
+    return {
+      ...result,
+      url: result?.url && /^https?:\/\//i.test(result.url) ? result.url : `${API}${result?.url || ''}`
+    };
+  },
   react: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }),
   unreact: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'DELETE', body: JSON.stringify({ emoji }) }),
   registerDevice: (token: string, platform: string) => request('/api/devices', { method: 'POST', body: JSON.stringify({ token, platform }) }),
