@@ -139,10 +139,12 @@ export const api = {
     await request(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`),
     id
   ),
-  syncMessages: async (id: string, after?: string, limit = 100) => normalizeMessages(
-    await request(`/api/conversations/${encodeURIComponent(id)}/messages/sync?limit=${limit}${after ? `&after=${encodeURIComponent(after)}` : ''}`),
-    id
-  ),
+  syncMessages: async (id: string, after?: string, limit = 100) => ({
+    messages: normalizeMessages(
+      await request(`/api/conversations/${encodeURIComponent(id)}/messages/sync?limit=${limit}${after ? `&after=${encodeURIComponent(after)}` : ''}`),
+      id
+    )
+  }),
   read: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }),
   editMessage: (id: string, body: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ body }) }),
   deleteMessage: (id: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'DELETE' }),
