@@ -7,6 +7,9 @@ const replaceOnce = (needle, replacement, label) => {
   if (!source.includes(needle)) throw new Error(`Web reliability patch anchor not found: ${label}`);
   source = source.replace(needle, replacement);
 };
+const replaceIfPresent = (needle, replacement) => {
+  if (source.includes(needle)) source = source.replace(needle, replacement);
+};
 
 if (!source.includes('const OUTBOX_KEY=')) {
   replaceOnce(
@@ -32,17 +35,23 @@ if (!source.includes("s.on('message:ack'")) {
   );
 }
 
-replaceOnce(
-  "s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>p.some(x=>x.id===m.id)?p:[...p,m]);setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[])]}:c))});",
-  "s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>[...p.filter(x=>x.id!==m.id),m].sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()));setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[]).filter(x=>x.id!==m.id)]}:c))});",
-  'ordered message:new'
-);
+if (!source.includes('ordered-message-new')) {
+  replaceOnce(
+    "s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>p.some(x=>x.id===m.id)?p:[...p,m]);setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[])]}:c))});",
+    "s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>[...p.filter(x=>x.id!==m.id),m].sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()));setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[]).filter(x=>x.id!==m.id)]}:c))});",
+    'ordered-message-new'
+  );
+}
 
-replaceOnce(
-  "s.on('message:delivered',()=>setSocketError(''));",
-  "s.on('message:delivered',(d:any)=>{setSocketError('');if(d?.messageId)setMessages(p=>p.map(x=>x.id===d.messageId?{...x,__delivered:true}:x));});s.on('message:read',(d:any)=>{const ids=new Set(Array.isArray(d?.messageIds)?d.messageIds:[]);if(ids.size)setMessages(p=>p.map(x=>ids.has(x.id)?{...x,__read:true,__delivered:true}:x));});",
-  'delivery and read status'
-);
+if (!source.includes('delivery-and-read-status')) {
+  const deliveredAnchor = "s.on('message:delivered',()=>setSocketError(''));";
+  if (source.includes(deliveredAnchor)) {
+    source = source.replace(
+      deliveredAnchor,
+      "s.on('message:delivered',(d:any)=>{setSocketError('');if(d?.messageId)setMessages(p=>p.map(x=>x.id===d.messageId?{...x,__delivered:true}:x));});s.on('message:read',(d:any)=>{const ids=new Set(Array.isArray(d?.messageIds)?d.messageIds:[]);if(ids.size)setMessages(p=>p.map(x=>ids.has(x.id)?{...x,__read:true,__delivered:true}:x));});"
+    );
+  }
+}
 
 const activeLoad = "api.messages(id).then(data=>{if(requestId!==messageRequest.current||active?.id!==id)return;setMessages(Array.isArray(data)?data.filter(m=>m?.conversationId===id):[])}).catch";
 if (!source.includes('incremental-sync-on-open')) {
@@ -75,10 +84,10 @@ if (!source.includes('offline outbox saved')) {
   );
 }
 
-replaceOnce(
+// chat-stability-patch may already own this UI (blocked-message state).
+replaceIfPresent(
   "{own&&<CheckCheck size={13}/>}",
   "{own&&<span className={`message-status ${message.__read?'read':(message.__delivered?'delivered':'sent')}`} aria-label={message.__read?'Read':(message.__delivered?'Delivered':'Sent')}>{message.__delivered||message.__read?'✓✓':'✓'}</span>}",
-  'status UI'
 );
 
 fs.writeFileSync(file, source);
