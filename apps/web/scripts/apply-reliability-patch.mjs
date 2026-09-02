@@ -3,7 +3,6 @@ import path from 'node:path';
 
 const file = path.resolve(process.cwd(), 'src/main.tsx');
 let source = fs.readFileSync(file, 'utf8');
-
 const replaceOnce = (needle, replacement, label) => {
   if (!source.includes(needle)) throw new Error(`Web reliability patch anchor not found: ${label}`);
   source = source.replace(needle, replacement);
@@ -21,7 +20,7 @@ const connectHandler = "s.on('connect',()=>setSocketError(''));";
 if (!source.includes('flush-outbox-on-connect')) {
   replaceOnce(
     connectHandler,
-    "s.on('connect',()=>{setSocketError('');const q=readOutbox();if(q.length){q.forEach(item=>s.emit('message:send',item));writeOutbox([]);}if(active?.id)s.emit('conversation:sync',{conversationId:active.id});});",
+    "s.on('connect',()=>{setSocketError('');const q=readOutbox();if(q.length){q.forEach(item=>s.emit('message:send',item));writeOutbox([]);}});",
     'flush-outbox-on-connect'
   );
 }
@@ -44,6 +43,19 @@ if (!source.includes('incremental-sync-on-open')) {
     activeLoad,
     "api.messages(id).then(data=>{if(requestId!==messageRequest.current||active?.id!==id)return;const ordered=Array.isArray(data)?data.filter(m=>m?.conversationId===id).sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()):[];setMessages(ordered);const last=ordered[ordered.length-1]?.createdAt;return api.syncMessages(id,last).then(extra=>{if(requestId!==messageRequest.current||active?.id!==id)return;setMessages(p=>[...p.filter(x=>x.conversationId!==id||!extra.some(y=>y.id===x.id)),...extra].sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()));}).catch(()=>{});}).catch",
     'incremental-sync-on-open'
+  );
+}
+
+if (!source.includes('active-conversation-reconnect-sync')) {
+  replaceOnce(
+    "socket.emit('conversation:join',id);",
+    "socket.emit('conversation:join',id);const onReconnect=()=>{socket.emit('conversation:join',id);socket.emit('conversation:sync',{conversationId:id});};socket.on('connect',onReconnect);",
+    'active-conversation-reconnect-sync'
+  );
+  replaceOnce(
+    "return()=>{if(socket.connected)socket.emit('conversation:leave',id)}",
+    "return()=>{socket.off('connect',onReconnect);if(socket.connected)socket.emit('conversation:leave',id)}",
+    'active-conversation-reconnect-cleanup'
   );
 }
 
