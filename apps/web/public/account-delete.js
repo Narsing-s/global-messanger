@@ -4,16 +4,23 @@
 
   const install = () => {
     if (installed) return;
-    const sidebarBottom = document.querySelector('.sidebar-bottom');
-    if (!sidebarBottom || !localStorage.getItem('gm_token')) return;
+    if (!localStorage.getItem('gm_token')) return;
+
+    // The React sidebar always renders .profile. Use .sidebar-bottom only as a
+    // fallback so the account control cannot disappear when that optional area
+    // is not present.
+    const host = document.querySelector('.sidebar-bottom') || document.querySelector('.profile');
+    if (!host) return;
+
     installed = true;
+    if (document.querySelector('.gm-delete-account-entry')) return;
 
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'gm-delete-account-entry';
-    button.innerHTML = '<span aria-hidden="true">⚠️</span> Delete account';
+    button.innerHTML = '<span aria-hidden="true">⚠️</span><span>Delete account</span>';
     button.title = 'Permanently delete your Global Messenger account';
-    sidebarBottom.appendChild(button);
+    host.appendChild(button);
 
     const style = document.createElement('style');
     style.textContent = `
