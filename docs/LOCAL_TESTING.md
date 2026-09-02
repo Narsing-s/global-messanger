@@ -30,11 +30,16 @@ If dependencies have not been installed before:
 npm install
 ```
 
-## 3. Start PostgreSQL
+## 3. Start PostgreSQL + local email capture
 
 ```bash
-docker compose up -d postgres
+docker compose up -d postgres mailpit
 ```
+
+Mailpit is the local SMTP inbox used to test password recovery without a real email provider:
+
+- SMTP: `127.0.0.1:2525`
+- Inbox UI: `http://127.0.0.1:8025`
 
 Confirm it is running:
 
@@ -122,12 +127,14 @@ Use two separate browser profiles or one normal window plus one private window.
 7. Verify typing indicators.
 8. Verify reactions, replies, editing and deletion.
 9. Verify image/file sharing.
-10. Disconnect one browser from the network and reconnect it.
-11. Confirm messages recover without a page refresh.
-12. Confirm presence changes only after the user's final active connection disconnects.
-13. Test group creation and messaging.
-14. Test profile/photo flows.
-15. Test call permission-denied and successful permission flows on supported devices.
+10. Test password recovery: request a reset email, open Mailpit, click the reset link, set a new password, then sign in again.
+11. Test Smart Assist with `GROQ_API_KEY` or `OPENAI_API_KEY` configured; verify the chat still works when AI is unavailable.
+12. Disconnect one browser from the network and reconnect it.
+13. Confirm messages recover without a page refresh.
+14. Confirm presence changes only after the user's final active connection disconnects.
+15. Test group creation and messaging.
+16. Test profile/photo flows.
+17. Test call permission-denied and successful permission flows on supported devices.
 
 ## 10. Quiet-browser policy
 
