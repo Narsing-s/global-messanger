@@ -1,0 +1,41 @@
+name: Backend Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/server/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/backend-build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/server/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/backend-build.yml'
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Build server
+        run: npm run build -w apps/server
