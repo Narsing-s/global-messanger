@@ -68,6 +68,43 @@ jobs:
         working-directory: apps/web/android
         run: ./gradlew assembleDebug
 
+      - name: Prepare release signing
+        if: ${{ env.ANDROID_SIGNING_READY == 'true' }}
+        env:
+          ANDROID_SIGNING_READY: ${{ secrets.ANDROID_SIGNING_READY }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > apps/web/android/release.keystore
+          cat > apps/web/android/keystore.properties <<EOF
+          storeFile=../release.keystore
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+
+      - name: Configure release signing
+        if: ${{ env.ANDROID_SIGNING_READY == 'true' }}
+        env:
+          ANDROID_SIGNING_READY: ${{ secrets.ANDROID_SIGNING_READY }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('apps/web/android/app/build.gradle')
+          text = p.read_text()
+          marker = 'android {'
+          signing = '''android {\n    signingConfigs {\n        release {\n            def propsFile = rootProject.file("keystore.properties")\n            def props = new Properties()\n            propsFile.withInputStream { props.load(it) }\n            storeFile file(props['storeFile'])\n            storePassword props['storePassword']\n            keyAlias props['keyAlias']\n            keyPassword props['keyPassword']\n        }\n    }\n'''
+          if 'signingConfigs {' not in text:
+              text = text.replace(marker, signing, 1)
+          if 'signingConfig signingConfigs.release' not in text:
+              text = text.replace('buildTypes {\n', 'buildTypes {\n        release {\n            signingConfig signingConfigs.release\n        }\n', 1)
+          p.write_text(text)
+          PY
+
       - name: Build release APK
         working-directory: apps/web/android
         run: ./gradlew assembleRelease
