@@ -17,94 +17,22 @@ type FastifyRequestWithId = import('fastify').FastifyRequest<{ Params: IdParams 
 
 const idSchema = z.string().min(1).max(128);
 const hashResetToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
-
-function smtpErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) return error.message.trim();
-  if (typeof error === 'string' && error.trim()) return error.trim();
-  return 'Unknown SMTP error.';
-}
-
-function localResetPage(): string {
-  const candidates = [
-    path.resolve(process.cwd(), '../web/reset-password.html'),
-    path.resolve(process.cwd(), '../web/public/reset-password.html'),
-    path.resolve(process.cwd(), 'apps/web/reset-password.html'),
-    path.resolve(process.cwd(), 'apps/web/public/reset-password.html')
-  ];
-  for (const file of candidates) {
-    if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8');
-  }
-  return '<!doctype html><html><body><h1>Global Messenger</h1><p>Password reset page is unavailable.</p></body></html>';
-}
-
-function resetOrigin(request: any): string {
-  // LOCAL DEVELOPMENT: the Fastify server itself serves the reset HTML and
-  // owns POST /api/auth/reset-password. Therefore the email MUST point to
-  // port 4000, not Vite port 5173. This also makes the link work even when
-  // Vite is not running.
-  if (process.env.NODE_ENV !== 'production') {
-    return `http://127.0.0.1:${process.env.PORT || 4000}`;
-  }
-
-  // PRODUCTION: use the explicitly configured public web origin when present.
-  const configured = String(process.env.PASSWORD_RESET_WEB_ORIGIN || '').trim();
-  if (configured) return configured.replace(/\/$/, '');
-
-  const forwardedProto = String(request.headers?.['x-forwarded-proto'] || '').split(',')[0].trim();
-  const forwardedHost = String(request.headers?.['x-forwarded-host'] || '').split(',')[0].trim();
-  if (forwardedHost) {
-    return `${forwardedProto || 'https'}://${forwardedHost}`.replace(/\/$/, '');
-  }
-  if (request.hostname) {
-    return `${forwardedProto || request.protocol || 'https'}://${request.hostname}${request.port ? `:${request.port}` : ''}`.replace(/\/$/, '');
-  }
-  return `http://127.0.0.1:${process.env.PORT || 4000}`;
-}
+function smtpErrorMessage(error: unknown): string { if (error instanceof Error && error.message.trim()) return error.message.trim(); if (typeof error === 'string' && error.trim()) return error.trim(); return 'Unknown SMTP error.'; }
+function localResetPage(): string { const candidates = [path.resolve(process.cwd(), '../web/reset-password.html'),path.resolve(process.cwd(), '../web/public/reset-password.html'),path.resolve(process.cwd(), 'apps/web/reset-password.html'),path.resolve(process.cwd(), 'apps/web/public/reset-password.html')]; for (const file of candidates) { if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8'); } return '<!doctype html><html><body><h1>Global Messenger</h1><p>Password reset page is unavailable.</p></body></html>'; }
+function resetOrigin(request: any): string { if (process.env.NODE_ENV !== 'production') return `http://127.0.0.1:${process.env.PORT || 4000}`; const configured = String(process.env.PASSWORD_RESET_WEB_ORIGIN || '').trim(); if (configured) return configured.replace(/\/$/, ''); const forwardedProto = String(request.headers?.['x-forwarded-proto'] || '').split(',')[0].trim(); const forwardedHost = String(request.headers?.['x-forwarded-host'] || '').split(',')[0].trim(); if (forwardedHost) return `${forwardedProto || 'https'}://${forwardedHost}`.replace(/\/$/, ''); if (request.hostname) return `${forwardedProto || request.protocol || 'https'}://${request.hostname}${request.port ? `:${request.port}` : ''}`.replace(/\/$/, ''); return `http://127.0.0.1:${process.env.PORT || 4000}`; }
 
 export async function registerAdvancedRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const auth = { preHandler: [app.authenticate] };
   await registerEmailAuthRoutes(app, prisma);
-
-  // Fastify serves the reset page itself. This removes the local dependency on Vite.
   app.get('/reset-password', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store, no-cache, must-revalidate').send(localResetPage()));
   app.get('/reset-password/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store, no-cache, must-revalidate').send(localResetPage()));
   app.get('/reset-password.html', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store, no-cache, must-revalidate').send(localResetPage()));
-
-  app.post('/api/auth/forgot-password', async (request, reply) => {
-    const parsed = z.object({ email: z.string().trim().email().max(320) }).safeParse(request.body ?? {});
-    if (!parsed.success) return reply.badRequest('A valid email address is required');
-    const email = parsed.data.email.toLowerCase();
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return { ok: true, message: 'If an account exists for that email, a password reset link has been sent.' };
-
-    const token = crypto.randomBytes(32).toString('hex');
-    const tokenHash = hashResetToken(token);
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    const resetUrl = `${resetOrigin(request)}/reset-password.html?token=${encodeURIComponent(token)}`;
-
-    await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt } });
-    try {
-      await sendPasswordResetEmail(email, user.displayName || user.username || 'there', resetUrl);
-    } catch (error) {
-      app.log.error(error, 'Password reset email failed');
-      await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: null, resetTokenExpiresAt: null } });
-      return reply.serviceUnavailable(`Password reset email could not be sent: ${smtpErrorMessage(error)}`);
-    }
-    return { ok: true, message: `Password reset link sent successfully to ${email}. Please check your inbox (and spam folder).` };
-  });
-
-  app.post('/api/auth/reset-password', async (request, reply) => {
-    const parsed = z.object({ token: z.string().min(32).max(128), password: z.string().min(8).max(128) }).safeParse(request.body ?? {});
-    if (!parsed.success) return reply.badRequest('A valid reset token and password of at least 8 characters are required');
-    const tokenHash = hashResetToken(parsed.data.token);
-    const user = await prisma.user.findFirst({ where: { resetTokenHash: tokenHash, resetTokenExpiresAt: { gt: new Date() } } });
-    if (!user) return reply.badRequest('This password reset link is invalid or has expired. Please request a new reset link.');
-    const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-    await prisma.user.update({ where: { id: user.id }, data: { passwordHash, resetTokenHash: null, resetTokenExpiresAt: null, lastSeenAt: new Date() } });
-    return { ok: true, message: 'Password reset successfully. You can now log in with your new password.' };
-  });
-
+  app.post('/api/auth/forgot-password', async (request, reply) => { const parsed = z.object({ email: z.string().trim().email().max(320) }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('A valid email address is required'); const email = parsed.data.email.toLowerCase(); const user = await prisma.user.findUnique({ where: { email } }); if (!user) return { ok: true, message: 'If an account exists for that email, a password reset link has been sent.' }; const token = crypto.randomBytes(32).toString('hex'); const tokenHash = hashResetToken(token); const expiresAt = new Date(Date.now() + 30 * 60 * 1000); const resetUrl = `${resetOrigin(request)}/reset-password.html?token=${encodeURIComponent(token)}`; await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt } }); try { await sendPasswordResetEmail(email, user.displayName || user.username || 'there', resetUrl); } catch (error) { app.log.error(error, 'Password reset email failed'); await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: null, resetTokenExpiresAt: null } }); return reply.serviceUnavailable(`Password reset email could not be sent: ${smtpErrorMessage(error)}`); } return { ok: true, message: `Password reset link sent successfully to ${email}. Please check your inbox (and spam folder).` }; });
+  app.post('/api/auth/reset-password', async (request, reply) => { const parsed = z.object({ token: z.string().min(32).max(128), password: z.string().min(8).max(128) }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('A valid reset token and password of at least 8 characters are required'); const tokenHash = hashResetToken(parsed.data.token); const user = await prisma.user.findFirst({ where: { resetTokenHash: tokenHash, resetTokenExpiresAt: { gt: new Date() } } }); if (!user) return reply.badRequest('This password reset link is invalid or has expired. Please request a new reset link.'); const passwordHash = await bcrypt.hash(parsed.data.password, 12); await prisma.user.update({ where: { id: user.id }, data: { passwordHash, resetTokenHash: null, resetTokenExpiresAt: null, lastSeenAt: new Date() } }); return { ok: true, message: 'Password reset successfully. You can now log in with your new password.' }; });
   app.delete('/api/auth/account', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const parsed = z.object({ password: z.string().min(1).max(128) }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('Enter your current password to delete your account.'); const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, displayName: true, username: true, passwordHash: true } }); if (!user) return reply.notFound('Account not found.'); const valid = await bcrypt.compare(parsed.data.password, user.passwordHash); if (!valid) return reply.code(401).send({ message: 'Current password is incorrect.' }); const deletionEmail = user.email; const deletionName = user.displayName || user.username || 'there'; await prisma.user.delete({ where: { id: userId } }); try { await sendAccountDeletedEmail(deletionEmail, deletionName); } catch (error) { app.log.error(error, 'Account deletion confirmation email failed'); } return { ok: true, message: 'Your Global Messenger account and associated database data have been permanently deleted. A confirmation email has been sent to your registered email address.' }; });
+  app.delete<{ Params: IdParams }>('/api/conversations/:id', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.notFound('Chat not found.'); await prisma.conversationMember.update({ where: { conversationId_userId: { conversationId, userId } }, data: { archivedAt: new Date() } }); return { ok: true, conversationId }; });
+  app.post<{ Params: IdParams }>('/api/conversations/:id/restore', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.notFound('Chat not found.'); await prisma.conversationMember.update({ where: { conversationId_userId: { conversationId, userId } }, data: { archivedAt: null } }); return { ok: true, conversationId }; });
+  app.get('/api/conversations/unread', auth, async request => { const userId = (request.user as AuthRequest['user']).id; const memberships = await prisma.conversationMember.findMany({ where: { userId }, select: { conversationId: true, lastReadAt: true, archivedAt: true } }); return Promise.all(memberships.map(async membership => { const unreadCount = await prisma.message.count({ where: { conversationId: membership.conversationId, senderId: { not: userId }, ...(membership.lastReadAt ? { createdAt: { gt: membership.lastReadAt } } : {}) } }); return { conversationId: membership.conversationId, unreadCount, archived: Boolean(membership.archivedAt) }; })); });
   async function getMessageAccess(request: FastifyRequestWithId, reply: any) { const userId = (request.user as AuthRequest['user']).id; const messageId = String(request.params.id); const message = await prisma.message.findUnique({ where: { id: messageId } }); if (!message) { reply.notFound('Message not found'); return null; } const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: message.conversationId, userId } } }); if (!membership) { reply.forbidden('Not a conversation member'); return null; } return { userId, message }; }
   app.get<{ Querystring: MessageSearchQuery }>('/api/messages/search', auth, async request => { const userId = (request.user as AuthRequest['user']).id; const q = String(request.query.q ?? '').trim(); const conversationId = String(request.query.conversationId ?? '').trim(); const limit = Math.min(Math.max(Number(request.query.limit ?? 50), 1), 100); if (q.length < 2) return []; const memberships = await prisma.conversationMember.findMany({ where: { userId, ...(conversationId ? { conversationId } : {}) }, select: { conversationId: true } }); const allowed: string[] = memberships.map((x: { conversationId: string }) => x.conversationId); if (!allowed.length) return []; return prisma.message.findMany({ where: { conversationId: { in: allowed }, deletedAt: null, body: { contains: q, mode: 'insensitive' } }, orderBy: { createdAt: 'desc' }, take: limit, include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } }); });
   app.post('/api/ai/assist', auth, async (request, reply) => { const parsed = z.object({ prompt: z.string().trim().min(1).max(4000), context: z.string().trim().max(6000).optional() }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('prompt is required and must be 1-4000 characters'); const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY; if (!apiKey) return reply.serviceUnavailable('AI is not configured. Add GROQ_API_KEY to the server environment.'); const isGroq = Boolean(process.env.GROQ_API_KEY); const endpoint = isGroq ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'; const model = isGroq ? (process.env.GROQ_MODEL || 'llama-3.3-70b-versatile') : (process.env.OPENAI_MODEL || 'gpt-4o-mini'); const context = parsed.data.context ? `\nConversation context:\n${parsed.data.context}` : ''; try { const response = await fetch(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, temperature: 0.4, max_tokens: 700, messages: [{ role: 'system', content: 'You are Global Messenger AI. Be concise, helpful, friendly, and privacy-conscious. Never claim to have performed actions you cannot perform.' }, { role: 'user', content: `${parsed.data.prompt}${context}` }] }) }); const data: any = await response.json().catch(() => ({})); if (!response.ok) return reply.code(502).send({ message: data?.error?.message || 'AI provider request failed' }); const answer = data?.choices?.[0]?.message?.content; if (typeof answer !== 'string' || !answer.trim()) return reply.code(502).send({ message: 'AI returned an empty response' }); return { answer: answer.trim(), model }; } catch { return reply.code(502).send({ message: 'Unable to reach AI provider' }); } });
@@ -113,27 +41,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   app.get('/api/bookmarks', auth, async request => { const userId = (request.user as AuthRequest['user']).id; return prisma.messageBookmark.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 200, include: { message: { include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } } } }); });
   app.post<{ Params: IdParams }>('/api/messages/:id/pin', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; if (access.message.deletedAt) return reply.badRequest('Deleted messages cannot be pinned'); return prisma.pinnedMessage.upsert({ where: { conversationId_messageId: { conversationId: access.message.conversationId, messageId: access.message.id } }, create: { conversationId: access.message.conversationId, messageId: access.message.id, pinnedById: access.userId }, update: { pinnedById: access.userId } }); });
   app.delete<{ Params: IdParams }>('/api/messages/:id/pin', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; await prisma.pinnedMessage.deleteMany({ where: { conversationId: access.message.conversationId, messageId: access.message.id } }); return { ok: true }; });
-  app.get<{ Params: IdParams }>('/api/conversations/:id/pins', auth, async (request, reply) => {
-    const userId = (request.user as AuthRequest['user']).id;
-    const conversationId = request.params.id;
-    const membership = await prisma.conversationMember.findUnique({
-      where: { conversationId_userId: { conversationId, userId } }
-    });
-    if (!membership) return reply.forbidden('Not a conversation member');
-    return prisma.pinnedMessage.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        message: {
-          include: {
-            sender: {
-              select: { id: true, username: true, displayName: true, avatarUrl: true }
-            }
-          }
-        }
-      }
-    });
-  });
+  app.get<{ Params: IdParams }>('/api/conversations/:id/pins', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.forbidden('Not a conversation member'); return prisma.pinnedMessage.findMany({ where: { conversationId }, orderBy: { createdAt: 'desc' }, include: { message: { include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } } } }); });
   app.post<{ Params: IdParams; Body: ForwardBody }>('/api/messages/:id/forward', auth, async (request, reply) => { const access = await getMessageAccess(request, reply); if (!access) return; const parsed = z.object({ conversationId: idSchema }).safeParse(request.body); if (!parsed.success) return reply.badRequest('conversationId is required'); const target = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: parsed.data.conversationId, userId: access.userId } } }); if (!target) return reply.forbidden('You are not a member of the target conversation'); const copy = await prisma.message.create({ data: { conversationId: parsed.data.conversationId, senderId: access.userId, body: access.message.body, type: access.message.type === 'text' ? 'forwarded' : access.message.type, attachmentUrl: access.message.attachmentUrl, attachmentName: access.message.attachmentName, attachmentMime: access.message.attachmentMime, attachmentSize: access.message.attachmentSize } }); await prisma.conversation.update({ where: { id: parsed.data.conversationId }, data: { updatedAt: new Date() } }); return copy; });
   app.post<{ Params: IdParams; Body: MuteBody }>('/api/conversations/:id/mute', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const conversationId = request.params.id; const parsed = z.object({ minutes: z.number().int().min(0).max(525600).nullable().optional() }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('minutes must be between 0 and 525600'); const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.forbidden('Not a conversation member'); const minutes = parsed.data.minutes ?? 0; const mutedUntil = minutes > 0 ? new Date(Date.now() + minutes * 60000) : null; return prisma.conversationMember.update({ where: { conversationId_userId: { conversationId, userId } }, data: { mutedUntil } }); });
   app.post<{ Params: IdParams }>('/api/users/:id/block', auth, async (request, reply) => { const userId = (request.user as AuthRequest['user']).id; const blockedUserId = request.params.id; if (userId === blockedUserId) return reply.badRequest('You cannot block yourself'); const target = await prisma.user.findUnique({ where: { id: blockedUserId }, select: { id: true } }); if (!target) return reply.notFound('User not found'); return prisma.userBlock.upsert({ where: { userId_blockedUserId: { userId, blockedUserId } }, create: { userId, blockedUserId }, update: {} }); });
