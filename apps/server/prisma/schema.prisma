@@ -27,6 +27,7 @@ model User {
   pinsCreated         PinnedMessage[]      @relation("PinCreator")
   blocksCreated       UserBlock[]          @relation("BlockCreator")
   blockedBy           UserBlock[]          @relation("BlockedUser")
+  messageReceipts     MessageReceipt[]
 }
 
 model PushDevice {
@@ -70,6 +71,7 @@ model ConversationMember {
 
 model Message {
   id              String       @id @default(cuid())
+  clientId        String?      @unique
   conversationId  String
   senderId        String
   body            String
@@ -89,9 +91,23 @@ model Message {
   reactions       MessageReaction[]
   bookmarks       MessageBookmark[]
   pin             PinnedMessage?
+  receipts        MessageReceipt[]
   @@index([conversationId, createdAt])
   @@index([senderId, createdAt])
   @@index([conversationId, type, createdAt])
+}
+
+model MessageReceipt {
+  messageId   String
+  userId      String
+  deliveredAt DateTime?
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([messageId, userId])
+  @@index([userId, readAt])
+  @@index([messageId, deliveredAt])
 }
 
 model MessageReaction {
