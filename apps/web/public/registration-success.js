@@ -38,9 +38,13 @@
 
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = 'Continue to Global Messenger';
+    button.textContent = 'Go to Login';
     button.style.cssText = 'border:0;border-radius:10px;padding:12px 18px;background:#2563eb;color:#fff;font-size:15px;font-weight:700;cursor:pointer;';
-    button.onclick = () => overlay.remove();
+    button.onclick = () => {
+      localStorage.removeItem('gm_token');
+      localStorage.removeItem('gm_user');
+      window.location.href = '/?login=1';
+    };
 
     card.append(icon, title, message, button);
     overlay.appendChild(card);
