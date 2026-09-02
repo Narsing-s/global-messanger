@@ -1,5 +1,5 @@
 (() => {
-  const API = window.__GM_CONFIG__?.API_URL || (location.hostname === '127.0.0.1' || location.hostname === 'localhost' ? location.origin : 'https://global-messenger-api.narsingbeesetti006.workers.dev');
+  const API = window.__GM_CONFIG__?.API_URL || (location.hostname === '127.0.0.1' || location.hostname === 'localhost' ? location.origin : 'https://global-messanger-backend.onrender.com');
   const token = () => localStorage.getItem('gm_token') || '';
   const request = async (path, options = {}) => {
     const hasBody = options.body !== undefined && options.body !== null;
