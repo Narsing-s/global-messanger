@@ -11,5 +11,12 @@ services:
     volumes:
       - messenger_pg:/var/lib/postgresql/data
 
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "2525:1025"
+      - "8025:8025"
+
 volumes:
   messenger_pg:
