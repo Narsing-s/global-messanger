@@ -4,14 +4,14 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "node scripts/apply-chat-stability-patch.mjs && vite",
+    "build": "node scripts/apply-chat-stability-patch.mjs && tsc -b && vite build",
     "android:add": "cap add android",
-    "android:sync": "cap sync android",
+    "android:sync": "cap sync",
     "android:open": "cap open android",
     "android:run": "cap run android",
     "ios:add": "cap add ios",
-    "ios:sync": "cap sync ios",
+    "ios:sync": "cap sync",
     "ios:open": "cap open ios",
     "ios:run": "cap run ios",
     "mobile:sync": "cap sync"
