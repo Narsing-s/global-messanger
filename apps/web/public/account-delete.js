@@ -1,25 +1,27 @@
 (() => {
   const API = window.__GM_CONFIG__?.API_URL || (location.hostname === '127.0.0.1' || location.hostname === 'localhost' ? location.origin : 'https://global-messanger-backend.onrender.com');
-  let installed = false;
+  let installedProfile: Element | null = null;
 
   const install = () => {
-    if (installed || !localStorage.getItem('gm_token')) return;
+    if (!localStorage.getItem('gm_token')) return;
     const profile = document.querySelector('.profile');
-    const sidebar = document.querySelector('.sidebar');
-    if (!profile || !sidebar) return;
-    if (document.querySelector('.gm-delete-account-entry')) { installed = true; return; }
+    if (!profile) return;
+    if (installedProfile === profile && profile.querySelector('.gm-delete-account-entry')) return;
 
-    installed = true;
+    installedProfile = profile;
+    profile.querySelector('.gm-delete-account-entry')?.remove();
+
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'gm-delete-account-entry';
     button.innerHTML = '<span aria-hidden="true">⚠️</span><span>Delete account</span>';
     button.title = 'Permanently delete your Global Messenger account';
+    button.setAttribute('aria-label', 'Delete account');
 
     const style = document.createElement('style');
+    style.dataset.gmAccountDelete = '1';
     style.textContent = `
-      .gm-account-delete-slot{width:100%;padding:0 12px;box-sizing:border-box}
-      .gm-delete-account-entry{width:100%;margin:7px 0 2px;padding:9px 12px;border:1px solid #f0c7c3;border-radius:10px;background:#fff8f7;color:#b42318;display:flex;align-items:center;gap:8px;font:inherit;font-size:12px;cursor:pointer;text-align:left;box-sizing:border-box}
+      .gm-delete-account-entry{flex:0 0 auto!important;width:auto!important;min-height:34px;margin:0 0 0 6px;padding:8px 10px;border:1px solid #f0c7c3;border-radius:10px;background:#fff8f7;color:#b42318;display:flex;align-items:center;justify-content:center;gap:6px;font:inherit;font-size:11px;font-weight:600;cursor:pointer;text-align:center;box-sizing:border-box;white-space:nowrap}
       .gm-delete-account-entry:hover{background:#fff1f0;border-color:#e7aaa5}
       .gm-delete-card{width:min(480px,94vw)!important}
       .gm-delete-warning{background:#fff5f4;border:1px solid #ffd6d2;border-radius:13px;padding:13px;color:#8f1d15;line-height:1.5;font-size:12px}
@@ -31,13 +33,11 @@
       .gm-delete-confirm{background:#b42318;color:#fff}
       .gm-delete-confirm:disabled{opacity:.55;cursor:not-allowed}
       .gm-delete-status{margin-top:9px;font-size:11px;color:#b42318;min-height:15px}
+      @media(max-width:640px){.gm-delete-account-entry{font-size:0;padding:8px;width:34px!important;height:34px}.gm-delete-account-entry span:first-child{font-size:14px}}
     `;
-    document.head.appendChild(style);
+    if (!document.querySelector('style[data-gm-account-delete="1"]')) document.head.appendChild(style);
 
-    const slot = document.createElement('div');
-    slot.className = 'gm-account-delete-slot';
-    slot.appendChild(button);
-    profile.insertAdjacentElement('afterend', slot);
+    profile.appendChild(button);
 
     const open = () => {
       document.getElementById('gm-account-delete-modal')?.remove();
