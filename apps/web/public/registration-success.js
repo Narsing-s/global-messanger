@@ -31,7 +31,9 @@
     title.style.cssText = 'margin:0 0 10px;font-size:24px;';
 
     const message = document.createElement('p');
-    message.textContent = `Welcome to Global Messenger. A greetings email has been sent to ${email}.`;
+    message.textContent = email
+      ? `Welcome to Global Messenger. A greetings email has been sent to ${email}.`
+      : 'Welcome to Global Messenger. A greetings email has been sent to your registered email address.';
     message.style.cssText = 'margin:0 0 22px;line-height:1.55;color:#cbd5e1;font-size:15px;word-break:break-word;';
 
     const button = document.createElement('button');
@@ -48,10 +50,14 @@
   window.fetch = async (...args) => {
     const response = await originalFetch(...args);
     try {
-      const requestUrl = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+      const request = args[0];
+      const requestUrl = typeof request === 'string' ? request : request?.url || '';
       if (requestUrl.includes('/api/auth/register-email') && response.ok) {
-        const data = await response.clone().json();
-        const email = data?.user?.email || 'your email address';
+        let email = '';
+        const init = args[1];
+        if (init?.body && typeof init.body === 'string') {
+          try { email = JSON.parse(init.body)?.email || ''; } catch {}
+        }
         showSuccess(email);
       }
     } catch (error) {
