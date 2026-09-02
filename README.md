@@ -31,6 +31,19 @@ Global Messenger is an open-source messaging application focused on fast convers
 - 🖥️ Desktop-ready experience
 - 🤖 Capacitor Android packaging
 
+## 🚀 Product differentiators
+
+Global Messenger is designed to compete on **privacy, ownership and practical AI**, not just another chat clone:
+
+- ✨ **Smart Assist** — optional AI help in the composer to improve a draft without changing its meaning.
+- 🔐 **Account ownership controls** — password recovery, account deletion, blocking, bookmarks and pinned messages.
+- 🧭 **Local-first engineering** — PostgreSQL + Mailpit can run entirely on a developer machine for predictable testing.
+- ⚡ **Realtime-first UX** — Socket.IO presence, typing, delivery, reconnect and offline synchronization.
+- 📱 **One product, multiple surfaces** — web today, with Capacitor paths for Android/iOS and desktop-ready UI.
+- 🧩 **Provider-independent AI** — the server can use Groq or OpenAI when configured; chat remains usable without AI.
+
+The goal is to make the product feel like a **privacy-first communication workspace with optional AI**, rather than a basic messaging demo.
+
 ## 🧭 Local-first development
 
 The repository now uses deterministic local development: `dev` and `build` no longer rewrite application source files through patch scripts. Run the environment check and build before testing the chat UI:
@@ -114,11 +127,13 @@ cd global-messanger
 npm ci
 ```
 
-### 3. Start PostgreSQL
+### 3. Start PostgreSQL + local email capture
 
 ```bash
-docker compose up -d postgres
+docker compose up -d postgres mailpit
 ```
+
+Mailpit captures password-reset emails locally. Open `http://127.0.0.1:8025` to inspect the inbox; SMTP is exposed to the server on port `2525`.
 
 ### 4. Configure the server
 
