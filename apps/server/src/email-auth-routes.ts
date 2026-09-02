@@ -45,12 +45,12 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
       data: { username, displayName: parsed.data.displayName, email, passwordHash }
     });
 
-    try {
-      await sendWelcomeEmail(email, user.displayName || user.username || 'there');
-    } catch (error) {
-      // Welcome email is non-blocking: account creation must still succeed if SMTP is unavailable.
+    // Never make account creation wait for SMTP. The account is already created;
+    // send the welcome email in the background so a slow/unavailable SMTP server
+    // cannot make the registration page appear frozen.
+    void sendWelcomeEmail(email, user.displayName || user.username || 'there').catch((error) => {
       app.log.error(error, 'Welcome email failed');
-    }
+    });
 
     const token = app.jwt.sign({ id: user.id, username: user.username });
     return reply.code(201).send({
