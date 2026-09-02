@@ -10,6 +10,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Global Messenger" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230b1020'/%3E%3Cpath d='M14 18h36v24H29l-9 8v-8h-6z' fill='white'/%3E%3Ccircle cx='25' cy='30' r='3' fill='%230b1020'/%3E%3Ccircle cx='32' cy='30' r='3' fill='%230b1020'/%3E%3Ccircle cx='39' cy='30' r='3' fill='%230b1020'/%3E%3C/svg%3E" />
     <title>Global Messenger</title>
   </head>
@@ -31,5 +32,12 @@
     <script src="/chat-switch-fix.js"></script>
     <script src="/chat-modern-menu.js?v=20260902c"></script>
     <script src="/chat-behavior-fix.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>
