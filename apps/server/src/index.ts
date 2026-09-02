@@ -1,6 +1,5 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import staticPlugin from '@fastify/static';
 import path from 'node:path';
@@ -23,11 +22,7 @@ const WEB_ORIGIN =
 const isAllowedOrigin = (origin?: string | null) => {
   if (!origin) return true;
 
-  const configured = WEB_ORIGIN
-    .split(',')
-    .map(value => value.trim())
-    .filter(Boolean);
-
+  const configured = WEB_ORIGIN.split(',').map(value => value.trim()).filter(Boolean);
   const isLocalDev =
     /^https?:\/\/localhost:\d+$/.test(origin) ||
     /^https?:\/\/127\.0\.0\.1:\d+$/.test(origin);
@@ -36,12 +31,9 @@ const isAllowedOrigin = (origin?: string | null) => {
 };
 
 await app.register(cors, {
-  origin: (origin, cb) => {
-    cb(null, isAllowedOrigin(origin));
-  },
+  origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
   credentials: true
 });
-await app.register(cookie);
 await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -51,13 +43,11 @@ await app.register(staticPlugin, {
   prefix: '/uploads/'
 });
 
-app.get('/', async () => {
-  return {
-    ok: true,
-    service: 'global-messenger-api',
-    health: '/health'
-  };
-});
+app.get('/', async () => ({
+  ok: true,
+  service: 'global-messenger-api',
+  health: '/health'
+}));
 
 app.get('/health', async () => ({ ok: true }));
 
