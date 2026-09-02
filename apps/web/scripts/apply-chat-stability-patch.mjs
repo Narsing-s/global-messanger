@@ -9,9 +9,10 @@ if (!source.includes('blockedSent')) {
     "[socketError,setSocketError]=useState(''),[presence,setPresence]=useState<Record<string,boolean>>({}),[conversationLoading,setConversationLoading]=useState(false),[aiLoading,setAiLoading]=useState(false);",
     "[socketError,setSocketError]=useState(''),[presence,setPresence]=useState<Record<string,boolean>>({}),[conversationLoading,setConversationLoading]=useState(false),[aiLoading,setAiLoading]=useState(false),[blockedSent,setBlockedSent]=useState<Record<string,boolean>>({});"
   );
+  // Keep the original delivery listener intact so later reliability patches can safely extend it.
   source = source.replace(
     "s.on('message:delivered',()=>setSocketError(''));",
-    "s.on('message:delivered',()=>setSocketError(''));s.on('message:blocked',(d:any)=>{if(d?.messageId)setBlockedSent(p=>({...p,[String(d.messageId)]:true}))});"
+    "s.on('message:blocked',(d:any)=>{if(d?.messageId)setBlockedSent(p=>({...p,[String(d.messageId)]:true}))});s.on('message:delivered',()=>setSocketError(''));"
   );
   source = source.replace(
     "<Bubble key={m.id}message={m}own={m.senderId===user.id}",
