@@ -19,15 +19,8 @@
     syncingServerState = true;
     try {
       const rows = await request('/api/conversations/unread');
-      if (Array.isArray(rows)) {
-        const serverArchived = rows.filter(row => row.archived).map(row => String(row.conversationId));
-        // Server is the source of truth. This prevents refresh/re-render from
-        // bringing an archived conversation back into the normal Chats folder.
-        write('gm_chat_archived', serverArchived);
-      }
-    } catch {} finally {
-      syncingServerState = false;
-    }
+      if (Array.isArray(rows)) write('gm_chat_archived', rows.filter(row => row.archived).map(row => String(row.conversationId)));
+    } catch {} finally { syncingServerState = false; }
   };
 
   const activeConversation = async () => {
@@ -70,7 +63,10 @@
     const card = document.querySelector('#gm-modern-menu .gm-wa-card'); if (!card || card.querySelector('[data-folder-action="pin"]')) return;
     const sep = document.createElement('div'); sep.className = 'gm-wa-separator';
     const pin = document.createElement('button'); pin.className = 'gm-wa-item'; pin.dataset.folderAction = 'pin'; pin.innerHTML = '<span class="gm-wa-icon">📌</span><span class="gm-wa-label">Pin chat</span>';
-    const archive = document.createElement('button'); archive.className = 'gm-wa-item'; archive.dataset.folderAction = 'archive'; archive.innerHTML = '<span class="gm-wa-icon">▱</span><span class="gm-wa-label">Archive chat</span>';
+    const archive = document.createElement('button'); archive.className = 'gm-wa-item'; archive.dataset.folderAction = 'archive';
+    const activeId = document.querySelector('.chat-heading')?.getAttribute('data-conversation-id') || '';
+    const archived = read('gm_chat_archived', []);
+    archive.innerHTML = `<span class="gm-wa-icon">▱</span><span class="gm-wa-label">${activeId && archived.includes(activeId) ? 'Restore chat' : 'Archive chat'}</span>`;
     card.insertBefore(sep, card.firstElementChild); card.insertBefore(pin, card.firstElementChild); card.insertBefore(archive, pin.nextElementSibling);
   };
 
@@ -82,13 +78,20 @@
       write('gm_chat_pinned', pinned); document.getElementById('gm-modern-menu')?.remove(); refresh(); return;
     }
     try {
-      await request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      const archived = read('gm_chat_archived', []); if (!archived.includes(id)) archived.push(id); write('gm_chat_archived', archived);
-      document.getElementById('gm-modern-menu')?.remove(); folder = 'archived'; refresh();
-      // Keep the archived chat available in Archive; never delete the conversation.
-      // The backend endpoint only marks this user's membership as archived.
+      const archived = read('gm_chat_archived', []);
+      if (archived.includes(id)) {
+        await request(`/api/conversations/${encodeURIComponent(id)}/restore`, { method: 'POST' });
+        write('gm_chat_archived', archived.filter(x => x !== id));
+        folder = 'all';
+      } else {
+        await request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (!archived.includes(id)) archived.push(id);
+        write('gm_chat_archived', archived);
+        folder = 'archived';
+      }
+      document.getElementById('gm-modern-menu')?.remove(); refresh();
       setTimeout(() => { void syncServerArchiveState().then(refresh); }, 150);
-    } catch (err) { alert(err?.message || 'Unable to archive chat.'); }
+    } catch (err) { alert(err?.message || 'Unable to update archive status.'); }
   }, true);
 
   document.addEventListener('click', e => { if (e.target instanceof Element && e.target.closest('.top-actions button[title="More options"]')) window.setTimeout(addMenuActions, 0); });
