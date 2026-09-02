@@ -19,9 +19,11 @@
         const id = item.getAttribute('data-gm-conversation-id'); if (!id) continue;
         const info = map.get(id); item.querySelector('.gm-unread-badge')?.remove();
         if (info?.unreadCount > 0) item.appendChild(badge(info.unreadCount));
-        item.style.display = '';
+        // Do NOT force display here. chat-folders.js owns folder visibility.
+        // This prevents Archive chats from jumping back into Chats during polling.
       }
       document.querySelectorAll('.chat-item.selected .gm-unread-badge').forEach(el => el.remove());
+      window.dispatchEvent(new CustomEvent('gm:chat-folders-refresh'));
     } catch {}
   }
   function addDeleteButton(item) {
