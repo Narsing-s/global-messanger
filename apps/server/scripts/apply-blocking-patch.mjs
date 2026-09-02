@@ -37,11 +37,10 @@ if (!source.includes('/* ---------------------- Blocked-contact delivery -------
 }
 
 const broadcastMarker = `          io\n            .to(\n              \`conversation:\\${data.conversationId}\`\n            )\n            .emit(\n              'message:new',`;
-const replacement = `          if (blockedRecipientIds.size > 0) {\n            // Only the sender receives the persisted message when the direct\n            // recipient has blocked them.\n            io.to(\`user:\\${userId}\`).emit('message:new', { ...message, clientId: data.clientId });\n          } else {\n            io\n              .to(\`conversation:\\${data.conversationId}\`)\n              .emit(\n                'message:new',`;
+const replacement = `          if (blockedRecipientIds.size > 0) {\n            // Only the sender receives the persisted message when the direct\n            // recipient has blocked them.\n            io.to(\`user:\\${userId}\`).emit('message:new', { ...message, clientId: data.clientId });\n            io.to(\`user:\\${userId}\`).emit('message:blocked', { messageId: message.id, conversationId: message.conversationId, clientId: data.clientId });\n          } else {\n            io\n              .to(\`conversation:\\${data.conversationId}\`)\n              .emit(\n                'message:new',`;
 
-if (source.includes(broadcastMarker) && !source.includes("Only the sender receives the persisted message")) {
+if (source.includes(broadcastMarker) && !source.includes("message:blocked', { messageId")) {
   source = source.replace(broadcastMarker, replacement);
-  const close = `              }\n            );\n\n          /* ---------------------- Delivery Ack ---------------------------- */`;
   source = source.replace(`              }\n            );\n\n          /* ---------------------- Delivery Ack ---------------------------- */`, `              }\n            );\n          }\n\n          /* ---------------------- Delivery Ack ---------------------------- */`);
 }
 
