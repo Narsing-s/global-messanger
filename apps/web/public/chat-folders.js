@@ -5,6 +5,7 @@
   const read = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch { return fallback; } };
   const write = (key, value) => localStorage.setItem(key, JSON.stringify(value));
   let folder = 'all';
+  let syncingServerState = false;
 
   const request = async (path, options = {}) => {
     const res = await fetch(`${API}${path}`, { ...options, headers: { ...(options.body ? {'Content-Type':'application/json'} : {}), ...(token() ? {Authorization:`Bearer ${token()}`} : {}), ...(options.headers || {}) } });
@@ -12,6 +13,23 @@
     if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
     return data;
   };
+
+  const syncServerArchiveState = async () => {
+    if (!token() || syncingServerState) return;
+    syncingServerState = true;
+    try {
+      const rows = await request('/api/conversations/unread');
+      if (Array.isArray(rows)) {
+        const serverArchived = rows.filter(row => row.archived).map(row => String(row.conversationId));
+        // Server is the source of truth. This prevents refresh/re-render from
+        // bringing an archived conversation back into the normal Chats folder.
+        write('gm_chat_archived', serverArchived);
+      }
+    } catch {} finally {
+      syncingServerState = false;
+    }
+  };
+
   const activeConversation = async () => {
     const title = document.querySelector('.chat-heading b')?.textContent?.trim(); if (!title) return null;
     const me = read('gm_user', {}); const rows = await request('/api/conversations');
@@ -63,10 +81,19 @@
       const pinned = read('gm_chat_pinned', []), i = pinned.indexOf(id); if (i >= 0) pinned.splice(i, 1); else { if (pinned.length >= 3) return alert('You can pin a maximum of 3 chats.'); pinned.push(id); }
       write('gm_chat_pinned', pinned); document.getElementById('gm-modern-menu')?.remove(); refresh(); return;
     }
-    try { await request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }); const archived = read('gm_chat_archived', []); if (!archived.includes(id)) archived.push(id); write('gm_chat_archived', archived); document.getElementById('gm-modern-menu')?.remove(); folder = 'archived'; refresh(); } catch (err) { alert(err?.message || 'Unable to archive chat.'); }
+    try {
+      await request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const archived = read('gm_chat_archived', []); if (!archived.includes(id)) archived.push(id); write('gm_chat_archived', archived);
+      document.getElementById('gm-modern-menu')?.remove(); folder = 'archived'; refresh();
+      // Keep the archived chat available in Archive; never delete the conversation.
+      // The backend endpoint only marks this user's membership as archived.
+      setTimeout(() => { void syncServerArchiveState().then(refresh); }, 150);
+    } catch (err) { alert(err?.message || 'Unable to archive chat.'); }
   }, true);
+
   document.addEventListener('click', e => { if (e.target instanceof Element && e.target.closest('.top-actions button[title="More options"]')) window.setTimeout(addMenuActions, 0); });
   window.addEventListener('gm:chat-folders-refresh', refresh);
   createFolderBar(); addMenuActions(); refresh();
-  window.setInterval(() => { createFolderBar(); addMenuActions(); refresh(); }, 1200);
+  void syncServerArchiveState().then(refresh);
+  window.setInterval(() => { createFolderBar(); addMenuActions(); void syncServerArchiveState().then(refresh); }, 2500);
 })();
