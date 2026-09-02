@@ -1,7 +1,11 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
+  const isWelcomeEmailLink = params.get('welcome') === '1';
   const loginEmail = params.get('loginEmail');
-  if (!loginEmail) return;
+
+  // Only the "Open Global Messenger" button in the welcome email may prefill
+  // the email/username field. Never prefill a password or credentials elsewhere.
+  if (!isWelcomeEmailLink || !loginEmail) return;
 
   const fill = () => {
     const inputs = Array.from(document.querySelectorAll('input'));
