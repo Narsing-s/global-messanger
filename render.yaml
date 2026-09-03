@@ -49,7 +49,7 @@ services:
     staticPublishPath: apps/web/dist
     envVars:
       - key: VITE_API_URL
-        value: https://global-messenger-api.onrender.com
+        value: https://global-messanger-backend.onrender.com
     routes:
       # Password reset must be handled by the Global Messenger reset page,
       # not the SPA fallback. Keep these before the catch-all rewrite.
