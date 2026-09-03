@@ -11,6 +11,7 @@
     return (Array.isArray(rows) ? rows : []).find(c => c.isGroup ? (c.title || 'Group') === title : (c.members || []).some(m => m.user?.id !== me.id && (m.user?.displayName === title || m.user?.username === title))) || null;
   };
   const labelFor = c => { const me = read('gm_user', {}); return c?.isGroup ? (c.title || 'Group') : ((c?.members || []).find(m => m.user?.id !== me.id)?.user?.displayName || 'Chat'); };
+  const hideDeletedRows = () => { const deleted = read('gm_chat_deleted', []); document.querySelectorAll('.chat-list .chat-item[data-gm-conversation-id]').forEach(row => { if (deleted.includes(String(row.getAttribute('data-gm-conversation-id')))) row.style.display = 'none'; }); };
   document.addEventListener('click', async e => {
     const b = e.target instanceof Element ? e.target.closest('#gm-modern-menu [data-folder-action]') : null;
     if (!b) return;
@@ -22,12 +23,12 @@
       const id = String(c.id); const label = labelFor(c);
       const ids = read('gm_chat_conversation_ids', {}); ids[label] = id; write('gm_chat_conversation_ids', ids);
       if (action === 'archive') {
-        const archived = read('gm_chat_archived', []);
-        if (archived.includes(id)) { await api(`/api/conversations/${encodeURIComponent(id)}/restore`, {method:'POST'}); write('gm_chat_archived', archived.filter(x => x !== id)); }
+        const archived = read('gm_chat_archived', []); const wasArchived = archived.includes(id);
+        if (wasArchived) { await api(`/api/conversations/${encodeURIComponent(id)}/restore`, {method:'POST'}); write('gm_chat_archived', archived.filter(x => x !== id)); }
         else { await api(`/api/conversations/${encodeURIComponent(id)}`, {method:'DELETE'}); write('gm_chat_archived', [...archived, id]); }
         document.getElementById('gm-modern-menu')?.remove();
         window.dispatchEvent(new CustomEvent('gm:chat-folders-refresh'));
-        alert(archived.includes(id) ? `${label} restored to Chats.` : `${label} moved to Archive.`);
+        alert(wasArchived ? `${label} restored to Chats.` : `${label} moved to Archive.`);
         return;
       }
       if (!confirm(`Delete this chat and all its messages?\n\n${label}`)) return;
@@ -38,8 +39,13 @@
       write('gm_chat_pinned', read('gm_chat_pinned', []).filter(x => x !== id));
       document.getElementById('gm-modern-menu')?.remove();
       document.querySelector('.messages')?.replaceChildren();
+      hideDeletedRows();
       window.dispatchEvent(new CustomEvent('gm:chat-folders-refresh'));
       alert(`${label} and its messages were deleted from your chat list.`);
     } catch (err) { alert(err?.message || 'Unable to complete the chat action.'); }
   }, true);
+  const observer = new MutationObserver(hideDeletedRows);
+  observer.observe(document.body, {childList:true, subtree:true});
+  setInterval(hideDeletedRows, 1000);
+  hideDeletedRows();
 })();
