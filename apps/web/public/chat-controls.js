@@ -19,12 +19,20 @@
         const id = item.getAttribute('data-gm-conversation-id'); if (!id) continue;
         const info = map.get(id); item.querySelector('.gm-unread-badge')?.remove();
         if (info?.unreadCount > 0) item.appendChild(badge(info.unreadCount));
-        // Do NOT force display here. chat-folders.js owns folder visibility.
-        // This prevents Archive chats from jumping back into Chats during polling.
       }
       document.querySelectorAll('.chat-item.selected .gm-unread-badge').forEach(el => el.remove());
       window.dispatchEvent(new CustomEvent('gm:chat-folders-refresh'));
     } catch {}
+  }
+  async function markChatRead(item) {
+    const id = item?.getAttribute('data-gm-conversation-id');
+    if (!id || !token()) return;
+    item.querySelector('.gm-unread-badge')?.remove();
+    try {
+      await request(`/api/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' });
+      await refresh();
+    } catch {}
+    item.querySelector('.gm-unread-badge')?.remove();
   }
   function addDeleteButton(item) {
     if (item.querySelector('.gm-delete-chat')) return;
@@ -42,7 +50,7 @@
     } catch {}
   }
   const observer = new MutationObserver(() => { void mapConversationIds().then(enhance); }); observer.observe(document.documentElement, { childList: true, subtree: true });
-  document.addEventListener('click', e => { const item = e.target instanceof Element ? e.target.closest('.chat-item') : null; if (item) setTimeout(refresh, 250); });
+  document.addEventListener('click', e => { const item = e.target instanceof Element ? e.target.closest('.chat-item') : null; if (item) { void markChatRead(item); setTimeout(refresh, 250); } });
   setInterval(() => { void mapConversationIds().then(enhance).then(refresh); }, 2500);
   setTimeout(() => { void mapConversationIds().then(enhance).then(refresh); }, 1200);
 })();
