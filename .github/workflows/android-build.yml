@@ -3,6 +3,7 @@ name: Android Build
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - 'apps/web/**'
       - 'package.json'
@@ -12,38 +13,30 @@ jobs:
   android:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-
       - name: Install dependencies
         run: npm install
-
       - name: Build web app
         run: npm run build -w apps/web
-
       - name: Add Android platform
         working-directory: apps/web
         run: npx cap add android
-
       - name: Sync Capacitor
         working-directory: apps/web
         run: npx cap sync android
-
       - name: Configure Android permissions
         shell: bash
         run: |
@@ -51,92 +44,35 @@ jobs:
           from pathlib import Path
           p = Path('apps/web/android/app/src/main/AndroidManifest.xml')
           text = p.read_text()
-          permissions = [
-              'android.permission.INTERNET',
-              'android.permission.CAMERA',
-              'android.permission.RECORD_AUDIO',
-              'android.permission.POST_NOTIFICATIONS',
-          ]
+          permissions = ['android.permission.INTERNET','android.permission.CAMERA','android.permission.RECORD_AUDIO','android.permission.POST_NOTIFICATIONS']
           for perm in permissions:
               if perm not in text:
-                  line = f'    <uses-permission android:name="{perm}" />\n'
-                  text = text.replace('<application', line + '    <application', 1)
+                  text = text.replace('<application', f'    <uses-permission android:name="{perm}" />\n    <application', 1)
           p.write_text(text)
           PY
-
       - name: Build debug APK
         working-directory: apps/web/android
         run: ./gradlew assembleDebug --stacktrace
-
-      - name: Prepare release signing
-        if: ${{ env.ANDROID_SIGNING_READY == 'true' }}
-        env:
-          ANDROID_SIGNING_READY: ${{ secrets.ANDROID_SIGNING_READY }}
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Prepare downloadable APK
         shell: bash
         run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > apps/web/android/release.keystore
-          cat > apps/web/android/keystore.properties <<EOF
-          storeFile=../release.keystore
-          storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyAlias=$ANDROID_KEY_ALIAS
-          keyPassword=$ANDROID_KEY_PASSWORD
-          EOF
-
-      - name: Configure release signing
-        if: ${{ env.ANDROID_SIGNING_READY == 'true' }}
-        env:
-          ANDROID_SIGNING_READY: ${{ secrets.ANDROID_SIGNING_READY }}
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('apps/web/android/app/build.gradle')
-          text = p.read_text()
-          marker = 'android {'
-          signing = '''android {\n    signingConfigs {\n        release {\n            def propsFile = rootProject.file("keystore.properties")\n            def props = new Properties()\n            propsFile.withInputStream { props.load(it) }\n            storeFile file(props['storeFile'])\n            storePassword props['storePassword']\n            keyAlias props['keyAlias']\n            keyPassword props['keyPassword']\n        }\n    }\n'''
-          if 'signingConfigs {' not in text:
-              text = text.replace(marker, signing, 1)
-          if 'signingConfig signingConfigs.release' not in text:
-              text = text.replace('buildTypes {\n', 'buildTypes {\n        release {\n            signingConfig signingConfigs.release\n        }\n', 1)
-          p.write_text(text)
-          PY
-
-      - name: Build release APK
-        working-directory: apps/web/android
-        run: ./gradlew assembleRelease --stacktrace
-
-      - name: Build release AAB
-        working-directory: apps/web/android
-        run: ./gradlew bundleRelease --stacktrace
-
-      - name: Locate Android artifacts
-        shell: bash
-        run: |
-          echo "Android output files:"
-          find apps/web/android/app/build/outputs -type f \( -name '*.apk' -o -name '*.aab' \) -print -exec ls -lh {} \;
-
-      - name: Verify Android artifacts
-        shell: bash
-        run: |
-          DEBUG_APK=$(find apps/web/android/app/build/outputs/apk -type f -name '*.apk' | grep '/debug/' | head -n 1 || true)
-          RELEASE_APK=$(find apps/web/android/app/build/outputs/apk -type f -name '*.apk' | grep '/release/' | head -n 1 || true)
-          RELEASE_AAB=$(find apps/web/android/app/build/outputs/bundle -type f -name '*.aab' | grep '/release/' | head -n 1 || true)
+          DEBUG_APK=$(find apps/web/android/app/build/outputs/apk -type f -name '*.apk' | grep '/debug/' | head -n 1)
           test -n "$DEBUG_APK"
-          test -n "$RELEASE_APK"
-          test -n "$RELEASE_AAB"
-          echo "Debug APK: $DEBUG_APK"
-          echo "Release APK: $RELEASE_APK"
-          echo "Release AAB: $RELEASE_AAB"
-
-      - name: Upload Android artifacts
+          cp "$DEBUG_APK" global-messenger.apk
+          ls -lh global-messenger.apk
+      - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
           name: global-messenger-android
-          path: |
-            apps/web/android/app/build/outputs/apk/**/*.apk
-            apps/web/android/app/build/outputs/bundle/**/*.aab
+          path: global-messenger.apk
           if-no-files-found: error
+      - name: Publish latest Android APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: Global Messenger Android APK
+          body: Latest installable Android APK for Global Messenger.
+          files: global-messenger.apk
+          make_latest: true
+          prerelease: false
+          fail_on_unmatched_files: true
