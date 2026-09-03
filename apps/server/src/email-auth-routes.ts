@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import { sendWelcomeEmail, sendReportEmail } from './smtp.js';
+import crypto from 'node:crypto';
+import { sendWelcomeEmail, sendReportEmail, sendSupportRequestEmail } from './smtp.js';
 
 const emailSchema = z.string().trim().email().max(320);
 const auth = { preHandler: [] as any[] };
@@ -36,15 +37,30 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
     return { token, user: { id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl } };
   });
 
+  app.post('/api/support/requests', async (request, reply) => {
+    const parsed = z.object({ name: z.string().trim().min(1).max(120), email: emailSchema, category: z.string().trim().min(1).max(80), subject: z.string().trim().min(3).max(180), details: z.string().trim().min(10).max(10000) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.badRequest('Please provide a valid name, email, category, subject and issue details.');
+    const data = parsed.data;
+    const requestId = `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+    const created = await prisma.supportRequest.create({ data: { requestId, ...data } });
+    let notification: 'sent' | 'failed' = 'sent';
+    try { await sendSupportRequestEmail(created); } catch (error) { notification = 'failed'; app.log.error(error, 'Support request notification email failed'); }
+    return reply.code(201).send({ ok: true, requestId: created.requestId, status: created.status, createdAt: created.createdAt, notification, message: notification === 'sent' ? `Support request ${created.requestId} was submitted successfully.` : `Support request ${created.requestId} was saved successfully, but the support notification email could not be delivered right now.` });
+  });
+
+  app.get('/api/support/requests/:requestId', async (request, reply) => {
+    const requestId = String((request.params as any).requestId || '').trim().toUpperCase();
+    if (!/^GM-[0-9]{8}-[A-F0-9]{8}$/.test(requestId)) return reply.badRequest('Invalid support request ID.');
+    const item = await prisma.supportRequest.findUnique({ where: { requestId }, select: { requestId: true, category: true, subject: true, status: true, createdAt: true, updatedAt: true } });
+    if (!item) return reply.notFound('Support request not found.');
+    return { ok: true, ...item };
+  });
+
   app.delete('/api/conversations/:id/permanent', { preHandler: [app.authenticate] }, async (request, reply) => {
     const userId = String((request.user as any).id); const conversationId = String((request.params as any).id);
     const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } });
     if (!membership) return reply.notFound('Chat not found.');
-    await prisma.$transaction(async tx => {
-      await tx.conversationMember.delete({ where: { conversationId_userId: { conversationId, userId } } });
-      const remainingMembers = await tx.conversationMember.count({ where: { conversationId } });
-      if (remainingMembers === 0) await tx.conversation.delete({ where: { id: conversationId } });
-    });
+    await prisma.$transaction(async tx => { await tx.conversationMember.delete({ where: { conversationId_userId: { conversationId, userId } } }); const remainingMembers = await tx.conversationMember.count({ where: { conversationId } }); if (remainingMembers === 0) await tx.conversation.delete({ where: { id: conversationId } }); });
     return { ok: true, conversationId };
   });
 
@@ -71,16 +87,11 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
 
   /* --------------------------- User blocking ----------------------------- */
   app.post('/api/users/:id/block', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const userId = String((request.user as any).id);
-    const blockedUserId = String((request.params as any).id);
+    const userId = String((request.user as any).id); const blockedUserId = String((request.params as any).id);
     if (!blockedUserId || blockedUserId === userId) return reply.badRequest('You cannot block yourself.');
     const target = await prisma.user.findUnique({ where: { id: blockedUserId }, select: { id: true } });
     if (!target) return reply.notFound('User not found.');
-    await prisma.userBlock.upsert({
-      where: { userId_blockedUserId: { userId, blockedUserId } },
-      create: { userId, blockedUserId },
-      update: {}
-    });
+    await prisma.userBlock.upsert({ where: { userId_blockedUserId: { userId, blockedUserId } }, create: { userId, blockedUserId }, update: {} });
     return { ok: true, blockedUserId };
   });
 
