@@ -20,9 +20,66 @@ It brings conversations, presence, profiles, groups, media sharing, message cont
 - **API health:** https://global-messanger-backend.onrender.com/health
 - **Source:** https://github.com/Narsing-s/global-messanger
 
+## 👥 Community & contributors
+
+Global Messenger is an open-source project and contributions are welcome. You do **not** need to be an expert in the whole codebase. Small improvements are valuable: bug fixes, UI polish, documentation, tests, accessibility, Android testing, performance improvements and new features.
+
+### Try the product first
+
+The easiest way to become a contributor is to use the application and report what you would improve.
+
+1. Open the live web app.
+2. Create a test account.
+3. Test one-to-one chat, groups, profiles, media, notifications and calling.
+4. Report bugs or suggest improvements through GitHub Issues.
+5. For code changes, read [`docs/08-contributing.md`](./docs/08-contributing.md).
+
+### How contributors can help
+
+| Contribution | Examples |
+|---|---|
+| 🐛 Bug fixes | Realtime bugs, UI problems, reconnect issues |
+| 🎨 UI/UX | Responsive design, accessibility, mobile polish |
+| 📱 Android | Device testing, Capacitor improvements, Play Store readiness |
+| 🧪 Testing | Regression tests, two-account testing, edge cases |
+| 🔐 Security | Safe validation, authorization and privacy improvements |
+| ⚡ Performance | Faster chat loading, uploads, database and Socket.IO improvements |
+| 📚 Documentation | Setup guides, troubleshooting, architecture and examples |
+| ✨ Features | Reactions, profiles, groups, calls and other roadmap work |
+
+### Contributor workflow
+
+```text
+Use Global Messenger
+        ↓
+Find a problem or improvement
+        ↓
+Open a GitHub Issue
+        ↓
+Discuss / get the issue assigned
+        ↓
+Fork → branch → code → test
+        ↓
+Open Pull Request
+        ↓
+Review + CI
+        ↓
+Merge
+```
+
+Good first contributions should be small and focused. Avoid unrelated changes in the same pull request.
+
+**Start here:**
+
+- Issues: https://github.com/Narsing-s/global-messanger/issues
+- Pull requests: https://github.com/Narsing-s/global-messanger/pulls
+- Contributing guide: [`docs/08-contributing.md`](./docs/08-contributing.md)
+- Community guide: [`docs/11-community-and-contributors.md`](./docs/11-community-and-contributors.md)
+- Security policy: [`docs/SECURITY.md`](./docs/SECURITY.md)
+
 ## 📱 Android releases
 
-Android releases now use a **versioned GitHub Release flow**.
+Android releases use a **versioned GitHub Release flow**.
 
 ### Download the latest Android release
 
