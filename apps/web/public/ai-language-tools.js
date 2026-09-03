@@ -13,7 +13,6 @@
   const localImprove = (text) => {
     let s = String(text || '').replace(/[ \t]+/g, ' ').replace(/\s+([,.!?;:])/g, '$1').trim();
     if (!s) return s;
-    // Safe, language-neutral cleanup. Do not rewrite unknown scripts.
     s = s.replace(/([!?.,])\1{2,}/g, '$1');
     if (/^[A-Za-z]/.test(s)) s = s.charAt(0).toUpperCase() + s.slice(1);
     return s;
@@ -50,20 +49,26 @@
   const smartAssist = async (button) => {
     const input = document.querySelector('.composer input:not([type=file])');
     if (!input || !input.value.trim()) { input?.focus(); return; }
-    const original = button.textContent;
-    button.disabled = true; button.textContent = '…';
     const draft = input.value.trim();
     const lang = effectiveLang();
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.style.opacity = '0.65';
+    button.title = 'Smart Assist is working…';
     try {
       const token = localStorage.getItem('gm_token') || '';
-      const res = await fetch(`${API}/api/ai/assist`, { method:'POST', headers:{'Content-Type':'application/json', ...(token ? {Authorization:`Bearer ${token}`} : {})}, body:JSON.stringify({ prompt:`Improve this message for clarity, grammar, spelling, warmth, and natural tone. Preserve the exact meaning. Do not add facts. Keep the answer in the same language/script as the draft. The preferred language is ${lang}. Return only the improved message.`, context:`Draft: ${draft}`}) });
+      const res = await fetch(`${API}/api/ai/assist`, { method:'POST', headers:{'Content-Type':'application/json', ...(token ? {Authorization:`Bearer ${token}`} : {})}, body:JSON.stringify({ mode:'smart', targetLanguage:lang, prompt:`Improve this message for clarity, grammar, spelling, warmth, and natural tone. Preserve the exact meaning. Do not add facts. Keep the answer in the same language/script as the draft. Return only the improved message.`, context:`Draft: ${draft}`}) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('AI unavailable');
       setReactValue(input, data.answer.trim());
     } catch {
-      // Always keep Smart Assist useful without requiring an API key.
       setReactValue(input, localImprove(draft));
-    } finally { button.disabled = false; button.textContent = original; }
+    } finally {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.style.opacity = '';
+      button.title = 'Smart Assist';
+    }
   };
   const scan = () => {
     languageSelect();
