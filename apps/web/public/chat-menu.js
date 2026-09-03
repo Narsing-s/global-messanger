@@ -8,7 +8,7 @@
   const load = () => {
     if (loaded || document.querySelector('script[data-gm-modern-chat-menu]')) return;
     const script = document.createElement('script');
-    script.src = '/chat-modern-menu.js?v=20260902b';
+    script.src = '/chat-modern-menu.js?v=20260903a';
     script.dataset.gmModernChatMenu = '1';
     script.onload = () => {
       loaded = true;
