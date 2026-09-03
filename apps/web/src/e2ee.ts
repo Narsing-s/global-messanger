@@ -75,10 +75,18 @@ export async function encryptMessage(conversationId: string, plaintext: string) 
   if (!me?.id || !plaintext) return plaintext;
   await registerIdentity();
   const identity = await getIdentity();
-  const recipients = (await conversationKeys(conversationId)).filter(item => item.userId !== me.id && item.publicKey);
+  const recipients = (await conversationKeys(conversationId)).filter(item => item.publicKey);
   if (!recipients.length) return plaintext;
+
+  // Include the sender as a recipient too. Without this entry, the sender's
+  // own newly-sent message could not be decrypted on the sending device.
+  const allRecipients: KeyBundle[] = [
+    { userId: me.id, publicKey: identity.publicKey },
+    ...recipients.filter(item => item.userId !== me.id)
+  ];
+
   const entries: Record<string, { iv: string; ct: string }> = {};
-  for (const recipient of recipients) {
+  for (const recipient of allRecipients) {
     const key = await deriveAesKey(identity.privateKey, recipient.publicKey!, conversationId);
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
