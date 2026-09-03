@@ -7,10 +7,36 @@ const original = source;
 
 // Smart Assist is intentionally removed: keep the messenger core key-free and avoid a broken AI button.
 source = source.replace(/,Sparkles(?=,)/g, '');
-source = source.replace(/,Sparkles(?=,LogOut)/g, '');
 source = source.replace(/,\[aiLoading,setAiLoading\]=useState\(false\)/g, '');
-source = source.replace(/async function aiAssist\(\)\{.*?\}function send\(\)/g, 'function send()');
-source = source.replace(/<button[^>]*title=["']Smart Assist["'][^>]*>.*?<\/button>/g, '');
+
+// Remove aiAssist with brace matching instead of a regex because main.tsx is minified to one long line
+// and the function itself contains nested braces.
+const aiStart = source.indexOf('async function aiAssist(){');
+if (aiStart >= 0) {
+  const open = source.indexOf('{', aiStart);
+  let depth = 0;
+  let close = -1;
+  for (let i = open; i < source.length; i += 1) {
+    if (source[i] === '{') depth += 1;
+    else if (source[i] === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        close = i + 1;
+        break;
+      }
+    }
+  }
+  if (close < 0) throw new Error('Global Messenger: could not safely remove Smart Assist function.');
+  source = source.slice(0, aiStart) + source.slice(close);
+}
+
+// Remove the Smart Assist button wherever it appears in the minified source.
+const smartButtonStart = source.indexOf('<button className="icon-btn" title="Smart Assist"');
+if (smartButtonStart >= 0) {
+  const smartButtonEnd = source.indexOf('</button>', smartButtonStart);
+  if (smartButtonEnd < 0) throw new Error('Global Messenger: could not safely remove Smart Assist button.');
+  source = source.slice(0, smartButtonStart) + source.slice(smartButtonEnd + '</button>'.length);
+}
 
 // Voice messages: record locally with MediaRecorder, upload through the existing first-party upload route,
 // then send the uploaded audio as a normal message attachment over the existing authenticated socket.
