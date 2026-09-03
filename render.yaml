@@ -50,27 +50,6 @@ services:
       - key: VITE_API_URL
         value: https://global-messanger-backend.onrender.com
     routes:
-      # Use real directory index pages for the public browser install portals.
-      # This avoids static-host directory/rewrite differences and keeps /chrome/
-      # and /edge/ as normal HTML pages.
-      - type: rewrite
-        source: /chrome
-        destination: /chrome/index.html
-      - type: rewrite
-        source: /chrome/
-        destination: /chrome/index.html
-      - type: rewrite
-        source: /chrome/*
-        destination: /chrome/index.html
-      - type: rewrite
-        source: /edge
-        destination: /edge/index.html
-      - type: rewrite
-        source: /edge/
-        destination: /edge/index.html
-      - type: rewrite
-        source: /edge/*
-        destination: /edge/index.html
       - type: rewrite
         source: /install
         destination: /install.html
