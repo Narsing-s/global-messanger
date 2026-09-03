@@ -1,11 +1,8 @@
 (() => {
-  // Keep the original Help Centre experience on its dedicated Render site.
+  // Help Centre is available to signed-in and signed-out users.
   const HELP_URL = 'https://global-messenger-help.onrender.com/';
   const sync = () => {
-    const authenticated = Boolean(localStorage.getItem('gm_token'));
-    const existing = document.getElementById('gm-help-center-link');
-    if (authenticated) { existing?.remove(); return; }
-    if (existing || !document.body) return;
+    if (!document.body || document.getElementById('gm-help-center-link')) return;
     if (!document.getElementById('gm-help-center-link-style')) {
       const style = document.createElement('style');
       style.id = 'gm-help-center-link-style';
@@ -20,6 +17,6 @@
     button.onclick = () => window.open(HELP_URL, '_blank', 'noopener,noreferrer');
     document.body.appendChild(button);
   };
-  const start = () => { sync(); new MutationObserver(sync).observe(document.body, {childList:true,subtree:true}); window.setInterval(sync,1000); };
+  const start = () => { sync(); new MutationObserver(sync).observe(document.body, {childList:true,subtree:true}); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once:true }); else start();
 })();
