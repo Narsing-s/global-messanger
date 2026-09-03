@@ -31,31 +31,25 @@
     <script src="/chat-switch-fix.js?v=20260903k"></script>
     <script src="/chat-modern-menu.js?v=20260903k"></script>
     <script src="/chat-menu-trigger.js?v=20260903k"></script>
+    <script src="/chat-final-actions.js?v=20260903m"></script>
     <script src="/chat-folders.js?v=20260903k"></script>
     <script src="/chat-behavior-fix.js?v=20260903k"></script>
     <script src="/chat-contact-trigger.js?v=20260903k"></script>
-    <script src="/chat-folder-sync.js?v=20260903k"></script>
+    <script src="/chat-folder-sync.js?v=20260903m"></script>
     <script src="/chat-contact-actions-fix.js?v=20260903k"></script>
     <script>
-      // One-to-one and group chat heading clicks always open the rich
-      // Contact info / Group info panel. The three-dot menu remains separate.
       document.addEventListener('click', function (event) {
         const target = event.target instanceof Element ? event.target : null;
         const heading = target?.closest('.chat-heading');
         if (!heading || target?.closest('.top-actions, button, a')) return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        if (typeof window.__gmOpenContactInfo === 'function') {
-          window.__gmOpenContactInfo();
-        } else {
-          window.dispatchEvent(new CustomEvent('gm:open-contact-info'));
-        }
+        if (typeof window.__gmOpenContactInfo === 'function') window.__gmOpenContactInfo();
+        else window.dispatchEvent(new CustomEvent('gm:open-contact-info'));
       }, true);
     </script>
     <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js?v=20260903l', { scope: '/' }).catch(() => {});
-      }
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=20260903l', { scope: '/' }).catch(() => {});
     </script>
   </body>
 </html>
