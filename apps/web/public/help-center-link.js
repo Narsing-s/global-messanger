@@ -1,6 +1,6 @@
 (() => {
   // Help Centre is shown only on the login/register screen.
-  const HELP_URL = 'https://global-messenger-help.onrender.com/';
+  const HELP_URL = 'https://global-messenger-help-centre.onrender.com/';
 
   const sync = () => {
     if (!document.body) return;
