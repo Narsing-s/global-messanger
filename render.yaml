@@ -50,18 +50,20 @@ services:
       - key: VITE_API_URL
         value: https://global-messanger-backend.onrender.com
     routes:
+      # Browser landing pages. Keep explicit HTML destinations so they do not
+      # depend on directory-index behavior on the static host.
       - type: rewrite
         source: /chrome
-        destination: /install.html
+        destination: /chrome.html
       - type: rewrite
         source: /chrome/
-        destination: /install.html
+        destination: /chrome.html
       - type: rewrite
         source: /edge
-        destination: /install.html
+        destination: /edge.html
       - type: rewrite
         source: /edge/
-        destination: /install.html
+        destination: /edge.html
       - type: rewrite
         source: /install
         destination: /install.html
