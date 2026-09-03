@@ -2,7 +2,9 @@ services:
   - type: web
     name: global-messenger-api
     runtime: node
-    plan: free
+    # Gmail SMTP uses ports 25/465/587. Render Free blocks outbound SMTP,
+    # so the backend must run on a paid web-service plan for direct Gmail SMTP.
+    plan: starter
     region: singapore
     buildCommand: rm -rf apps/server/dist && npm install --include=dev --include=optional && npm run db:generate -w apps/server && npm run db:deploy -w apps/server && npm run build -w apps/server
     startCommand: npm run start -w apps/server
