@@ -2,8 +2,13 @@
   const API = window.__GM_CONFIG__?.API_URL || (location.hostname === '127.0.0.1' || location.hostname === 'localhost' ? location.origin : 'https://global-messanger-backend.onrender.com');
 
   const install = () => {
-    if (!localStorage.getItem('gm_token')) return;
-    if (document.querySelector('.gm-delete-account-entry')) return;
+    const authenticated = Boolean(localStorage.getItem('gm_token'));
+    const existing = document.querySelector('.gm-delete-account-entry');
+    if (!authenticated || !document.querySelector('.shell')) { existing?.remove(); return; }
+    const profile = document.querySelector('.profile');
+    if (!profile) return;
+    if (existing && existing.parentElement === profile) return;
+    existing?.remove();
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -16,7 +21,7 @@
       const style = document.createElement('style');
       style.dataset.gmAccountDelete = '1';
       style.textContent = `
-        .gm-delete-account-entry{position:fixed!important;left:18px!important;bottom:18px!important;z-index:2147483000!important;display:flex!important;align-items:center!important;gap:8px!important;padding:11px 15px!important;border:1px solid #efb8b3!important;border-radius:12px!important;background:#fff!important;color:#b42318!important;box-shadow:0 6px 22px rgba(15,23,42,.22)!important;font:600 13px system-ui,sans-serif!important;cursor:pointer!important;visibility:visible!important;opacity:1!important;transform:none!important;white-space:nowrap!important}
+        .gm-delete-account-entry{display:flex!important;align-items:center!important;gap:6px!important;margin:8px 0 0 auto!important;padding:7px 9px!important;border:1px solid #efb8b3!important;border-radius:9px!important;background:#fff!important;color:#b42318!important;font:600 11px system-ui,sans-serif!important;box-shadow:none!important;cursor:pointer!important;white-space:nowrap!important}
         .gm-delete-account-entry:hover{background:#fff4f2!important;border-color:#d92d20!important}
         .gm-delete-card{width:min(480px,94vw)!important}
         .gm-delete-warning{background:#fff5f4;border:1px solid #ffd6d2;border-radius:13px;padding:13px;color:#8f1d15;line-height:1.5;font-size:12px}
@@ -27,12 +32,11 @@
         .gm-delete-confirm{background:#b42318;color:#fff}
         .gm-delete-confirm:disabled{opacity:.55;cursor:not-allowed}
         .gm-delete-status{margin-top:9px;font-size:11px;color:#b42318;min-height:15px}
-        @media(max-width:640px){.gm-delete-account-entry{left:10px!important;bottom:10px!important;padding:9px!important;width:38px!important;height:38px!important}.gm-delete-account-entry span:last-child{display:none!important}}
       `;
       document.head.appendChild(style);
     }
 
-    document.body.appendChild(button);
+    profile.appendChild(button);
 
     const open = () => {
       document.getElementById('gm-account-delete-modal')?.remove();
