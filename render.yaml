@@ -52,16 +52,16 @@ services:
     routes:
       - type: rewrite
         source: /chrome
-        destination: /chrome.html
+        destination: /install.html
       - type: rewrite
         source: /chrome/
-        destination: /chrome.html
+        destination: /install.html
       - type: rewrite
         source: /edge
-        destination: /edge.html
+        destination: /install.html
       - type: rewrite
         source: /edge/
-        destination: /edge.html
+        destination: /install.html
       - type: rewrite
         source: /install
         destination: /install.html
