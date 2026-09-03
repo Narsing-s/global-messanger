@@ -21,23 +21,64 @@ PostgreSQL / Prisma
 
 The Android app uses the same messaging, authentication and calling backend as the web client.
 
-## 2. Current Android APK
+## 2. Android release downloads
 
-A real installable Android APK is currently published in the GitHub Release `android-latest`.
+The production Android release is published as a **versioned GitHub Release**.
 
-**Download:** https://github.com/Narsing-s/global-messanger/releases/tag/android-latest
+**Latest release:** https://github.com/Narsing-s/global-messanger/releases/latest
 
-Download the file under **Assets**:
+Each production release contains:
 
 ```text
-global-messenger.apk
+Global-Messenger.apk   ← direct Android installation
+Global-Messenger.aab   ← Google Play Console upload
 ```
 
-This is an actual Android Package (`application/vnd.android.package-archive`), not an `.aab` or ZIP archive.
+The APK is an actual Android Package (`application/vnd.android.package-archive`), not an `.aab` or ZIP archive. The AAB is a Play Store publishing bundle and is not directly installable like an APK.
 
-For a step-by-step download/install guide, see [`ANDROID_APK.md`](./ANDROID_APK.md).
+For the step-by-step APK guide, see [`ANDROID_APK.md`](./ANDROID_APK.md).
 
-## 3. What is configured
+## 3. Production release flow
+
+The repository now separates normal CI builds from production releases:
+
+```text
+Push to main
+    ↓
+Web CI/deployment
+    ↓
+Android build + verification
+    ↓
+GitHub Actions artifact only
+
+Create and push version tag
+    v1.0.0 / v1.0.1 / v1.1.0
+    ↓
+Android build + verification
+    ↓
+Signed APK + AAB
+    ↓
+GitHub Release with matching version tag
+```
+
+A push to `main` **does not replace the production GitHub Release**. It produces a CI artifact for testing.
+
+A version tag such as `v1.0.0` starts the same Android build and then publishes the signed packages to a new GitHub Release.
+
+Example:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The release workflow makes that tag the latest GitHub Release. Therefore this stable link always points to the newest production version:
+
+```text
+https://github.com/Narsing-s/global-messanger/releases/latest
+```
+
+## 4. What is configured
 
 The repository contains:
 
@@ -53,7 +94,7 @@ The repository contains:
 
 The Android project can be generated reproducibly by Capacitor during local development and CI.
 
-## 4. Local Windows setup
+## 5. Local Windows setup
 
 Install:
 
@@ -81,7 +122,7 @@ Android Studio should open:
 apps/web/android
 ```
 
-## 5. Run on a real Android phone
+## 6. Run on a real Android phone
 
 Enable Developer Options and USB debugging on the phone, connect it to Windows, then run:
 
@@ -92,7 +133,7 @@ npm run android:run
 
 Test on a real device because camera, microphone, notifications, WebRTC and network reconnect behavior are important for this application.
 
-## 6. Test the complete Messenger flow
+## 7. Test the complete Messenger flow
 
 Use two independent accounts/devices and verify:
 
@@ -119,7 +160,7 @@ Use two independent accounts/devices and verify:
 - App restart while logged in
 - Android back navigation
 
-## 7. Production backend requirement
+## 8. Production backend requirement
 
 Do not point a production Android build at `localhost` or a development machine.
 
@@ -134,18 +175,7 @@ Configure the production API URL through the application's production configurat
 
 For WebRTC calls, configure production STUN/TURN infrastructure. TURN is important for users whose networks cannot establish a direct peer-to-peer connection.
 
-## 8. Android permissions
-
-Global Messenger uses permissions related to its core features:
-
-- Internet — realtime messaging and media
-- Camera — video calls
-- Microphone — voice/video calls
-- Notifications — messages and incoming calls
-
-Request permissions only when needed and explain their purpose to users.
-
-## 9. GitHub Actions Android APK workflow
+## 9. GitHub Actions Android workflow
 
 The Android workflow is:
 
@@ -153,7 +183,7 @@ The Android workflow is:
 .github/workflows/android-build.yml
 ```
 
-It performs the following sequence:
+It performs:
 
 ```text
 Build React app
@@ -166,16 +196,42 @@ Configure permissions
       ↓
 Configure CI release signing
       ↓
-assembleRelease
+assembleRelease + bundleRelease
       ↓
-Verify APK + apksigner
+Verify APK + AAB
       ↓
 Upload Actions artifact
       ↓
-Publish GitHub Release asset
+If tag starts with v → publish versioned GitHub Release
 ```
 
-The current release workflow therefore produces a **real `.apk` file** for direct Android installation. GitHub Actions artifacts can also be downloaded from the workflow run; GitHub documents artifacts as files produced by workflow jobs that can be persisted and shared. citeturn0search3
+### Normal `main` build
+
+A normal push to `main` builds and verifies the Android packages but **does not publish a production Release**. The resulting `global-messenger-android-release` artifact is intended for CI/testing.
+
+### Production version tag
+
+Push a semantic version tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow then publishes:
+
+```text
+Global-Messenger.apk
+Global-Messenger.aab
+```
+
+to:
+
+```text
+GitHub Releases → v1.0.0
+```
+
+The next release can be `v1.0.1`, then `v1.1.0`, and so on.
 
 ## 10. Release signing
 
@@ -192,15 +248,25 @@ Never commit the keystore or signing credentials to GitHub.
 
 The workflow verifies the release APK with Android `apksigner` before publishing it.
 
-## 11. Build a release App Bundle for Google Play
+## 11. Build artifacts
 
-The direct-download APK and the Google Play App Bundle are different release artifacts.
+There are two different GitHub download mechanisms:
+
+### GitHub Actions artifact
+
+The workflow artifact is for developers/testers and may be downloaded by GitHub as an archive. It contains the generated APK/AAB files.
+
+### GitHub Release assets
+
+Release assets are the user-facing production files. `Global-Messenger.apk` is the actual APK file and can be downloaded directly and installed on Android. `Global-Messenger.aab` is the Play Store bundle.
+
+Do not use **Code → Download ZIP** to install the application. That ZIP is the repository source code.
+
+## 12. Google Play App Bundle
 
 For Google Play:
 
 ```text
-Android source
-    ↓
 Signed .aab
     ↓
 Google Play Console
@@ -217,18 +283,18 @@ Before Play submission:
 5. Set the version name.
 6. Increase the version code for each release.
 7. Configure secure release signing.
-8. Build a signed `.aab`.
+8. Upload the generated `.aab` to Play Console.
 9. Test through Play Console internal/closed testing.
 
 Never commit the signing keystore, passwords or private keys.
 
-## 12. Google Play target API
+## 13. Google Play target API
 
 Google Play requirements change over time. Verify the current target API requirement in Play Console and official Android/Google Play documentation before every submission.
 
 For the current project configuration, use Android SDK/API 36 or newer unless the current Play requirement specifies a higher level.
 
-## 13. Play Console setup
+## 14. Play Console setup
 
 Prepare:
 
@@ -248,7 +314,7 @@ Prepare:
 - App access instructions if reviewers need an account
 - Ads declaration, if applicable
 
-## 14. Testing tracks
+## 15. Testing tracks
 
 Use the Play Console tracks in this order:
 
@@ -264,7 +330,7 @@ Production
 
 Keep the app in testing until independent accounts can reliably exchange messages and complete calls on real Android devices.
 
-## 15. Play Store privacy requirements
+## 16. Play Store privacy requirements
 
 Publish a real Privacy Policy that accurately explains:
 
@@ -284,7 +350,7 @@ Publish a real Privacy Policy that accurately explains:
 
 The Play Console Data Safety answers must match the actual implementation.
 
-## 16. Production release checklist
+## 17. Production release checklist
 
 - [ ] Production HTTPS API
 - [ ] Production WSS Socket.IO endpoint
@@ -308,7 +374,7 @@ The Play Console Data Safety answers must match the actual implementation.
 - [ ] Store listing completed
 - [ ] Play review submitted
 
-## 17. After launch
+## 18. After launch
 
 Monitor:
 
@@ -322,4 +388,4 @@ Monitor:
 - Database health
 - TURN usage and call quality
 
-Release every update with the same application ID and a higher Android version code.
+Release every update with the same application ID and a higher Android version code. Use a new semantic Git tag for every production release.
