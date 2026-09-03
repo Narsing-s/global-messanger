@@ -12,6 +12,10 @@
     script.dataset.gmModernChatMenu = '1';
     script.onload = () => {
       loaded = true;
+      const common = document.createElement('script');
+      common.src = '/chat-contact-common.js?v=20260903a';
+      common.dataset.gmChatContactCommon = '1';
+      document.body.appendChild(common);
       if (pendingOptions) {
         pendingOptions = false;
         window.dispatchEvent(new CustomEvent('gm:options'));
