@@ -1,0 +1,45 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build signed debug APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon
+      - name: Prepare APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk global-messenger.apk
+      - name: Publish APK release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: Global Messenger Android APK
+          body: |
+            Latest installable Android APK for Global Messenger.
+            This build opens the production Global Messenger web app inside a native Android shell.
+          files: global-messenger.apk
+          make_latest: true
+          prerelease: false
+          fail_on_unmatched_files: true
