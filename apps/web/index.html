@@ -28,30 +28,16 @@
     <script src="/login-prefill.js"></script>
     <script src="/registration-success.js"></script>
     <script src="/account-delete.js?v=20260903d"></script>
-    <script src="/chat-controls.js"></script>
+    <script src="/chat-controls.js?v=20260903e"></script>
     <script src="/chat-switch-fix.js"></script>
     <script src="/chat-modern-menu.js?v=20260903d"></script>
     <script src="/chat-folders.js?v=20260903d"></script>
     <script src="/chat-behavior-fix.js?v=20260903c"></script>
     <script>
-      // The three-dots conversation menu is the single UI entry point for
-      // conversation tools. Remove the legacy Explore Features button if
-      // an older UI script injects it, without touching any other controls.
-      (() => {
-        const removeLegacyExplore = () => {
-          document.querySelectorAll('.sidebar-bottom button').forEach((button) => {
-            const label = (button.textContent || '').trim().toLowerCase();
-            if (label.includes('explore features') || label === 'explore') {
-              button.remove();
-            }
-          });
-        };
-        removeLegacyExplore();
-        new MutationObserver(removeLegacyExplore).observe(document.body, {
-          childList: true,
-          subtree: true
-        });
-      })();
+      // Keep the three-dots conversation menu as the single entry point for
+      // conversation tools. Do not remove React-owned DOM nodes here.
+      // Removing children outside React's reconciler can cause:
+      // NotFoundError: Failed to execute 'removeChild' on 'Node'.
     </script>
     <script>
       if ('serviceWorker' in navigator) {
