@@ -8,6 +8,18 @@ import { sendWelcomeEmail, sendReportEmail, sendSupportRequestEmail } from './sm
 const emailSchema = z.string().trim().email().max(320);
 const auth = { preHandler: [] as any[] };
 const supportRequestId = z.string().regex(/^GM-[0-9]{8}-[A-F0-9]{8}$/);
+const supportResolutionType = z.string().trim().min(2).max(80);
+
+async function requireSupportTeam(app: FastifyInstance, prisma: PrismaClient, request: any, reply: any) {
+  const userId = String(request.user?.id || '');
+  if (!userId) { reply.unauthorized('Authentication required.'); return null; }
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, displayName: true, username: true } });
+  if (!user || !['SUPPORT', 'ADMIN'].includes(String(user.role).toUpperCase())) {
+    reply.forbidden('Support team access required.');
+    return null;
+  }
+  return user;
+}
 
 export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: PrismaClient) {
   app.post('/api/auth/register-email', async (request, reply) => {
@@ -45,7 +57,7 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
     let requestId = data.requestId || `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     const existing = await prisma.supportRequest.findUnique({ where: { requestId }, select: { id: true } });
     if (existing) requestId = `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-    const created = await prisma.supportRequest.create({ data: { requestId, name: data.name, email: data.email, category: data.category, subject: data.subject, details: data.details } });
+    const created = await prisma.supportRequest.create({ data: { requestId, name: data.name, email: data.email.toLowerCase(), category: data.category, subject: data.subject, details: data.details } });
     let notification: 'sent' | 'failed' = 'sent';
     try { await sendSupportRequestEmail(created); } catch (error) { notification = 'failed'; app.log.error(error, 'Support request notification email failed'); }
     return reply.code(201).send({ ok: true, requestId: created.requestId, status: created.status, createdAt: created.createdAt, notification, message: notification === 'sent' ? `Support request ${created.requestId} was submitted successfully.` : `Support request ${created.requestId} was saved successfully, but the support notification email could not be delivered right now.` });
@@ -54,9 +66,37 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
   app.get('/api/support/requests/:requestId', async (request, reply) => {
     const requestId = String((request.params as any).requestId || '').trim().toUpperCase();
     if (!supportRequestId.safeParse(requestId).success) return reply.badRequest('Invalid support request ID.');
-    const item = await prisma.supportRequest.findUnique({ where: { requestId }, select: { requestId: true, category: true, subject: true, status: true, createdAt: true, updatedAt: true } });
+    const item = await prisma.supportRequest.findUnique({ where: { requestId }, include: { resolution: { select: { resolutionType: true, resolutionNotes: true, resolutionTimeSecs: true, closedAt: true, resolvedBy: { select: { displayName: true, username: true } } } } } });
     if (!item) return reply.notFound('Support request not found.');
-    return { ok: true, ...item };
+    return { ok: true, requestId: item.requestId, category: item.category, subject: item.subject, status: item.status, createdAt: item.createdAt, updatedAt: item.updatedAt, resolution: item.resolution ? { resolutionType: item.resolution.resolutionType, resolutionNotes: item.resolution.resolutionNotes, resolutionTimeSecs: item.resolution.resolutionTimeSecs, closedAt: item.resolution.closedAt, resolvedBy: item.resolution.resolvedBy?.displayName || item.resolution.resolvedBy?.username || null } : null };
+  });
+
+  app.get('/api/support/team/requests', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const agent = await requireSupportTeam(app, prisma, request, reply); if (!agent) return;
+    const query = z.object({ status: z.string().trim().optional(), limit: z.coerce.number().int().min(1).max(200).default(100) }).safeParse(request.query ?? {});
+    if (!query.success) return reply.badRequest('Invalid support request query.');
+    const where = query.data.status ? { status: query.data.status.toUpperCase() } : {};
+    const rows = await prisma.supportRequest.findMany({ where, orderBy: { createdAt: 'asc' }, take: query.data.limit, include: { resolution: { select: { resolutionType: true, resolutionNotes: true, resolutionTimeSecs: true, closedAt: true, resolvedBy: { select: { displayName: true, username: true } } } } } });
+    return { ok: true, requests: rows };
+  });
+
+  app.post('/api/support/team/requests/:requestId/close', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const agent = await requireSupportTeam(app, prisma, request, reply); if (!agent) return;
+    const requestId = String((request.params as any).requestId || '').trim().toUpperCase();
+    if (!supportRequestId.safeParse(requestId).success) return reply.badRequest('Invalid support request ID.');
+    const parsed = z.object({ resolutionType: supportResolutionType, resolutionNotes: z.string().trim().max(5000).optional() }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.badRequest('Resolution type is required.');
+    const item = await prisma.supportRequest.findUnique({ where: { requestId }, include: { resolution: true } });
+    if (!item) return reply.notFound('Support request not found.');
+    if (item.status === 'CLOSED' || item.resolution) return reply.conflict('Support request is already closed.');
+    const closedAt = new Date();
+    const resolutionTimeSecs = Math.max(0, Math.round((closedAt.getTime() - item.createdAt.getTime()) / 1000));
+    const result = await prisma.$transaction(async tx => {
+      const resolution = await tx.supportResolution.create({ data: { supportRequestId: item.id, resolvedById: agent.id, resolutionType: parsed.data.resolutionType, resolutionNotes: parsed.data.resolutionNotes || null, resolutionTimeSecs, closedAt } });
+      const closed = await tx.supportRequest.update({ where: { id: item.id }, data: { status: 'CLOSED' } });
+      return { closed, resolution };
+    });
+    return { ok: true, requestId: result.closed.requestId, status: result.closed.status, closedAt: result.resolution.closedAt, resolutionType: result.resolution.resolutionType, resolutionTimeSecs: result.resolution.resolutionTimeSecs, resolutionTimeMinutes: Math.round((result.resolution.resolutionTimeSecs / 60) * 100) / 100, resolvedBy: agent.displayName || agent.username };
   });
 
   app.delete('/api/conversations/:id/permanent', { preHandler: [app.authenticate] }, async (request, reply) => {
