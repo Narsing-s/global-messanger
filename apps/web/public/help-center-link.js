@@ -1,5 +1,5 @@
 (() => {
-  const HELP_URL = 'https://global-messenger-help.onrender.com/';
+  const HELP_URL = `${location.origin}/help-center.html`;
   const sync = () => {
     const authenticated = Boolean(localStorage.getItem('gm_token'));
     const existing = document.getElementById('gm-help-center-link');
@@ -16,7 +16,7 @@
     button.type = 'button';
     button.title = 'Open Global Messenger Help Centre';
     button.textContent = '❓ Help Centre';
-    button.onclick = () => window.open(HELP_URL, '_blank', 'noopener,noreferrer');
+    button.onclick = () => { window.location.href = HELP_URL; };
     document.body.appendChild(button);
   };
   const start = () => { sync(); new MutationObserver(sync).observe(document.body, {childList:true,subtree:true}); window.setInterval(sync,1000); };
