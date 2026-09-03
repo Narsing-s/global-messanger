@@ -28,7 +28,7 @@ model User {
   bookmarks           MessageBookmark[]
   pinsCreated         PinnedMessage[]      @relation("PinCreator")
   blocksCreated       UserBlock[]          @relation("BlockCreator")
-  blockedBy           UserBlock[]          @relation("BlockedUser")
+  blockedBy            UserBlock[]          @relation("BlockedUser")
   messageReceipts     MessageReceipt[]
 }
 
@@ -129,7 +129,7 @@ model MessageBookmark {
   userId    String
   createdAt DateTime @default(now())
   message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([messageId, userId])
   @@index([userId, createdAt])
 }
@@ -149,9 +149,24 @@ model PinnedMessage {
 model UserBlock {
   userId          String
   blockedUserId   String
-  createdAt       DateTime @default(now())
-  user            User @relation("BlockCreator", fields: [userId], references: [id], onDelete: Cascade)
-  blockedUser     User @relation("BlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
+  user            User      @relation("BlockCreator", fields: [userId], references: [id], onDelete: Cascade)
+  blockedUser     User      @relation("BlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
   @@id([userId, blockedUserId])
   @@index([blockedUserId])
+}
+
+model SupportRequest {
+  id         String   @id @default(cuid())
+  requestId  String   @unique
+  name       String
+  email      String
+  category   String
+  subject    String
+  details    String
+  status     String   @default("OPEN")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@index([email, createdAt])
+  @@index([status, createdAt])
 }
