@@ -2,15 +2,16 @@
 
 > **Realtime conversations. One shared product. Built for people everywhere.**
 
-Global Messenger is an independently developed, open-source messaging application focused on fast realtime communication across web and future mobile/desktop surfaces.
+Global Messenger is an independently developed messaging application focused on fast realtime communication across web and Android, with a shared codebase that can be extended to other platforms.
 
-It brings conversations, presence, profiles, groups, media sharing, message controls and optional AI assistance into one workspace. The core messaging experience does **not** require AI.
+It brings conversations, presence, profiles, groups, media sharing, message controls, calling foundations and optional AI assistance into one workspace. The core messaging experience does **not** require AI.
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node](https://img.shields.io/badge/node-22%2B-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Prisma-316192)
 ![Realtime](https://img.shields.io/badge/realtime-Socket.IO-black)
+![Android](https://img.shields.io/badge/Android-APK-3DDC84)
 
 ## 🚀 Live project
 
@@ -19,20 +20,35 @@ It brings conversations, presence, profiles, groups, media sharing, message cont
 - **API health:** https://global-messanger-backend.onrender.com/health
 - **Source:** https://github.com/Narsing-s/global-messanger
 
-The API exposes `/health` for service checks and `/` for a lightweight service-status response.
+## 📱 Android APK — direct installation
 
-## ✨ Why Global Messenger?
+**Yes — the repository currently has a real `.apk` file available for download.** The latest GitHub Release contains an Android Package (`application/vnd.android.package-archive`) named `global-messenger.apk`, about 5 MB in size. It is a real APK, not an `.aab`, `.zip`, or source-code archive.
 
-Global Messenger is designed around a few principles:
+### Download the Android APK
 
-- ⚡ **Realtime first** — messaging, presence, typing and reconnect behavior use Socket.IO.
-- 🔐 **User ownership** — application source, database schema and deployment configuration live together.
-- 🧭 **Local-first development** — PostgreSQL and Mailpit can run locally for predictable testing.
-- 📱 **Cross-platform foundation** — the responsive web client can be packaged with Capacitor.
-- 🤖 **AI by choice** — optional Smart Assist can be enabled through a configured provider.
-- 🧩 **Practical engineering** — verification, smoke testing, deployment and release procedures are documented.
+**👉 https://github.com/Narsing-s/global-messanger/releases/tag/android-latest**
 
-## 💬 Feature set
+On the release page, under **Assets**, download:
+
+```text
+global-messenger.apk
+```
+
+After downloading it to an Android phone, open the APK to install Global Messenger. Android may ask you to allow installation from that source. Only install APKs obtained from a source you trust.
+
+### APK vs AAB vs ZIP
+
+| File | Purpose | Directly install on Android? |
+|---|---|---|
+| `global-messenger.apk` | Android application package | ✅ Yes |
+| `.aab` | Google Play publishing bundle | ❌ No |
+| `.zip` | Source/archive/artifact container | ❌ No |
+
+The GitHub Actions workflow builds the Android release APK, validates that an APK exists, checks the package, verifies the APK signature, and uploads the APK as a workflow artifact and GitHub Release asset.
+
+**Important:** the current APK is intended for direct testing/install. For Google Play, build and publish a properly signed `.aab` and complete Play Console requirements. See [`docs/06-android-play-store.md`](./docs/06-android-play-store.md).
+
+## ✨ Features
 
 ### Messaging
 - One-to-one realtime conversations
@@ -56,7 +72,7 @@ Global Messenger is designed around a few principles:
 - Voice/video calling foundation
 - Microphone and camera controls
 - Notification sounds
-- Capacitor mobile packaging path
+- Android packaging through Capacitor
 
 ### Account & security
 - JWT authentication
@@ -64,7 +80,7 @@ Global Messenger is designed around a few principles:
 - Password recovery
 - Account deletion support
 
-> **Scope note:** a feature described as a foundation is not presented as production-complete infrastructure. Public WebRTC calling, for example, requires production STUN/TURN infrastructure.
+> **Scope note:** a feature described as a foundation is not presented as production-complete infrastructure. Public WebRTC calling requires suitable production STUN/TURN infrastructure.
 
 ## 🏗️ Architecture
 
@@ -76,8 +92,8 @@ Global Messenger is designed around a few principles:
       React + Vite Client                Fastify API
       TypeScript + Capacitor              Node.js + TS
              │                                 │
-       Web / Mobile                      Socket.IO
-       / Desktop                              │
+       Web / Android                       Socket.IO
+                                             │
                                              ▼
                                       Prisma + PostgreSQL
 
@@ -97,7 +113,7 @@ Optional local services:
 | Database | PostgreSQL + Prisma |
 | Authentication | JWT + bcrypt |
 | Calls | WebRTC foundation |
-| Mobile | Capacitor |
+| Mobile | Capacitor + Android |
 | Local services | Docker Compose + Mailpit |
 | Optional AI | Provider-based integration |
 
@@ -109,9 +125,9 @@ Optional local services:
 │   ├── web/                 React/Vite/Capacitor client
 │   └── server/              Fastify/Socket.IO API
 ├── apps/server/prisma/      Prisma schema and migrations
-├── docs/                    Development and release documentation
+├── docs/                    Development, Android and release documentation
 ├── scripts/                 Verification and development helpers
-├── .github/workflows/       CI configuration
+├── .github/workflows/       CI and Android build workflows
 ├── docker-compose.yml       Local PostgreSQL + Mailpit
 ├── render.yaml              Render deployment configuration
 ├── LICENSE                  MIT license
@@ -126,6 +142,7 @@ Optional local services:
 - npm
 - Git
 - Docker Desktop (recommended)
+- Android Studio + Android SDK for native Android development
 
 ### Install
 
@@ -211,6 +228,25 @@ npm run build
 
 For realtime QA, use two independent accounts and two browser sessions/devices. Test messaging, presence, typing, reconnects, media, reactions, replies, editing, deletion, groups and permissions without relying on a refresh.
 
+For Android QA, use the actual APK on a real device and test login, messaging, permissions, notifications, media, calls and reconnect behavior.
+
+## 🤖 Android build and release
+
+The Android client is generated from the shared React/Vite application through Capacitor. The repository includes:
+
+```text
+.github/workflows/android-build.yml
+apps/web/capacitor.config.ts
+```
+
+The Android workflow builds the web client, generates/synchronizes Android, configures required permissions, creates a release APK, verifies it, uploads it as a GitHub Actions artifact and publishes the latest APK to the `android-latest` GitHub Release.
+
+For the complete process, see:
+
+- [`docs/ANDROID_APK.md`](./docs/ANDROID_APK.md) — download/install/build APK
+- [`docs/06-android-play-store.md`](./docs/06-android-play-store.md) — Android and Play Store release
+- [`docs/07-release-checklist.md`](./docs/07-release-checklist.md) — release checklist
+
 ## ☁️ Render deployment
 
 The repository contains Render configuration for the web/API services. The server listens on the `PORT` supplied by Render.
@@ -223,8 +259,6 @@ After deployment, verify:
 GET /health → HTTP 200
 GET /       → service-status JSON
 ```
-
-If `/health` works but `/` returns `Route GET:/ not found`, the running API build is missing the root route; check that the latest source was built and deployed.
 
 ## 🛡️ Production checklist
 
@@ -242,23 +276,11 @@ Before a broad public launch:
 - Camera/microphone/notification permission handling
 - Production STUN/TURN for WebRTC
 - Secure environment variables and secret rotation
-- Signed mobile/desktop builds
+- Signed mobile builds
 
 Never commit `.env` files, passwords, tokens, private keys or database credentials.
 
 See [`docs/SECURITY.md`](./docs/SECURITY.md).
-
-## 📱 Platform direction
-
-The shared client is intended to support:
-
-- 🌐 Web
-- 🤖 Android via Capacitor
-- 🍎 iOS/iPadOS via Capacitor
-- 🪟 Windows desktop packaging
-- 🍎 macOS desktop packaging
-
-Platform signing and store-release procedures are documented under `docs/`.
 
 ## 🤝 Contributing
 
@@ -274,15 +296,7 @@ git commit -m "feat: describe the change"
 git push origin feature/my-improvement
 ```
 
-Pull requests should explain the change, motivation, testing performed and any migration/environment requirements.
-
 See [`docs/08-contributing.md`](./docs/08-contributing.md).
-
-## 🐛 Reporting a bug
-
-Include the device/browser, OS, reproduction steps, expected result, actual result and relevant logs. Screenshots are useful for UI issues.
-
-**Never publish credentials, tokens, private messages or other sensitive information.**
 
 ## 📚 Documentation
 
@@ -292,6 +306,7 @@ Include the device/browser, OS, reproduction steps, expected result, actual resu
 - [`04-testing.md`](./docs/04-testing.md) — testing
 - [`05-production-deployment.md`](./docs/05-production-deployment.md) — deployment guidance
 - [`06-android-play-store.md`](./docs/06-android-play-store.md) — Android/Play Store
+- [`ANDROID_APK.md`](./docs/ANDROID_APK.md) — Android APK download/install/build
 - [`07-release-checklist.md`](./docs/07-release-checklist.md) — release checklist
 - [`08-contributing.md`](./docs/08-contributing.md) — contribution workflow
 - [`09-cross-platform-release.md`](./docs/09-cross-platform-release.md) — platform releases
@@ -307,10 +322,6 @@ Include the device/browser, OS, reproduction steps, expected result, actual resu
 
 Global Messenger is released under the **MIT License**.
 
-The current repository license is the standard MIT license with the copyright notice `Copyright (c) 2026 Narsing-s`. MIT permits use, copying, modification, distribution, sublicensing and sale of the software subject to its notice and disclaimer terms.
-
-**Branding note:** the MIT software license does not automatically grant trademark rights to the name, logo or other branding of Global Messenger.
-
 See [`LICENSE`](./LICENSE) for the complete legal text.
 
 ## 🪪 Project identity
@@ -324,6 +335,7 @@ See [`LICENSE`](./LICENSE) for the complete legal text.
 | Primary client | React + TypeScript + Vite |
 | Primary API | Fastify + Socket.IO |
 | Database | PostgreSQL + Prisma |
+| Android package | `com.globalmessenger.app` |
 
 ## 💰 Pricing
 
@@ -333,7 +345,7 @@ See [`LICENSE`](./LICENSE) for the complete legal text.
 
 **Short description:** Free realtime messaging for everyone — chat, share, react and connect without borders.
 
-**Long description:** Global Messenger is a free messaging application built for fast conversations across web and mobile experiences. Chat one-to-one or in groups, share images and files, react to messages, reply to conversations, manage your profile and see realtime presence without unnecessary complexity.
+**Long description:** Global Messenger is a free messaging application built for fast conversations across web and Android experiences. Chat one-to-one or in groups, share images and files, react to messages, reply to conversations, manage your profile and see realtime presence without unnecessary complexity.
 
 ## ⭐ Project principle
 
