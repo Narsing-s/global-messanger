@@ -17,26 +17,33 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
+
       - name: Install dependencies
         run: npm install
+
       - name: Build web app
         run: npm run build -w apps/web
+
       - name: Add Android platform
         working-directory: apps/web
         run: npx cap add android
+
       - name: Sync Capacitor
         working-directory: apps/web
         run: npx cap sync android
+
       - name: Configure Android permissions
         shell: bash
         run: |
@@ -44,35 +51,85 @@ jobs:
           from pathlib import Path
           p = Path('apps/web/android/app/src/main/AndroidManifest.xml')
           text = p.read_text()
-          permissions = ['android.permission.INTERNET','android.permission.CAMERA','android.permission.RECORD_AUDIO','android.permission.POST_NOTIFICATIONS']
+          permissions = [
+              'android.permission.INTERNET',
+              'android.permission.CAMERA',
+              'android.permission.RECORD_AUDIO',
+              'android.permission.POST_NOTIFICATIONS'
+          ]
           for perm in permissions:
+              line = f'    <uses-permission android:name="{perm}" />\n'
               if perm not in text:
-                  text = text.replace('<application', f'    <uses-permission android:name="{perm}" />\n    <application', 1)
+                  text = text.replace('<application', line + '    <application', 1)
           p.write_text(text)
           PY
-      - name: Build debug APK
+
+      - name: Configure release signing
         working-directory: apps/web/android
-        run: ./gradlew assembleDebug --stacktrace
-      - name: Prepare downloadable APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         shell: bash
         run: |
-          DEBUG_APK=$(find apps/web/android/app/build/outputs/apk -type f -name '*.apk' | grep '/debug/' | head -n 1)
-          test -n "$DEBUG_APK"
-          cp "$DEBUG_APK" global-messenger.apk
-          ls -lh global-messenger.apk
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_BASE64" || { echo 'Missing GitHub secret ANDROID_KEYSTORE_BASE64'; exit 1; }
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || { echo 'Missing GitHub secret ANDROID_KEYSTORE_PASSWORD'; exit 1; }
+          test -n "$ANDROID_KEY_ALIAS" || { echo 'Missing GitHub secret ANDROID_KEY_ALIAS'; exit 1; }
+          test -n "$ANDROID_KEY_PASSWORD" || { echo 'Missing GitHub secret ANDROID_KEY_PASSWORD'; exit 1; }
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release-keystore.jks
+          cat > keystore.properties <<EOF
+          storeFile=release-keystore.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/build.gradle')
+          if not p.exists():
+              p = Path('app/build.gradle.kts')
+          text = p.read_text()
+          if 'keystore.properties' not in text:
+              if p.suffix == '.kts':
+                  block = '''\nimport java.util.Properties\n\nval signingProps = Properties()\nval signingFile = rootProject.file("keystore.properties")\nif (signingFile.exists()) signingFile.inputStream().use { signingProps.load(it) }\n\nandroid {\n    signingConfigs {\n        create("release") {\n            if (signingFile.exists()) {\n                storeFile = file(signingProps["storeFile"] as String)\n                storePassword = signingProps["storePassword"] as String\n                keyAlias = signingProps["keyAlias"] as String\n                keyPassword = signingProps["keyPassword"] as String\n            }\n        }\n    }\n    buildTypes {\n        getByName("release") {\n            signingConfig = signingConfigs.getByName("release")\n        }\n    }\n}\n'''
+              else:
+                  block = '''\nimport java.util.Properties\n\ndef signingProps = new Properties()\ndef signingFile = rootProject.file("keystore.properties")\nif (signingFile.exists()) signingFile.withInputStream { signingProps.load(it) }\n\nandroid {\n    signingConfigs {\n        release {\n            if (signingFile.exists()) {\n                storeFile file(signingProps['storeFile'])\n                storePassword signingProps['storePassword']\n                keyAlias signingProps['keyAlias']\n                keyPassword signingProps['keyPassword']\n            }\n        }\n    }\n    buildTypes {\n        release {\n            signingConfig signingConfigs.release\n        }\n    }\n}\n'''
+              p.write_text(text + block)
+          PY
+
+      - name: Build release APK
+        working-directory: apps/web/android
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Verify release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_APK=$(find apps/web/android/app/build/outputs/apk -type f -name '*.apk' | grep '/release/' | head -n 1)
+          test -n "$RELEASE_APK"
+          mkdir -p release-output
+          cp "$RELEASE_APK" release-output/Global-Messenger.apk
+          file release-output/Global-Messenger.apk
+          unzip -t release-output/Global-Messenger.apk >/dev/null
+          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/apksigner" verify --verbose release-output/Global-Messenger.apk
+          ls -lh release-output/Global-Messenger.apk
+
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
-          name: global-messenger-android
-          path: global-messenger.apk
+          name: global-messenger-android-release
+          path: release-output/Global-Messenger.apk
           if-no-files-found: error
+
       - name: Publish latest Android APK
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-latest
           name: Global Messenger Android APK
-          body: Latest installable Android APK for Global Messenger.
-          files: global-messenger.apk
+          body: Signed release APK for direct Android installation.
+          files: release-output/Global-Messenger.apk
           make_latest: true
           prerelease: false
           fail_on_unmatched_files: true
