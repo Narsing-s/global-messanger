@@ -7,6 +7,7 @@ import { sendWelcomeEmail, sendReportEmail, sendSupportRequestEmail } from './sm
 
 const emailSchema = z.string().trim().email().max(320);
 const auth = { preHandler: [] as any[] };
+const supportRequestId = z.string().regex(/^GM-[0-9]{8}-[A-F0-9]{8}$/);
 
 export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: PrismaClient) {
   app.post('/api/auth/register-email', async (request, reply) => {
@@ -38,11 +39,13 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
   });
 
   app.post('/api/support/requests', async (request, reply) => {
-    const parsed = z.object({ name: z.string().trim().min(1).max(120), email: emailSchema, category: z.string().trim().min(1).max(80), subject: z.string().trim().min(3).max(180), details: z.string().trim().min(10).max(10000) }).safeParse(request.body ?? {});
+    const parsed = z.object({ requestId: supportRequestId.optional(), name: z.string().trim().min(1).max(120), email: emailSchema, category: z.string().trim().min(1).max(80), subject: z.string().trim().min(3).max(180), details: z.string().trim().min(10).max(10000) }).safeParse(request.body ?? {});
     if (!parsed.success) return reply.badRequest('Please provide a valid name, email, category, subject and issue details.');
     const data = parsed.data;
-    const requestId = `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-    const created = await prisma.supportRequest.create({ data: { requestId, ...data } });
+    let requestId = data.requestId || `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+    const existing = await prisma.supportRequest.findUnique({ where: { requestId }, select: { id: true } });
+    if (existing) requestId = `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+    const created = await prisma.supportRequest.create({ data: { requestId, name: data.name, email: data.email, category: data.category, subject: data.subject, details: data.details } });
     let notification: 'sent' | 'failed' = 'sent';
     try { await sendSupportRequestEmail(created); } catch (error) { notification = 'failed'; app.log.error(error, 'Support request notification email failed'); }
     return reply.code(201).send({ ok: true, requestId: created.requestId, status: created.status, createdAt: created.createdAt, notification, message: notification === 'sent' ? `Support request ${created.requestId} was submitted successfully.` : `Support request ${created.requestId} was saved successfully, but the support notification email could not be delivered right now.` });
@@ -50,7 +53,7 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
 
   app.get('/api/support/requests/:requestId', async (request, reply) => {
     const requestId = String((request.params as any).requestId || '').trim().toUpperCase();
-    if (!/^GM-[0-9]{8}-[A-F0-9]{8}$/.test(requestId)) return reply.badRequest('Invalid support request ID.');
+    if (!supportRequestId.safeParse(requestId).success) return reply.badRequest('Invalid support request ID.');
     const item = await prisma.supportRequest.findUnique({ where: { requestId }, select: { requestId: true, category: true, subject: true, status: true, createdAt: true, updatedAt: true } });
     if (!item) return reply.notFound('Support request not found.');
     return { ok: true, ...item };
@@ -85,7 +88,6 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
     return { ok: true, message: 'Report submitted to Global Messenger support.' };
   });
 
-  /* --------------------------- User blocking ----------------------------- */
   app.post('/api/users/:id/block', { preHandler: [app.authenticate] }, async (request, reply) => {
     const userId = String((request.user as any).id); const blockedUserId = String((request.params as any).id);
     if (!blockedUserId || blockedUserId === userId) return reply.badRequest('You cannot block yourself.');
