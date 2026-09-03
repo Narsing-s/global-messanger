@@ -24,10 +24,6 @@ services:
         value: https://global-messanger-web-git-main-narsing-s-projects.vercel.app
       - key: UPLOAD_DIR
         value: /tmp/global-messenger/uploads
-
-      # Production email delivery uses Gmail SMTP directly.
-      # Gmail submission uses SMTP over SSL on port 465.
-      # The password is intentionally not stored in GitHub.
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT
@@ -54,6 +50,24 @@ services:
       - key: VITE_API_URL
         value: https://global-messanger-backend.onrender.com
     routes:
+      - type: rewrite
+        source: /chrome
+        destination: /chrome/index.html
+      - type: rewrite
+        source: /chrome/
+        destination: /chrome/index.html
+      - type: rewrite
+        source: /edge
+        destination: /edge/index.html
+      - type: rewrite
+        source: /edge/
+        destination: /edge/index.html
+      - type: rewrite
+        source: /install
+        destination: /install.html
+      - type: rewrite
+        source: /install/
+        destination: /install.html
       - type: rewrite
         source: /reset-password
         destination: /reset-password/index.html
