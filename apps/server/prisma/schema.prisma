@@ -19,7 +19,8 @@ model User {
   lastSeenAt          DateTime             @default(now())
   e2eePublicKey       String?
   e2eeKeyVersion      Int                  @default(1)
-  createdAt           DateTime             @default(now())
+  role                String               @default("USER")
+  createdAt            DateTime             @default(now())
   messages            Message[]
   memberships         ConversationMember[]
   createdConvos       Conversation[]       @relation("ConversationCreator")
@@ -30,6 +31,7 @@ model User {
   blocksCreated       UserBlock[]          @relation("BlockCreator")
   blockedBy            UserBlock[]          @relation("BlockedUser")
   messageReceipts     MessageReceipt[]
+  supportResolutions  SupportResolution[]  @relation("SupportResolver")
 }
 
 model PushDevice {
@@ -140,8 +142,8 @@ model PinnedMessage {
   pinnedById     String
   createdAt      DateTime @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  message        Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  pinnedBy       User    @relation("PinCreator", fields: [pinnedById], references: [id], onDelete: Cascade)
+  message        Message     @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  pinnedBy       User        @relation("PinCreator", fields: [pinnedById], references: [id], onDelete: Cascade)
   @@id([conversationId, messageId])
   @@index([conversationId, createdAt])
 }
@@ -157,16 +159,32 @@ model UserBlock {
 }
 
 model SupportRequest {
-  id         String   @id @default(cuid())
-  requestId  String   @unique
-  name       String
-  email      String
-  category   String
-  subject    String
-  details    String
-  status     String   @default("OPEN")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String               @id @default(cuid())
+  requestId    String               @unique
+  name         String
+  email        String
+  category     String
+  subject      String
+  details      String
+  status       String               @default("OPEN")
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  resolution   SupportResolution?
   @@index([email, createdAt])
   @@index([status, createdAt])
+}
+
+model SupportResolution {
+  id                 String        @id @default(cuid())
+  supportRequestId   String        @unique
+  resolvedById       String?
+  resolutionType     String
+  resolutionNotes    String?
+  resolutionTimeSecs Int
+  closedAt           DateTime      @default(now())
+  createdAt          DateTime      @default(now())
+  supportRequest     SupportRequest @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
+  resolvedBy         User?         @relation("SupportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  @@index([resolvedById, closedAt])
+  @@index([resolutionType, closedAt])
 }
