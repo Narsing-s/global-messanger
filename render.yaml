@@ -19,7 +19,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: WEB_ORIGIN
-        value: https://global-messanger.onrender.com,https://global-messanger-web-git-main-narsing-s-projects.vercel.app,https://global-messenger-web.narsingbeesetti006.workers.dev,https://global-messenger-help.onrender.com
+        value: https://global-messanger.onrender.com,https://global-messanger-web-git-main-narsing-s-projects.vercel.app,https://global-messenger-web.narsingbeesetti006.workers.dev,https://global-messenger-help-centre.onrender.com
       - key: PASSWORD_RESET_WEB_ORIGIN
         value: https://global-messanger-web-git-main-narsing-s-projects.vercel.app
       - key: UPLOAD_DIR
@@ -74,7 +74,7 @@ services:
         destination: /index.html
 
   - type: web
-    name: global-messenger-help
+    name: global-messenger-help-centre
     runtime: static
     plan: free
     region: singapore
