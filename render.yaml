@@ -26,16 +26,16 @@ services:
         value: /tmp/global-messenger/uploads
 
       # Production email delivery uses Gmail SMTP directly.
-      # Gmail submission uses SMTP over STARTTLS on port 587.
+      # Gmail submission uses SMTP over SSL on port 465.
       # The password is intentionally not stored in GitHub.
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT
-        value: 587
+        value: 465
       - key: SMTP_SECURE
-        value: "false"
-      - key: SMTP_STARTTLS
         value: "true"
+      - key: SMTP_STARTTLS
+        value: "false"
       - key: SMTP_USER
         value: narsingbeesetti22@gmail.com
       - key: SMTP_PASSWORD
