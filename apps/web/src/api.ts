@@ -34,11 +34,29 @@ function normalizeConversation(value: any): ConversationResponse {
   };
 }
 
+function directPairKey(conversation: ConversationResponse): string | null {
+  if (conversation.isGroup || conversation.members.length !== 2) return null;
+  return conversation.members.map(member => String(member.user.id)).sort().join(':');
+}
+
 function normalizeConversations(value: any): ConversationResponse[] {
   const list = Array.isArray(value) ? value : value?.conversations;
-  return Array.isArray(list)
-    ? list.map(normalizeConversation).filter(conversation => conversation.id)
-    : [];
+  if (!Array.isArray(list)) return [];
+  const seenPairs = new Set<string>();
+  const seenIds = new Set<string>();
+  const result: ConversationResponse[] = [];
+  for (const raw of list) {
+    const conversation = normalizeConversation(raw);
+    if (!conversation.id || seenIds.has(conversation.id)) continue;
+    seenIds.add(conversation.id);
+    const pair = directPairKey(conversation);
+    if (pair) {
+      if (seenPairs.has(pair)) continue;
+      seenPairs.add(pair);
+    }
+    result.push(conversation);
+  }
+  return result;
 }
 
 function normalizeMessages(value: any, conversationId: string): any[] {
@@ -77,16 +95,12 @@ async function request(path: string, options: RequestInit = {}) {
         ...(token ? { Authorization: `Bearer ${token}` } : {})
       }
     });
-
     const contentType = res.headers.get('content-type') || '';
     const text = await res.text();
     let data: any = {};
     if (text && contentType.includes('application/json')) {
       try { data = JSON.parse(text); } catch { data = { message: text }; }
-    } else if (text) {
-      data = { message: text };
-    }
-
+    } else if (text) data = { message: text };
     if (!res.ok) {
       if (res.status === 401) {
         localStorage.removeItem('gm_token');
@@ -105,6 +119,8 @@ async function request(path: string, options: RequestInit = {}) {
   }
 }
 
+const directRequests = new Map<string, Promise<ConversationResponse>>();
+
 export const api = {
   searchUsers: async (q: string) => {
     const value = await request(`/api/users/search?q=${encodeURIComponent(q)}`);
@@ -112,50 +128,48 @@ export const api = {
   },
   conversations: async () => normalizeConversations(await request('/api/conversations')),
   direct: async (userId: string) => {
-    const conversation = normalizeConversation(await request('/api/conversations/direct', {
-      method: 'POST',
-      body: JSON.stringify({ userId })
-    }));
-
-    // Starting a chat from Search should reopen an archived chat instead of
-    // leaving the user with a conversation that is immediately hidden again.
-    if (conversation.id) {
-      try {
-        await request(`/api/conversations/${encodeURIComponent(conversation.id)}/restore`, {
-          method: 'POST'
-        });
-      } catch {
-        // A brand-new conversation has nothing to restore. Do not block chat creation.
+    const key = String(userId);
+    const pending = directRequests.get(key);
+    if (pending) return pending;
+    const promise = (async () => {
+      const conversation = normalizeConversation(await request('/api/conversations/direct', {
+        method: 'POST',
+        body: JSON.stringify({ userId })
+      }));
+      if (conversation.id) {
+        try {
+          await request(`/api/conversations/${encodeURIComponent(conversation.id)}/restore`, { method: 'POST' });
+        } catch {
+          // A brand-new conversation has nothing to restore.
+        }
       }
+      return conversation;
+    })();
+    directRequests.set(key, promise);
+    try {
+      return await promise;
+    } finally {
+      if (directRequests.get(key) === promise) directRequests.delete(key);
     }
-
-    return conversation;
   },
   group: async (title: string, userIds: string[]) => normalizeConversation(await request('/api/conversations/group', {
-    method: 'POST',
-    body: JSON.stringify({ title, userIds })
+    method: 'POST', body: JSON.stringify({ title, userIds })
   })),
   messages: async (id: string, limit = 100) => normalizeMessages(
-    await request(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`),
-    id
+    await request(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`), id
   ),
   syncMessages: async (id: string, after?: string, limit = 100) => ({
     messages: normalizeMessages(
-      await request(`/api/conversations/${encodeURIComponent(id)}/messages/sync?limit=${limit}${after ? `&after=${encodeURIComponent(after)}` : ''}`),
-      id
+      await request(`/api/conversations/${encodeURIComponent(id)}/messages/sync?limit=${limit}${after ? `&after=${encodeURIComponent(after)}` : ''}`), id
     )
   }),
   read: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }),
   editMessage: (id: string, body: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ body }) }),
   deleteMessage: (id: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   upload: async (file: File) => {
-    const f = new FormData();
-    f.append('file', file);
+    const f = new FormData(); f.append('file', file);
     const result = await request('/api/uploads', { method: 'POST', body: f });
-    return {
-      ...result,
-      url: result?.url && /^https?:\/\//i.test(result.url) ? result.url : `${API}${result?.url || ''}`
-    };
+    return { ...result, url: result?.url && /^https?:\/\//i.test(result.url) ? result.url : `${API}${result?.url || ''}` };
   },
   react: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }),
   unreact: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'DELETE', body: JSON.stringify({ emoji }) }),
