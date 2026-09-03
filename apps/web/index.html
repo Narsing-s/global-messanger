@@ -16,7 +16,7 @@
   </head>
   <body>
     <div id="root"></div>
-    <script src="/chat-actions-fix.js?v=20260903b"></script>
+    <script src="/chat-actions-fix.js?v=20260903c"></script>
     <script type="module" src="/src/e2ee-bootstrap.ts?v=20260903e"></script>
     <script type="module" src="/src/main.tsx"></script>
     <script type="module" src="/src/socket-room-fix.ts"></script>
@@ -24,20 +24,17 @@
     <script type="module" src="/src/advanced-ui.ts"></script>
     <script type="module" src="/src/group-read-receipts.ts"></script>
     <script src="/emoji-picker.js"></script>
-    <script src="/profile-viewer.js"></script>
     <script src="/login-prefill.js"></script>
     <script src="/registration-success.js"></script>
     <script src="/account-delete.js?v=20260903d"></script>
     <script src="/chat-controls.js?v=20260903e"></script>
     <script src="/chat-switch-fix.js"></script>
-    <script src="/chat-modern-menu.js?v=20260903d"></script>
-    <script src="/chat-folders.js?v=20260903d"></script>
-    <script src="/chat-behavior-fix.js?v=20260903c"></script>
+    <script src="/chat-modern-menu.js?v=20260903e"></script>
+    <script src="/chat-folders.js?v=20260903e"></script>
+    <script src="/chat-behavior-fix.js?v=20260903d"></script>
     <script>
-      // Keep the three-dots conversation menu as the single entry point for
-      // conversation tools. Do not remove React-owned DOM nodes here.
-      // Removing children outside React's reconciler can cause:
-      // NotFoundError: Failed to execute 'removeChild' on 'Node'.
+      // chat-modern-menu.js is the only three-dots conversation menu.
+      // Do not remove React-owned nodes from outside the React reconciler.
     </script>
     <script>
       if ('serviceWorker' in navigator) {
