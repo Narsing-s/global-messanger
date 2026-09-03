@@ -16,28 +16,27 @@
   </head>
   <body>
     <div id="root"></div>
-    <script src="/chat-actions-fix.js?v=20260903e"></script>
-    <script type="module" src="/src/e2ee-bootstrap.ts?v=20260903g"></script>
-    <script type="module" src="/src/main.tsx?v=20260903g"></script>
-    <script type="module" src="/src/socket-room-fix.ts?v=20260903g"></script>
-    <script type="module" src="/src/features.ts?v=20260903g"></script>
-    <script type="module" src="/src/advanced-ui.ts?v=20260903g"></script>
-    <script type="module" src="/src/group-read-receipts.ts?v=20260903g"></script>
-    <script src="/emoji-picker.js?v=20260903g"></script>
-    <script src="/login-prefill.js?v=20260903g"></script>
-    <script src="/registration-success.js?v=20260903g"></script>
-    <script src="/account-delete.js?v=20260903g"></script>
-    <script src="/chat-controls.js?v=20260903g"></script>
-    <script src="/chat-switch-fix.js?v=20260903g"></script>
-    <script src="/chat-modern-menu.js?v=20260903g"></script>
-    <script src="/chat-menu-trigger.js?v=20260903g"></script>
-    <script src="/chat-folders.js?v=20260903g"></script>
-    <script src="/chat-behavior-fix.js?v=20260903g"></script>
-    <script src="/chat-contact-trigger.js?v=20260903g"></script>
-    <script src="/profile-viewer.js?v=20260903g"></script>
+    <script src="/chat-actions-fix.js?v=20260903h"></script>
+    <script type="module" src="/src/e2ee-bootstrap.ts?v=20260903h"></script>
+    <script type="module" src="/src/main.tsx?v=20260903h"></script>
+    <script type="module" src="/src/socket-room-fix.ts?v=20260903h"></script>
+    <script type="module" src="/src/features.ts?v=20260903h"></script>
+    <script type="module" src="/src/advanced-ui.ts?v=20260903h"></script>
+    <script type="module" src="/src/group-read-receipts.ts?v=20260903h"></script>
+    <script src="/emoji-picker.js?v=20260903h"></script>
+    <script src="/login-prefill.js?v=20260903h"></script>
+    <script src="/registration-success.js?v=20260903h"></script>
+    <script src="/account-delete.js?v=20260903h"></script>
+    <script src="/chat-controls.js?v=20260903h"></script>
+    <script src="/chat-switch-fix.js?v=20260903h"></script>
+    <script src="/chat-modern-menu.js?v=20260903h"></script>
+    <script src="/chat-menu-trigger.js?v=20260903h"></script>
+    <script src="/chat-folders.js?v=20260903h"></script>
+    <script src="/chat-behavior-fix.js?v=20260903h"></script>
+    <script src="/chat-contact-trigger.js?v=20260903h"></script>
     <script>
-      // Final profile bridge: registered before React enhancements so the old
-      // name/status-only profile dialog cannot win the click event.
+      // Single profile/contact-info entry point. The contact-info controller
+      // owns profile clicks so the legacy name/status-only dialog cannot win.
       document.addEventListener('click', function (event) {
         const target = event.target instanceof Element ? event.target : null;
         const profileTarget = target?.closest('.chat-heading .avatar, .chat-heading .chat-avatar, .chat-heading [data-profile], .chat-heading > .avatar, .chat-heading b');
@@ -50,7 +49,7 @@
     </script>
     <script>
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js?v=20260903g', { scope: '/' }).catch(() => {});
+        navigator.serviceWorker.register('/sw.js?v=20260903h', { scope: '/' }).catch(() => {});
       }
     </script>
   </body>
