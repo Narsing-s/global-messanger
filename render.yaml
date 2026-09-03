@@ -19,9 +19,26 @@ services:
       - key: WEB_ORIGIN
         value: https://global-messanger.onrender.com,https://global-messanger-web-git-main-narsing-s-projects.vercel.app,https://global-messenger-web.narsingbeesetti006.workers.dev
       - key: PASSWORD_RESET_WEB_ORIGIN
-        value: https://global-messanger-web-git-main-narsing-s-projects.vercel.app,https://global-messenger-web.narsingbeesetti006.workers.dev
+        value: https://global-messanger-web-git-main-narsing-s-projects.vercel.app
       - key: UPLOAD_DIR
         value: /tmp/global-messenger/uploads
+
+      # Production email delivery uses Gmail SMTP directly.
+      # The password is intentionally not stored in GitHub.
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 465
+      - key: SMTP_SECURE
+        value: "true"
+      - key: SMTP_STARTTLS
+        value: "false"
+      - key: SMTP_USER
+        value: narsingbeesetti22@gmail.com
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        value: Global Messenger <narsingbeesetti22@gmail.com>
 
   - type: web
     name: global-messenger-web
@@ -32,7 +49,7 @@ services:
     staticPublishPath: apps/web/dist
     envVars:
       - key: VITE_API_URL
-        value: https://global-messanger-backend.onrender.com
+        value: https://global-messenger-api.onrender.com
     routes:
       # Password reset must be handled by the Global Messenger reset page,
       # not the SPA fallback. Keep these before the catch-all rewrite.
