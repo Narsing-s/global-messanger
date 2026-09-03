@@ -5,10 +5,15 @@ const file = path.resolve('src/main.tsx');
 let source = fs.readFileSync(file, 'utf8');
 const original = source;
 
-// Smart Assist is intentionally removed: it depends on an AI endpoint and is not part of the core messenger.
-source = source.replace(/,Sparkles(?=,)/, '');
-source = source.replace(/,\[aiLoading,setAiLoading\]=useState\(false\)/, '');
-source = source.replace(/async function aiAssist\(\)\{.*?\}function send\(\)/, 'function send()');
+// Smart Assist is intentionally removed: keep the messenger core key-free and avoid a broken AI button.
+source = source.replace(',Sparkles,', ',');
+source = source.replace(',Sparkles,LogOut', ',LogOut');
+source = source.replace(',[aiLoading,setAiLoading]=useState(false)', '');
+const aiStart = source.indexOf('async function aiAssist(){');
+const sendStart = source.indexOf('function send(){', aiStart >= 0 ? aiStart : 0);
+if (aiStart >= 0 && sendStart > aiStart) {
+  source = source.slice(0, aiStart) + source.slice(sendStart);
+}
 source = source.replace(/<button className="icon-btn" title="Smart Assist" onClick=\{aiAssist\} disabled=\{aiLoading\}><Sparkles size=\{18\} \/><\/button>/, '');
 
 // Voice messages: record locally with MediaRecorder, upload through the existing first-party upload route,
