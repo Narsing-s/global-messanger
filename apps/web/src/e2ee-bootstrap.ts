@@ -1,4 +1,6 @@
-import { decryptMessage, encryptMessage, initE2EE } from './e2ee';
+import { encryptMessage } from './e2ee';
+import { decryptMessageCompat } from './e2ee-compat';
+import { initE2EE } from './e2ee';
 import { Socket } from 'socket.io-client';
 import './runtime-fixes';
 
@@ -31,7 +33,11 @@ export function installE2EE() {
       if (event !== 'message:new' && event !== 'message:updated') return originalOn.call(this, event, listener);
       const wrapped = async (message: any) => {
         if (message?.body?.startsWith?.('gm:e2ee:v1:')) {
-          const body = await decryptMessage(String(message.conversationId), message.body);
+          // Use the compatibility decryptor here too. This socket-level
+          // handler runs before the React message-list cleanup and previously
+          // converted recoverable legacy messages into a permanent
+          // "Unable to decrypt" string.
+          const body = await decryptMessageCompat(String(message.conversationId), message.body);
           return listener({ ...message, body });
         }
         return listener(message);
