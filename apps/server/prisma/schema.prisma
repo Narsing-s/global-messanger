@@ -17,6 +17,8 @@ model User {
   passwordHash        String
   avatarUrl           String?
   lastSeenAt          DateTime             @default(now())
+  privacyLastSeen     String               @default("everyone")
+  privacyProfilePhoto String               @default("everyone")
   e2eePublicKey       String?
   e2eeKeyVersion      Int                  @default(1)
   role                String               @default("USER")
@@ -26,12 +28,29 @@ model User {
   createdConvos       Conversation[]       @relation("ConversationCreator")
   reactions           MessageReaction[]
   devices             PushDevice[]
+  sessions            UserSession[]
   bookmarks           MessageBookmark[]
   pinsCreated         PinnedMessage[]      @relation("PinCreator")
   blocksCreated       UserBlock[]          @relation("BlockCreator")
   blockedBy            UserBlock[]          @relation("BlockedUser")
   messageReceipts     MessageReceipt[]
   supportResolutions  SupportResolution[]  @relation("SupportResolver")
+}
+
+model UserSession {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  deviceName String?
+  platform   String?
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, revokedAt])
 }
 
 model PushDevice {
@@ -67,6 +86,7 @@ model ConversationMember {
   lastReadAt     DateTime?
   mutedUntil     DateTime?
   archivedAt     DateTime?
+  disappearingSeconds Int?
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([conversationId, userId])
@@ -88,6 +108,7 @@ model Message {
   createdAt       DateTime     @default(now())
   editedAt        DateTime?
   deletedAt       DateTime?
+  expiresAt       DateTime?
   conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender          User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
   replyTo         Message?     @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
@@ -99,6 +120,7 @@ model Message {
   @@index([conversationId, createdAt])
   @@index([senderId, createdAt])
   @@index([conversationId, type, createdAt])
+  @@index([expiresAt])
   @@unique([senderId, clientId])
 }
 
@@ -181,8 +203,8 @@ model SupportResolution {
   resolutionType     String
   resolutionNotes    String?
   resolutionTimeSecs Int
-  closedAt           DateTime      @default(now())
-  createdAt          DateTime      @default(now())
+  closedAt            DateTime     @default(now())
+  createdAt           DateTime     @default(now())
   supportRequest     SupportRequest @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
   resolvedBy         User?         @relation("SupportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
   @@index([resolvedById, closedAt])
