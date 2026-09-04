@@ -137,20 +137,12 @@ export const api = {
         body: JSON.stringify({ userId })
       }));
       if (conversation.id) {
-        try {
-          await request(`/api/conversations/${encodeURIComponent(conversation.id)}/restore`, { method: 'POST' });
-        } catch {
-          // A brand-new conversation has nothing to restore.
-        }
+        try { await request(`/api/conversations/${encodeURIComponent(conversation.id)}/restore`, { method: 'POST' }); } catch {}
       }
       return conversation;
     })();
     directRequests.set(key, promise);
-    try {
-      return await promise;
-    } finally {
-      if (directRequests.get(key) === promise) directRequests.delete(key);
-    }
+    try { return await promise; } finally { if (directRequests.get(key) === promise) directRequests.delete(key); }
   },
   group: async (title: string, userIds: string[]) => normalizeConversation(await request('/api/conversations/group', {
     method: 'POST', body: JSON.stringify({ title, userIds })
@@ -159,11 +151,21 @@ export const api = {
     await request(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`), id
   ),
   syncMessages: async (id: string, after?: string, limit = 100) => ({
-    messages: normalizeMessages(
-      await request(`/api/conversations/${encodeURIComponent(id)}/messages/sync?limit=${limit}${after ? `&after=${encodeURIComponent(after)}` : ''}`), id
-    )
+    messages: normalizeMessages(await request(`/api/conversations/${encodeURIComponent(id)}/messages/sync?limit=${limit}${after ? `&after=${encodeURIComponent(after)}` : ''}`), id)
   }),
+  unread: async () => request('/api/conversations/unread'),
   read: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }),
+  chatInfo: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/info`),
+  pins: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/pins`),
+  pin: (conversationId: string, messageId: string) => request(`/api/conversations/${encodeURIComponent(conversationId)}/pins`, { method: 'POST', body: JSON.stringify({ messageId }) }),
+  unpin: (conversationId: string, messageId: string) => request(`/api/conversations/${encodeURIComponent(conversationId)}/pins/${encodeURIComponent(messageId)}`, { method: 'DELETE' }),
+  searchMessages: async (q: string, conversationId?: string) => request(`/api/messages/search?q=${encodeURIComponent(q)}${conversationId ? `&conversationId=${encodeURIComponent(conversationId)}` : ''}`),
+  profile: () => request('/api/users/me'),
+  updateProfile: (data: { displayName?: string; avatarUrl?: string | null }) => request('/api/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
+  renameGroup: (id: string, title: string) => request(`/api/conversations/${encodeURIComponent(id)}/group`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+  addGroupMember: (id: string, userId: string) => request(`/api/conversations/${encodeURIComponent(id)}/members`, { method: 'POST', body: JSON.stringify({ userId }) }),
+  removeGroupMember: (id: string, userId: string) => request(`/api/conversations/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+  forwardMessage: (messageId: string, conversationId: string) => request('/api/messages/forward', { method: 'POST', body: JSON.stringify({ messageId, conversationId }) }),
   editMessage: (id: string, body: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ body }) }),
   deleteMessage: (id: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   upload: async (file: File) => {
@@ -173,6 +175,8 @@ export const api = {
   },
   react: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }),
   unreact: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'DELETE', body: JSON.stringify({ emoji }) }),
+  bookmark: (id: string) => request(`/api/messages/${encodeURIComponent(id)}/bookmark`, { method: 'POST' }),
+  unbookmark: (id: string) => request(`/api/messages/${encodeURIComponent(id)}/bookmark`, { method: 'DELETE' }),
   registerDevice: (token: string, platform: string) => request('/api/devices', { method: 'POST', body: JSON.stringify({ token, platform }) }),
   aiAssist: (prompt: string, context?: string) => request('/api/ai/assist', { method: 'POST', body: JSON.stringify({ prompt, context }) })
 };
