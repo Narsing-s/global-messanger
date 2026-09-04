@@ -16,18 +16,29 @@ export async function registerAdvancedFeatures(app: FastifyInstance, prisma: Pri
   app.post('/api/sessions/current', auth, async (request) => { const token=String(request.headers.authorization||'').replace(/^Bearer\s+/i,''); if(!token)return {ok:false}; const tokenHash=hashToken(token); const existing=await prisma.userSession.findUnique({where:{tokenHash}}); if(existing)return existing; const b:any=request.body||{}; return prisma.userSession.create({data:{userId:userIdOf(request),tokenHash,deviceName:String(b.deviceName||'Unknown device').slice(0,80),platform:String(b.platform||'web').slice(0,30),userAgent:String(request.headers['user-agent']||'').slice(0,500),ipAddress:String(request.ip||'').slice(0,64)},select:{id:true,deviceName:true,platform:true,userAgent:true,ipAddress:true,createdAt:true,lastSeenAt:true}}); });
   app.delete('/api/sessions/:id', auth, async (request, reply) => { const id=String((request.params as any).id); const s=await prisma.userSession.findFirst({where:{id,userId:userIdOf(request)}}); if(!s)return reply.notFound('Session not found'); await prisma.userSession.update({where:{id},data:{revokedAt:new Date()}}); return {ok:true}; });
   app.delete('/api/sessions', auth, async (request) => { const current=hashToken(String(request.headers.authorization||'').replace(/^Bearer\s+/i,'')); await prisma.userSession.updateMany({where:{userId:userIdOf(request),tokenHash:{not:current},revokedAt:null},data:{revokedAt:new Date()}}); return {ok:true}; });
+
+  // Disappearing messages are an explicit per-chat option. Off means normal messages never expire.
   app.get('/api/conversations/:id/disappearing', auth, async (request, reply) => { const conversationId=String((request.params as any).id); const m=await prisma.conversationMember.findUnique({where:{conversationId_userId:{conversationId,userId:userIdOf(request)}},select:{disappearingSeconds:true}}); if(!m)return reply.notFound('Chat not found'); return {seconds:m.disappearingSeconds||0}; });
   app.put('/api/conversations/:id/disappearing', auth, async (request, reply) => { const conversationId=String((request.params as any).id); const userId=userIdOf(request); const m=await prisma.conversationMember.findUnique({where:{conversationId_userId:{conversationId,userId}}}); if(!m)return reply.notFound('Chat not found'); const seconds=Number((request.body as any)?.seconds||0); const allowed=[0,86400,604800,2592000]; if(!allowed.includes(seconds))return reply.badRequest('Seconds must be 0, 86400, 604800, or 2592000'); await prisma.conversationMember.update({where:{conversationId_userId:{conversationId,userId}},data:{disappearingSeconds:seconds||null}}); return {ok:true,seconds}; });
+
+  // This endpoint only targets messages that have an explicit expiresAt set by the
+  // disappearing-message feature. Normal messages have expiresAt=null and are never touched.
   app.post('/api/messages/cleanup-expired', async (request, reply) => { const secret=process.env.CRON_SECRET; if(secret&&String(request.headers['x-cron-secret']||'')!==secret)return reply.code(401).send({message:'Unauthorized'}); const result=await prisma.message.deleteMany({where:{expiresAt:{lte:new Date()}}}); return {ok:true,deleted:result.count}; });
 }
 
-// Normal user messages never expire. This routine only archives conversations that
-// have had no activity for 60 days; it does not delete messages or chat data.
+// Runs two independent retention policies:
+// 1) disappearing-message records are removed only when they explicitly expired;
+// 2) conversations inactive for 60+ days are archived from the active list, never deleted.
 export function startExpiredMessageCleanup(prisma: PrismaClient) {
   const interval = 24 * 60 * 60 * 1000;
-  const archiveInactiveChats = async () => {
-    const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+  const maintainRetention = async () => {
     try {
+      await prisma.message.deleteMany({ where: { expiresAt: { lte: new Date() } } });
+    } catch (error) {
+      console.error('[Global Messenger] disappearing-message cleanup failed', error);
+    }
+    try {
+      const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
       const stale = await prisma.conversation.findMany({
         where: { updatedAt: { lt: cutoff } },
         select: { id: true }
@@ -41,6 +52,6 @@ export function startExpiredMessageCleanup(prisma: PrismaClient) {
       console.error('[Global Messenger] 60-day inactive-chat archive failed', error);
     }
   };
-  void archiveInactiveChats();
-  setInterval(() => void archiveInactiveChats(), interval).unref();
+  void maintainRetention();
+  setInterval(() => void maintainRetention(), interval).unref();
 }
