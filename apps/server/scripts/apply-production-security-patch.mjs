@@ -59,10 +59,62 @@ app.addHook('onSend', async (_request, reply, payload) => {
   if (process.env.NODE_ENV === 'production') reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   return payload;
 });
+
+/* Android/WebView clients do not always use the same browser origin as the
+ * hosted web app. Handle API preflight explicitly so registration, login,
+ * messaging and every other /api endpoint work from installed clients too. */
+if (!source.includes("app.options('/api/*'")) {
+  app.options('/api/*', async (request, reply) => {
+    const origin = String(request.headers.origin || '').trim();
+    const requestedHeaders = String(
+      request.headers['access-control-request-headers'] ||
+      'Content-Type,Authorization,Accept,Origin,X-Requested-With'
+    );
+
+    if (origin) {
+      reply.header('Access-Control-Allow-Origin', origin);
+      reply.header('Access-Control-Allow-Credentials', 'true');
+    }
+
+    reply
+      .header('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS')
+      .header('Access-Control-Allow-Headers', requestedHeaders)
+      .header('Access-Control-Max-Age', '86400')
+      .header('Vary', 'Origin, Access-Control-Request-Headers');
+
+    return reply.code(204).send();
+  });
+}
 `;
 
 if (!source.includes('const securityWindowMs = 60_000;')) {
   source = source.replace(marker, securityBlock + '\n' + marker);
+} else if (!source.includes("app.options('/api/*'")) {
+  const securityMarker = "app.addHook('onRequest', securityRateLimit);";
+  const preflightBlock = `
+
+/* Android/WebView clients do not always use the same browser origin as the
+ * hosted web app. Handle API preflight explicitly so registration, login,
+ * messaging and every other /api endpoint work from installed clients too. */
+app.options('/api/*', async (request, reply) => {
+  const origin = String(request.headers.origin || '').trim();
+  const requestedHeaders = String(
+    request.headers['access-control-request-headers'] ||
+    'Content-Type,Authorization,Accept,Origin,X-Requested-With'
+  );
+  if (origin) {
+    reply.header('Access-Control-Allow-Origin', origin);
+    reply.header('Access-Control-Allow-Credentials', 'true');
+  }
+  reply
+    .header('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS')
+    .header('Access-Control-Allow-Headers', requestedHeaders)
+    .header('Access-Control-Max-Age', '86400')
+    .header('Vary', 'Origin, Access-Control-Request-Headers');
+  return reply.code(204).send();
+});
+`;
+  source = source.replace(securityMarker, securityMarker + preflightBlock);
 }
 
 const healthMarker = "app.get(\n  '/health',\n  async () => {\n    return {\n      ok: true,\n      service: 'global-messenger',\n      time: new Date().toISOString()\n    };\n  }\n);";
