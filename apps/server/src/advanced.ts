@@ -8,6 +8,7 @@ import path from 'node:path';
 import { sendPasswordResetEmail, sendAccountDeletedEmail } from './smtp.js';
 import { registerEmailAuthRoutes } from './email-auth-routes.js';
 import { localAssist } from './local-ai.js';
+import { registerAdvancedFeatures } from './advanced-features.js';
 
 type AuthRequest = { user: { id: string; username: string } };
 type IdParams = { id: string };
@@ -21,6 +22,7 @@ function resetOrigin(request: any): string { if (process.env.NODE_ENV !== 'produ
 export async function registerAdvancedRoutes(app: FastifyInstance, prisma: PrismaClient) {
   const auth = { preHandler: [app.authenticate] };
   await registerEmailAuthRoutes(app, prisma);
+  await registerAdvancedFeatures(app, prisma);
   app.get('/reset-password', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage()));
   app.get('/reset-password/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage()));
   app.get('/reset-password.html', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage()));
