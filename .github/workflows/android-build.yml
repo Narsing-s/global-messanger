@@ -138,14 +138,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo 'Refreshing android-latest release assets...'
+          echo 'Refreshing android-latest APK...'
           gh release view android-latest --repo "$GITHUB_REPOSITORY" >/dev/null
-          gh release upload android-latest \
-            release-output/Global-Messenger.apk \
-            release-output/Global-Messenger.aab \
-            --repo "$GITHUB_REPOSITORY" \
-            --clobber
-          echo 'android-latest release assets refreshed successfully.'
+          gh release upload android-latest release-output/Global-Messenger.apk --repo "$GITHUB_REPOSITORY" --clobber
+          echo 'Refreshing android-latest AAB...'
+          gh release upload android-latest release-output/Global-Messenger.aab --repo "$GITHUB_REPOSITORY" --clobber
+          echo 'android-latest APK and AAB refreshed successfully.'
       - name: Publish versioned GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && env.ANDROID_SIGNING_AVAILABLE == 'true'
         uses: softprops/action-gh-release@v2
