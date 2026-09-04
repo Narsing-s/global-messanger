@@ -25,6 +25,22 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   await registerEmailAuthRoutes(app, prisma);
   await registerAdvancedFeatures(app, prisma);
   startExpiredMessageCleanup(prisma);
+
+  // Make the Help Centre preflight response deterministic even if the hosting
+  // environment has a stale/missing WEB_ORIGIN value. This is scoped to the
+  // Help Centre and only affects CORS response headers.
+  app.addHook('onSend', async (request, reply, payload) => {
+    const origin = String(request.headers.origin || '').trim();
+    if (origin === 'https://global-messenger-help-centre.onrender.com') {
+      reply.header('Access-Control-Allow-Origin', origin);
+      reply.header('Access-Control-Allow-Credentials', 'true');
+      reply.header('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,Origin,X-Requested-With');
+      reply.header('Vary', 'Origin');
+    }
+    return payload;
+  });
+
   await registerSupportRoutes(app, prisma);
   app.get('/reset-password', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage()));
   app.get('/reset-password/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage()));
