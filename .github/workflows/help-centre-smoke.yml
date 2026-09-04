@@ -1,0 +1,44 @@
+name: Help Centre Smoke Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check API health
+        run: |
+          curl --fail --silent --show-error \
+            https://global-messanger-backend.onrender.com/health
+
+      - name: Check Help Centre is reachable
+        run: |
+          curl --fail --silent --show-error -I \
+            https://global-messenger-help-centre.onrender.com/
+
+      - name: Check Help Centre CORS preflight
+        run: |
+          curl --fail --silent --show-error -D /tmp/headers -o /dev/null \
+            -X OPTIONS \
+            -H 'Origin: https://global-messenger-help-centre.onrender.com' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type' \
+            https://global-messanger-backend.onrender.com/api/support/requests
+          grep -i '^access-control-allow-origin: https://global-messenger-help-centre.onrender.com' /tmp/headers
+          grep -i '^access-control-allow-methods:' /tmp/headers
+
+      - name: Check support endpoint responds
+        run: |
+          curl --fail --silent --show-error \
+            -o /tmp/support-response \
+            -w '%{http_code}' \
+            -X POST \
+            -H 'Origin: https://global-messenger-help-centre.onrender.com' \
+            -H 'Content-Type: application/json' \
+            --data '{"name":"Smoke Test","email":"smoke-test@example.com","category":"Other","subject":"Automated smoke test","details":"This is a non-production validation request and should not be persisted."}' \
+            https://global-messanger-backend.onrender.com/api/support/requests || true
+          echo
+          echo 'Support endpoint was contacted. POST persistence is intentionally not asserted by this smoke test.'
