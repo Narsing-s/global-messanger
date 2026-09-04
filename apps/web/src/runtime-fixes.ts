@@ -22,9 +22,11 @@ async function currentConversation() {
     : c.members?.some((m: any) => m.user.id !== me.id && m.user.displayName === title)) || null;
 }
 
-function authHeaders() {
+function authHeaders(): HeadersInit {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = localStorage.getItem('gm_token');
-  return token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 function addReactionBadge(messageId: string, emoji: string) {
