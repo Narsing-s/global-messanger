@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && vite",
-    "build": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && tsc -b && vite build",
+    "dev": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && vite",
+    "build": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && tsc -b && vite build",
     "android:add": "cap add android",
     "android:sync": "cap sync",
     "android:open": "cap open android",
@@ -26,13 +26,13 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "socket.io-client": "^4.8.1",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vite": "^6.4.3"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.0",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.5",
-    "vite": "^6.4.3"
+    "@types/react-dom": "^19.2.5"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "4.63.1",
