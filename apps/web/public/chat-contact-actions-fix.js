@@ -174,8 +174,10 @@
         if (!target?.id) throw new Error('Contact could not be identified.');
         if (!confirm(`Block ${target.displayName || target.username || title}?`)) return;
         await api(`/api/users/${encodeURIComponent(target.id)}/block`, {method:'POST'});
+        await api(`/api/conversations/${encodeURIComponent(c.id)}/permanent`, {method:'DELETE'});
         closePanel();
-        alert(`${target.displayName || target.username || title} has been blocked.`);
+        alert(`${target.displayName || target.username || title} has been blocked and the chat was removed from your chat list.`);
+        location.reload();
       } catch (error) { alert(`Block failed: ${error.message}`); }
       return;
     }
@@ -204,6 +206,7 @@
         document.querySelector('.messages')?.replaceChildren();
         closePanel();
         alert('Chat deleted from your chat list.');
+        location.reload();
       } catch (error) { alert(`Delete chat failed: ${error.message}`); }
       return;
     }
@@ -217,6 +220,7 @@
         document.querySelector('.messages')?.replaceChildren();
         closePanel();
         alert('You left the group successfully.');
+        location.reload();
       } catch (error) { alert(`Exit group failed: ${error.message}`); }
       return;
     }
