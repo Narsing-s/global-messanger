@@ -52,7 +52,7 @@ if (!source.includes('/* ---------------------- Blocked-contact delivery -------
 
 // Ensure the generated handler never uses a delivery-only block filter that
 // persists the message first. The pre-persist guard above is authoritative.
-const blockedBroadcast = /          if \\(blockedRecipientIds\\.size > 0\\) \\{[\\s\\S]*?          \\} else \\{\\n([\\s\\S]*?)          \\}\\n\\n          \\/\\* ---------------------- Delivery Ack/;
+const blockedBroadcast = /          if \(blockedRecipientIds\.size > 0\) \{[\s\S]*?          \} else \{\n([\s\S]*?)          \}\n\n          \/\* ---------------------- Delivery Ack/;
 if (blockedBroadcast.test(source)) {
   source = source.replace(blockedBroadcast, `          io
             .to(
