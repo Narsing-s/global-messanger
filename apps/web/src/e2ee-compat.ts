@@ -40,16 +40,31 @@ async function keys(conversationId: string): Promise<KeyBundle[]> {
 }
 async function legacyDecrypt(conversationId: string, body: string) {
   const envelope = JSON.parse(body.slice(PREFIX.length));
-  const me = JSON.parse(localStorage.getItem('gm_user') || 'null');
   const identity = getIdentity();
   if (!identity || envelope?.v !== 1 || !envelope?.senderKey) return '🔒 Encrypted message (not available on this device)';
+
+  // Legacy v1 envelopes contain the sender public key. ECDH must always use
+  // the current user's private key + the sender's public key; using a
+  // recipient's public key here produces a different shared secret and makes
+  // otherwise valid historical messages look undecryptable.
+  const entry = envelope?.entries?.[JSON.parse(localStorage.getItem('gm_user') || 'null')?.id];
+  if (!entry) return '🔒 Encrypted message (not available on this device)';
+  try {
+    const key = await derive(identity.privateKey, envelope.senderKey, conversationId);
+    const plain = await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(entry.iv)}, key, b64(entry.ct));
+    return dec.decode(plain);
+  } catch {}
+
+  // Compatibility fallback for older envelopes that may have a recipient
+  // entry under another currently registered user id. Keep this read-only;
+  // never rewrite or re-store message contents.
   const recipients = await keys(conversationId);
-  const candidates = recipients.filter(x => x?.publicKey && envelope?.entries?.[x.userId]);
-  for (const recipient of candidates) {
+  for (const recipient of recipients) {
+    const candidate = recipient?.userId ? envelope?.entries?.[recipient.userId] : null;
+    if (!candidate || !recipient?.publicKey) continue;
     try {
-      const key = await derive(identity.privateKey, recipient.publicKey!, conversationId);
-      const entry = envelope.entries[recipient.userId];
-      const plain = await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(entry.iv)}, key, b64(entry.ct));
+      const key = await derive(identity.privateKey, envelope.senderKey, conversationId);
+      const plain = await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(candidate.iv)}, key, b64(candidate.ct));
       return dec.decode(plain);
     } catch {}
   }
