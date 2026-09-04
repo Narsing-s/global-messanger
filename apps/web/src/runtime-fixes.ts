@@ -2,6 +2,7 @@ import { api, API } from './api';
 import { encryptMessage } from './e2ee';
 
 const REACTION_KEY = 'gm_reaction_cache_v1';
+const DELETED_CHAT_KEY = 'gm_deleted_chats_v1';
 const identityKey = 'gm_e2ee_identity_v1';
 let installed = false;
 
@@ -53,6 +54,19 @@ function restoreReactionBadges() {
 }
 
 function installApiFixes() {
+  const originalConversations = api.conversations;
+  if (!(api as any).__gmDeletedFilter) {
+    (api as any).__gmDeletedFilter = true;
+    api.conversations = async () => {
+      const list = await originalConversations();
+      let deleted: string[] = [];
+      try { deleted = JSON.parse(localStorage.getItem(DELETED_CHAT_KEY) || '[]'); } catch {}
+      if (!deleted.length) return list;
+      const blocked = new Set(deleted.map(String));
+      return list.filter((conversation: any) => !blocked.has(String(conversation.id)));
+    };
+  }
+
   const originalReact = api.react;
   if (!(api as any).__gmFastReact) {
     (api as any).__gmFastReact = true;
@@ -124,6 +138,10 @@ async function deleteCurrentChat() {
   const contentType = response.headers.get('content-type') || '';
   const data = contentType.includes('application/json') ? await response.json() : {};
   if (!response.ok) throw new Error(data?.message || `Unable to delete chat (${response.status})`);
+  let deleted: string[] = [];
+  try { deleted = JSON.parse(localStorage.getItem(DELETED_CHAT_KEY) || '[]'); } catch {}
+  if (!deleted.includes(String(conversation.id))) deleted.push(String(conversation.id));
+  localStorage.setItem(DELETED_CHAT_KEY, JSON.stringify(deleted));
   document.getElementById('gm-enhance-modal')?.remove();
   location.reload();
 }
@@ -142,7 +160,7 @@ function installChatDeleteAction() {
       button.setAttribute('disabled', 'true');
       button.innerHTML = '<b>Deleting…</b><span>Please wait.</span>';
       try { await deleteCurrentChat(); }
-      catch (error: any) { button.removeAttribute('disabled'); alert(error?.message || 'Unable to delete chat.'); }
+      catch (error: any) { button.removeAttribute('disabled'); button.innerHTML = '<b>🗑️ Delete chat</b><span>Remove this conversation from your chat list immediately.</span>'; alert(error?.message || 'Unable to delete chat.'); }
     };
     grid.appendChild(button);
   });
