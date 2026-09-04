@@ -1,6 +1,6 @@
 ---
 name: Global Messenger Product QA
- description: Reviews user-facing messaging features for reliability, accessibility, mobile usability, and safe product improvements.
+description: Reviews user-facing messaging features for reliability, accessibility, mobile usability, and safe product improvements.
 tools:
   - read
   - search
