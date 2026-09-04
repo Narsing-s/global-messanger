@@ -12,6 +12,10 @@ on:
       - 'package-lock.json'
       - '.github/workflows/android-build.yml'
 
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -129,26 +133,19 @@ jobs:
           if-no-files-found: error
       - name: Publish Android latest release
         if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: android-latest
-          name: Global Messenger Android Latest
-          body: |
-            ## Global Messenger Android Latest
-
-            Latest Android build from the `main` branch.
-
-            - **Global-Messenger.apk** — direct Android installation.
-            - **Global-Messenger.aab** — Google Play Console upload bundle.
-
-            The install page points to this release, so every successful main-branch Android build refreshes the downloadable APK.
-          files: |
-            release-output/Global-Messenger.apk
-            release-output/Global-Messenger.aab
-          make_latest: false
-          prerelease: false
-          overwrite_files: true
-          fail_on_unmatched_files: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'Refreshing android-latest release assets...'
+          gh release view android-latest --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload android-latest \
+            release-output/Global-Messenger.apk \
+            release-output/Global-Messenger.aab \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+          echo 'android-latest release assets refreshed successfully.'
       - name: Publish versioned GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && env.ANDROID_SIGNING_AVAILABLE == 'true'
         uses: softprops/action-gh-release@v2
