@@ -6,7 +6,7 @@ let source = fs.readFileSync(file, 'utf8');
 if (!source.includes('chat-message-display-v2')) {
   source = source.replace(
     "import{installEnhancements}from'./enhancements';",
-    "import{installEnhancements}from'./enhancements';import{decryptMessage}from'./e2ee';"
+    "import{installEnhancements}from'./enhancements';import{decryptMessageCompat}from'./e2ee-compat';"
   );
 
   const helpers = `
@@ -22,7 +22,7 @@ async function cleanIncomingMessage(message:any){
   if(isEncryptedChatMessage(message)){
     try{
       const normalized=message.body.startsWith('gme2ee:v1:')?'gm:e2ee:v1:'+message.body.slice('gme2ee:v1:'.length):message.body;
-      return {...message,body:await decryptMessage(String(message.conversationId),normalized)};
+      return {...message,body:await decryptMessageCompat(String(message.conversationId),normalized)};
     }catch{return {...message,body:'🔒 Encrypted message (not available on this device)'};}
   }
   return message;
