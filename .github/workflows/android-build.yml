@@ -179,3 +179,5 @@ jobs:
           make_latest: true
           prerelease: false
           fail_on_unmatched_files: true
+
+# Trigger a fresh Android build after signing secrets are configured.
