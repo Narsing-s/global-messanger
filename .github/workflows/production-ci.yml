@@ -13,7 +13,28 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: global_messenger_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d global_messenger_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/global_messenger_ci
+      JWT_SECRET: ci-only-secret
+      WEB_ORIGIN: http://127.0.0.1:5173
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,11 +51,20 @@ jobs:
       - name: Doctor
         run: npm run doctor
 
-      - name: Build web
-        run: npm run build -w apps/web
-
       - name: Generate Prisma client
         run: npm run db:generate
 
+      - name: Validate production migrations
+        run: npm run db:deploy
+
+      - name: Build web
+        run: npm run build -w apps/web
+
       - name: Build server
         run: npm run build -w apps/server
+
+      - name: Verify generated production assets
+        run: |
+          test -f apps/web/dist/index.html
+          test -f apps/server/dist/index.js
+          echo "Production build verification passed"
