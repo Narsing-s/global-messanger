@@ -138,7 +138,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          RELEASE_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/android-latest" --jq '.id')
+          RELEASE_API="repos/$GITHUB_REPOSITORY/releases/tags/android-latest"
+
+          if ! gh api "$RELEASE_API" >/dev/null 2>&1; then
+            echo 'android-latest release does not exist; creating it...'
+            gh release create android-latest \
+              --repo "$GITHUB_REPOSITORY" \
+              --title 'Global Messenger Android — Latest' \
+              --notes 'Maintained latest Android build. The APK is the direct installation package; the AAB is for Google Play Console.' \
+              --target "$GITHUB_SHA"
+          fi
+
+          RELEASE_ID=$(gh api "$RELEASE_API" --jq '.id')
           echo "Refreshing android-latest release $RELEASE_ID..."
 
           for asset in Global-Messenger.apk global-messenger.apk Global-Messenger.aab global-messenger.aab; do
@@ -156,9 +167,16 @@ jobs:
           echo 'Uploading fresh AAB...'
           gh release upload android-latest release-output/Global-Messenger.aab --repo "$GITHUB_REPOSITORY"
 
+          APK_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/android-latest/Global-Messenger.apk"
+          AAB_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/android-latest/Global-Messenger.aab"
+          gh release edit android-latest \
+            --repo "$GITHUB_REPOSITORY" \
+            --title 'Global Messenger Android — Latest' \
+            --notes "## Global Messenger Android — Latest\n\nAutomatically refreshed from the latest successful main-branch Android build.\n\n### Downloads\n- **[Global-Messenger.apk]($APK_URL)** — direct Android installation.\n- **[Global-Messenger.aab]($AAB_URL)** — Google Play Console upload bundle.\n\nThe Install page uses the same stable android-latest APK URL, so it automatically serves this newly published APK without requiring a manual page edit."
+
           gh release view android-latest --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fx 'Global-Messenger.apk'
           gh release view android-latest --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fx 'Global-Messenger.aab'
-          echo 'android-latest APK and AAB refreshed successfully.'
+          echo 'android-latest APK and AAB refreshed successfully; Install page stable download target is current.'
       - name: Publish versioned GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && env.ANDROID_SIGNING_AVAILABLE == 'true'
         uses: softprops/action-gh-release@v2
