@@ -2,13 +2,16 @@ services:
   - type: web
     name: global-messenger-api
     runtime: node
-    # Gmail SMTP uses ports 25/465/587. Render Free blocks outbound SMTP,
-    # so the backend must run on a paid web-service plan for direct Gmail SMTP.
+    # Paid service is required for direct Gmail SMTP.
     plan: starter
     region: singapore
     buildCommand: rm -rf apps/server/dist && npm install --include=dev --include=optional && npm run db:generate -w apps/server && npm run db:deploy -w apps/server && npm run build -w apps/server
     startCommand: npm run start -w apps/server
     healthCheckPath: /health
+    disk:
+      name: global-messenger-uploads
+      mountPath: /tmp/global-messenger/uploads
+      sizeGB: 1
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -19,7 +22,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: WEB_ORIGIN
-        value: https://global-messanger.onrender.com,https://global-messenger-web.onrender.com,https://global-messanger-web-git-main-narsing-s-projects.vercel.app,https://global-messenger-web.narsingbeesetti006.workers.dev,https://global-messenger-help-centre.onrender.com
+        value: https://global-messanger.onrender.com,https://global-messenger-web.onrender.com,https://global-messenger-help-centre.onrender.com
       - key: PASSWORD_RESET_WEB_ORIGIN
         value: https://global-messanger.onrender.com
       - key: UPLOAD_DIR
