@@ -10,6 +10,7 @@ let identityPromise: Promise<Identity> | null = null;
 let identityUserId: string | null = null;
 let identityRegistrationPromise: Promise<void> | null = null;
 let registeredUserId: string | null = null;
+let registeredIdentityFingerprint: string | null = null;
 const conversationKeyCache = new Map<string, Promise<KeyBundle[]>>();
 const derivedKeyCache = new Map<string, Promise<CryptoKey>>();
 const enc = new TextEncoder();
@@ -91,14 +92,19 @@ async function registerIdentity() {
   try { me = JSON.parse(localStorage.getItem('gm_user') || 'null'); } catch {}
   const userId = String(me?.id || '');
   if (!token || !userId) return;
-  if (registeredUserId === userId && identityRegistrationPromise) return identityRegistrationPromise;
   const identity = await getIdentity();
+  const fingerprint = JSON.stringify(identity.publicKey);
+  if (registeredUserId === userId && registeredIdentityFingerprint === fingerprint && identityRegistrationPromise) return identityRegistrationPromise;
+  if (registeredUserId === userId && registeredIdentityFingerprint !== fingerprint) {
+    conversationKeyCache.clear();
+  }
   registeredUserId = userId;
+  registeredIdentityFingerprint = fingerprint;
   identityRegistrationPromise = (async () => {
     const response = await authFetch('/api/crypto/identity', { method: 'PUT', body: JSON.stringify({ publicKey: identity.publicKey, version: 1 }) });
     if (!response.ok) throw new Error('Encryption key registration failed');
   })();
-  try { await identityRegistrationPromise; } catch (error) { identityRegistrationPromise = null; registeredUserId = null; throw error; }
+  try { await identityRegistrationPromise; } catch (error) { identityRegistrationPromise = null; registeredUserId = null; registeredIdentityFingerprint = null; throw error; }
 }
 
 async function conversationKeys(conversationId: string): Promise<KeyBundle[]> {
