@@ -21,6 +21,7 @@ services:
         generateValue: true
       - key: NODE_ENV
         value: production
+      # All browser-hosted Global Messenger clients, including Help Centre.
       - key: WEB_ORIGIN
         value: https://global-messanger.onrender.com,https://global-messenger-web.onrender.com,https://global-messenger-help-centre.onrender.com
       - key: PASSWORD_RESET_WEB_ORIGIN
