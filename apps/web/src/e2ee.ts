@@ -5,9 +5,11 @@ const API = configuredApi || ((import.meta as any).env?.DEV ? window.location.or
 
 type Identity = { publicKey: JsonWebKey; privateKey: JsonWebKey; version: 1 };
 type KeyBundle = { userId: string; publicKey: JsonWebKey | null };
-const IDENTITY_KEY = 'gm_e2ee_identity_v1';
+const IDENTITY_PREFIX = 'gm_e2ee_identity_v1';
 let identityPromise: Promise<Identity> | null = null;
+let identityUserId: string | null = null;
 let identityRegistrationPromise: Promise<void> | null = null;
+let registeredUserId: string | null = null;
 const conversationKeyCache = new Map<string, Promise<KeyBundle[]>>();
 const derivedKeyCache = new Map<string, Promise<CryptoKey>>();
 const enc = new TextEncoder();
@@ -26,18 +28,30 @@ function b64ToBytes(value: string) {
   return bytes;
 }
 
+function identityStorageKey(userId: string) {
+  return `${IDENTITY_PREFIX}:${userId}`;
+}
+
 async function getIdentity(): Promise<Identity> {
-  if (identityPromise) return identityPromise;
+  let me: any = null;
+  try { me = JSON.parse(localStorage.getItem('gm_user') || 'null'); } catch {}
+  const userId = String(me?.id || 'anonymous');
+  if (identityPromise && identityUserId === userId) return identityPromise;
+  identityUserId = userId;
   identityPromise = (async () => {
+    const accountKey = identityStorageKey(userId);
     try {
-      const saved = localStorage.getItem(IDENTITY_KEY);
-      if (saved) return JSON.parse(saved) as Identity;
+      const saved = localStorage.getItem(accountKey) || (userId !== 'anonymous' ? localStorage.getItem(IDENTITY_PREFIX) : null);
+      if (saved) {
+        if (!localStorage.getItem(accountKey) && userId !== 'anonymous') localStorage.setItem(accountKey, saved);
+        return JSON.parse(saved) as Identity;
+      }
     } catch {}
     const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
     const publicKey = await crypto.subtle.exportKey('jwk', pair.publicKey);
     const privateKey = await crypto.subtle.exportKey('jwk', pair.privateKey);
     const identity: Identity = { publicKey, privateKey, version: 1 };
-    localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+    if (userId !== 'anonymous') localStorage.setItem(accountKey, JSON.stringify(identity));
     return identity;
   })();
   return identityPromise;
@@ -52,14 +66,19 @@ async function authFetch(path: string, options: RequestInit = {}) {
 }
 
 async function registerIdentity() {
-  if (!localStorage.getItem('gm_token')) return;
-  if (identityRegistrationPromise) return identityRegistrationPromise;
+  const token = localStorage.getItem('gm_token');
+  let me: any = null;
+  try { me = JSON.parse(localStorage.getItem('gm_user') || 'null'); } catch {}
+  const userId = String(me?.id || '');
+  if (!token || !userId) return;
+  if (registeredUserId === userId && identityRegistrationPromise) return identityRegistrationPromise;
+  const identity = await getIdentity();
+  registeredUserId = userId;
   identityRegistrationPromise = (async () => {
-    const identity = await getIdentity();
     const response = await authFetch('/api/crypto/identity', { method: 'PUT', body: JSON.stringify({ publicKey: identity.publicKey, version: 1 }) });
     if (!response.ok) throw new Error('Encryption key registration failed');
   })();
-  try { await identityRegistrationPromise; } catch (error) { identityRegistrationPromise = null; throw error; }
+  try { await identityRegistrationPromise; } catch (error) { identityRegistrationPromise = null; registeredUserId = null; throw error; }
 }
 
 async function conversationKeys(conversationId: string): Promise<KeyBundle[]> {
@@ -97,12 +116,7 @@ export async function encryptMessage(conversationId: string, plaintext: string) 
   const identity = await getIdentity();
   const recipients = (await conversationKeys(conversationId)).filter(item => item.publicKey);
   if (!recipients.length) return plaintext;
-
-  const allRecipients: KeyBundle[] = [
-    { userId: me.id, publicKey: identity.publicKey },
-    ...recipients.filter(item => item.userId !== me.id)
-  ];
-
+  const allRecipients: KeyBundle[] = [{ userId: me.id, publicKey: identity.publicKey }, ...recipients.filter(item => item.userId !== me.id)];
   const entries: Record<string, { iv: string; ct: string }> = {};
   await Promise.all(allRecipients.map(async recipient => {
     const key = await deriveAesKey(identity.privateKey, recipient.publicKey!, conversationId);
@@ -135,4 +149,4 @@ export async function initE2EE() {
   try { await registerIdentity(); } catch (error) { console.warn('[Global Messenger E2EE] initialization deferred', error); }
 }
 
-export { PREFIX };
+export { PREFIX, IDENTITY_PREFIX };
