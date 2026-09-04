@@ -6,8 +6,6 @@ const file = path.resolve(root, 'apps/server/src/index.ts');
 if (!fs.existsSync(file)) process.exit(0);
 
 let source = fs.readFileSync(file, 'utf8');
-
-const importLine = "import crypto from 'node:crypto';";
 const injectedImport = "import crypto from 'node:crypto';";
 
 if (!source.includes(injectedImport)) {
@@ -32,7 +30,7 @@ const securityRateLimit = async (request: any, reply: any) => {
   const isAuthRoute = pathname.startsWith('/api/auth/');
   const limit = isAuthRoute ? authLimit : generalLimit;
   const now = Date.now();
-  const key = \\`${isAuthRoute ? 'auth' : 'api'}:\\${request.ip || 'unknown'}\\`;
+  const key = (isAuthRoute ? 'auth' : 'api') + ':' + String(request.ip || 'unknown');
   const bucket = rateBuckets.get(key);
   if (!bucket || now - bucket.startedAt >= securityWindowMs) {
     rateBuckets.set(key, { startedAt: now, count: 1 });
