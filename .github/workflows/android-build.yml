@@ -20,33 +20,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-
       - name: Install dependencies
         run: npm ci
-
       - name: Build web app
         run: npm run build -w apps/web
-
       - name: Add Android platform
         working-directory: apps/web
         run: npx cap add android
-
       - name: Sync Capacitor
         working-directory: apps/web
         run: npx cap sync android
-
       - name: Configure Android permissions
         shell: bash
         run: |
@@ -67,7 +60,6 @@ jobs:
                   text = text.replace('<application', line + '    <application', 1)
           p.write_text(text)
           PY
-
       - name: Configure release signing
         working-directory: apps/web/android
         env:
@@ -95,21 +87,18 @@ jobs:
           text = p.read_text()
           if 'keystore.properties' not in text:
               if p.suffix == '.kts':
-                  block = '''\nimport java.util.Properties\n\nval signingProps = Properties()\nval signingFile = rootProject.file("keystore.properties")\nif (signingFile.exists()) signingFile.inputStream().use { signingProps.load(it) }\n\nandroid {\n    signingConfigs {\n        create("release") {\n            if (signingFile.exists()) {\n                storeFile = file(signingProps["storeFile"] as String)\n                storePassword = signingProps["storePassword"] as String\n                keyAlias = signingProps["keyAlias"] as String\n                keyPassword = signingProps["keyPassword"] as String\n            }\n        }\n    }\n    buildTypes {\n        getByName("release") {\n            signingConfig = signingConfigs.getByName("release")\n        }\n    }\n}\n'''
+                  block = '''\nimport java.util.Properties\nval signingProps = Properties()\nval signingFile = rootProject.file("keystore.properties")\nif (signingFile.exists()) signingFile.inputStream().use { signingProps.load(it) }\nandroid {\n    signingConfigs {\n        create("release") {\n            if (signingFile.exists()) {\n                storeFile = file(signingProps["storeFile"] as String)\n                storePassword = signingProps["storePassword"] as String\n                keyAlias = signingProps["keyAlias"] as String\n                keyPassword = signingProps["keyPassword"] as String\n            }\n        }\n    }\n    buildTypes { getByName("release") { signingConfig = signingConfigs.getByName("release") } }\n}\n'''
               else:
-                  block = '''\nimport java.util.Properties\n\ndef signingProps = new Properties()\ndef signingFile = rootProject.file("keystore.properties")\nif (signingFile.exists()) signingFile.withInputStream { signingProps.load(it) }\n\nandroid {\n    signingConfigs {\n        release {\n            if (signingFile.exists()) {\n                storeFile file(signingProps['storeFile'])\n                storePassword signingProps['storePassword']\n                keyAlias signingProps['keyAlias']\n                keyPassword signingProps['keyPassword']\n            }\n        }\n    }\n    buildTypes {\n        release {\n            signingConfig signingConfigs.release\n        }\n    }\n}\n'''
+                  block = '''\nimport java.util.Properties\ndef signingProps = new Properties()\ndef signingFile = rootProject.file("keystore.properties")\nif (signingFile.exists()) signingFile.withInputStream { signingProps.load(it) }\nandroid {\n    signingConfigs {\n        release {\n            if (signingFile.exists()) {\n                storeFile file(signingProps['storeFile'])\n                storePassword signingProps['storePassword']\n                keyAlias signingProps['keyAlias']\n                keyPassword signingProps['keyPassword']\n            }\n        }\n    }\n    buildTypes { release { signingConfig signingConfigs.release } }\n}\n'''
               p.write_text(text + block)
           PY
-            echo 'Release signing configured.'
           else
-            echo 'Release signing secrets are not configured; building a real unsigned release APK/AAB for installation/testing.'
+            echo 'Release signing secrets are not configured; building an unsigned release APK/AAB for installation/testing.'
             echo 'ANDROID_SIGNING_AVAILABLE=false' >> "$GITHUB_ENV"
           fi
-
       - name: Build release APK and AAB
         working-directory: apps/web/android
         run: ./gradlew assembleRelease bundleRelease --stacktrace
-
       - name: Verify release packages
         shell: bash
         env:
@@ -128,20 +117,38 @@ jobs:
           unzip -t release-output/Global-Messenger.aab >/dev/null
           if [[ "$ANDROID_SIGNING_AVAILABLE" == 'true' ]]; then
             "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/apksigner" verify --verbose release-output/Global-Messenger.apk
-            echo 'APK signature verified.'
           else
             echo 'APK is intentionally unsigned because no persistent Android release keystore is configured.'
           fi
           sha256sum release-output/Global-Messenger.apk release-output/Global-Messenger.aab
-          ls -lh release-output/
-
       - name: Upload Android packages artifact
         uses: actions/upload-artifact@v4
         with:
           name: global-messenger-android-release
           path: release-output/*
           if-no-files-found: error
+      - name: Publish Android latest release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: Global Messenger Android Latest
+          body: |
+            ## Global Messenger Android Latest
 
+            Latest Android build from the `main` branch.
+
+            - **Global-Messenger.apk** — direct Android installation.
+            - **Global-Messenger.aab** — Google Play Console upload bundle.
+
+            The install page points to this release, so every successful main-branch Android build refreshes the downloadable APK.
+          files: |
+            release-output/Global-Messenger.apk
+            release-output/Global-Messenger.aab
+          make_latest: false
+          prerelease: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
       - name: Publish versioned GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && env.ANDROID_SIGNING_AVAILABLE == 'true'
         uses: softprops/action-gh-release@v2
