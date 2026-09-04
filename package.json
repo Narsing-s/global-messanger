@@ -2,6 +2,7 @@
   "name": "global-messenger",
   "private": true,
   "version": "0.1.0",
+  "description": "Private, realtime messaging for web and Android with one-to-one and group chats, media sharing, calling, notifications, and user-controlled conversation history.",
   "workspaces": ["apps/web", "apps/server"],
   "scripts": {
     "doctor": "node scripts/doctor.mjs",
