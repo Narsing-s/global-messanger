@@ -1,5 +1,6 @@
 import { decryptMessage, encryptMessage, initE2EE } from './e2ee';
 import { Socket } from 'socket.io-client';
+import './runtime-fixes';
 
 const SocketProto: any = (Socket as any).prototype;
 let installed = false;
@@ -44,7 +45,7 @@ export function installE2EE() {
     proto.emit = function(event: string, ...args: any[]) {
       const payload = args[0];
       if (event === 'message:send' && payload && payload.type === 'text' && typeof payload.body === 'string' && !payload.body.startsWith('gm:e2ee:v1:')) {
-        void encryptMessage(payload.conversationId, payload.body).then(body => originalEmit.call(this, event, { ...payload, body })).catch(() => originalEmit.call(this, event, payload));
+        void encryptMessage(payload.conversationId, payload.body).then(body => originalEmit.call(this, event, { ...payload, body })).catch(() => originalEmit.call(this, event, ...args));
         return this;
       }
       return originalEmit.call(this, event, ...args);
