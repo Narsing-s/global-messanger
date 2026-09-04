@@ -7,6 +7,9 @@ type Identity = { publicKey: JsonWebKey; privateKey: JsonWebKey; version: 1 };
 type KeyBundle = { userId: string; publicKey: JsonWebKey | null };
 const IDENTITY_KEY = 'gm_e2ee_identity_v1';
 let identityPromise: Promise<Identity> | null = null;
+let identityRegistrationPromise: Promise<void> | null = null;
+const conversationKeyCache = new Map<string, Promise<KeyBundle[]>>();
+const derivedKeyCache = new Map<string, Promise<CryptoKey>>();
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -50,24 +53,41 @@ async function authFetch(path: string, options: RequestInit = {}) {
 
 async function registerIdentity() {
   if (!localStorage.getItem('gm_token')) return;
-  const identity = await getIdentity();
-  const response = await authFetch('/api/crypto/identity', { method: 'PUT', body: JSON.stringify({ publicKey: identity.publicKey, version: 1 }) });
-  if (!response.ok) throw new Error('Encryption key registration failed');
+  if (identityRegistrationPromise) return identityRegistrationPromise;
+  identityRegistrationPromise = (async () => {
+    const identity = await getIdentity();
+    const response = await authFetch('/api/crypto/identity', { method: 'PUT', body: JSON.stringify({ publicKey: identity.publicKey, version: 1 }) });
+    if (!response.ok) throw new Error('Encryption key registration failed');
+  })();
+  try { await identityRegistrationPromise; } catch (error) { identityRegistrationPromise = null; throw error; }
 }
 
 async function conversationKeys(conversationId: string): Promise<KeyBundle[]> {
-  const response = await authFetch(`/api/conversations/${encodeURIComponent(conversationId)}/crypto-keys`);
-  if (!response.ok) throw new Error('Encryption keys unavailable');
-  const value = await response.json();
-  return Array.isArray(value?.keys) ? value.keys : [];
+  const cached = conversationKeyCache.get(conversationId);
+  if (cached) return cached;
+  const pending = (async () => {
+    const response = await authFetch(`/api/conversations/${encodeURIComponent(conversationId)}/crypto-keys`);
+    if (!response.ok) throw new Error('Encryption keys unavailable');
+    const value = await response.json();
+    return Array.isArray(value?.keys) ? value.keys : [];
+  })();
+  conversationKeyCache.set(conversationId, pending);
+  try { return await pending; } catch (error) { conversationKeyCache.delete(conversationId); throw error; }
 }
 
 async function deriveAesKey(privateJwk: JsonWebKey, publicJwk: JsonWebKey, conversationId: string) {
-  const privateKey = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
-  const publicKey = await crypto.subtle.importKey('jwk', publicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-  const shared = await crypto.subtle.deriveBits({ name: 'ECDH', public: publicKey }, privateKey, 256);
-  const hkdf = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
-  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: enc.encode(`global-messenger:${conversationId}`), info: enc.encode('gm-e2ee-v1') }, hkdf, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  const cacheKey = `${conversationId}:${JSON.stringify(publicJwk)}`;
+  const cached = derivedKeyCache.get(cacheKey);
+  if (cached) return cached;
+  const pending = (async () => {
+    const privateKey = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+    const publicKey = await crypto.subtle.importKey('jwk', publicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+    const shared = await crypto.subtle.deriveBits({ name: 'ECDH', public: publicKey }, privateKey, 256);
+    const hkdf = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: enc.encode(`global-messenger:${conversationId}`), info: enc.encode('gm-e2ee-v1') }, hkdf, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  })();
+  derivedKeyCache.set(cacheKey, pending);
+  try { return await pending; } catch (error) { derivedKeyCache.delete(cacheKey); throw error; }
 }
 
 export async function encryptMessage(conversationId: string, plaintext: string) {
@@ -78,20 +98,18 @@ export async function encryptMessage(conversationId: string, plaintext: string) 
   const recipients = (await conversationKeys(conversationId)).filter(item => item.publicKey);
   if (!recipients.length) return plaintext;
 
-  // Include the sender as a recipient too. Without this entry, the sender's
-  // own newly-sent message could not be decrypted on the sending device.
   const allRecipients: KeyBundle[] = [
     { userId: me.id, publicKey: identity.publicKey },
     ...recipients.filter(item => item.userId !== me.id)
   ];
 
   const entries: Record<string, { iv: string; ct: string }> = {};
-  for (const recipient of allRecipients) {
+  await Promise.all(allRecipients.map(async recipient => {
     const key = await deriveAesKey(identity.privateKey, recipient.publicKey!, conversationId);
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
     entries[recipient.userId] = { iv: bytesToB64(iv), ct: bytesToB64(ciphertext) };
-  }
+  }));
   return PREFIX + JSON.stringify({ v: 1, senderId: me.id, senderKey: identity.publicKey, entries });
 }
 
