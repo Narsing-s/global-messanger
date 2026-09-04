@@ -29,16 +29,3 @@ jobs:
             https://global-messanger-backend.onrender.com/api/support/requests
           grep -i '^access-control-allow-origin: https://global-messenger-help-centre.onrender.com' /tmp/headers
           grep -i '^access-control-allow-methods:' /tmp/headers
-
-      - name: Check support endpoint responds
-        run: |
-          curl --fail --silent --show-error \
-            -o /tmp/support-response \
-            -w '%{http_code}' \
-            -X POST \
-            -H 'Origin: https://global-messenger-help-centre.onrender.com' \
-            -H 'Content-Type: application/json' \
-            --data '{"name":"Smoke Test","email":"smoke-test@example.com","category":"Other","subject":"Automated smoke test","details":"This is a non-production validation request and should not be persisted."}' \
-            https://global-messanger-backend.onrender.com/api/support/requests || true
-          echo
-          echo 'Support endpoint was contacted. POST persistence is intentionally not asserted by this smoke test.'
