@@ -56,7 +56,7 @@ export function installE2EE() {
     const originalOn = proto.on;
     proto.__gmE2eeOn = originalOn;
     proto.on = function(event: string, listener: (...args: any[]) => any) {
-      if (event !== 'message:new') return originalOn.call(this, event, listener);
+      if (event !== 'message:new' && event !== 'message:updated') return originalOn.call(this, event, listener);
       const wrapped = async (message: any) => {
         if (message?.body?.startsWith?.('gm:e2ee:v1:')) {
           const body = await decryptMessage(String(message.conversationId), message.body);
