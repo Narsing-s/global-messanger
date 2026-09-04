@@ -57,6 +57,26 @@ async function getIdentity(): Promise<Identity> {
   return identityPromise;
 }
 
+function getLocalIdentityCandidates(): Identity[] {
+  const candidates: Identity[] = [];
+  const seen = new Set<string>();
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || (key !== IDENTITY_PREFIX && !key.startsWith(`${IDENTITY_PREFIX}:`))) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const identity = JSON.parse(raw) as Identity;
+      if (!identity?.privateKey || !identity?.publicKey) continue;
+      const fingerprint = JSON.stringify(identity.publicKey);
+      if (seen.has(fingerprint)) continue;
+      seen.add(fingerprint);
+      candidates.push(identity);
+    }
+  } catch {}
+  return candidates;
+}
+
 async function authFetch(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem('gm_token');
   return fetch(`${API}${path}`, {
@@ -95,7 +115,7 @@ async function conversationKeys(conversationId: string): Promise<KeyBundle[]> {
 }
 
 async function deriveAesKey(privateJwk: JsonWebKey, publicJwk: JsonWebKey, conversationId: string) {
-  const cacheKey = `${conversationId}:${JSON.stringify(publicJwk)}`;
+  const cacheKey = `${conversationId}:${JSON.stringify(privateJwk)}:${JSON.stringify(publicJwk)}`;
   const cached = derivedKeyCache.get(cacheKey);
   if (cached) return cached;
   const pending = (async () => {
@@ -134,10 +154,25 @@ export async function decryptMessage(conversationId: string, body: string) {
     const me = JSON.parse(localStorage.getItem('gm_user') || 'null');
     const entry = envelope?.entries?.[me?.id];
     if (envelope?.v !== 1 || !envelope?.senderKey || !entry) return '🔒 Encrypted message (not available on this device)';
-    const identity = await getIdentity();
-    const key = await deriveAesKey(identity.privateKey, envelope.senderKey, conversationId);
-    const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(entry.iv) }, key, b64ToBytes(entry.ct));
-    return dec.decode(plaintext);
+
+    // Normally the current account identity is enough. If the browser has
+    // retained an older account-scoped identity, also try those keys. This
+    // recovers messages created before a local key migration/restore without
+    // weakening the E2EE scheme or sending private keys to the server.
+    const current = await getIdentity();
+    const candidates = [current, ...getLocalIdentityCandidates()];
+    const seen = new Set<string>();
+    for (const identity of candidates) {
+      const fingerprint = JSON.stringify(identity.publicKey);
+      if (seen.has(fingerprint)) continue;
+      seen.add(fingerprint);
+      try {
+        const key = await deriveAesKey(identity.privateKey, envelope.senderKey, conversationId);
+        const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(entry.iv) }, key, b64ToBytes(entry.ct));
+        return dec.decode(plaintext);
+      } catch {}
+    }
+    return '🔒 Encrypted message (not available on this device)';
   } catch (error) {
     console.warn('[Global Messenger E2EE] decrypt failed', error);
     return '🔒 Unable to decrypt this message';
