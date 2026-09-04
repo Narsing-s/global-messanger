@@ -172,12 +172,57 @@ jobs:
           gh release edit android-latest \
             --repo "$GITHUB_REPOSITORY" \
             --title 'Global Messenger Android — Latest' \
-            --notes "## Global Messenger Android — Latest\n\nAutomatically refreshed from the latest successful main-branch Android build.\n\n### Downloads\n- **[Global-Messenger.apk]($APK_URL)** — direct Android installation.\n- **[Global-Messenger.aab]($AAB_URL)** — Google Play Console upload bundle.\n\nThe Install page uses the same stable android-latest APK URL, so it automatically serves this newly published APK without requiring a manual page edit."
+            --notes "## Global Messenger Android — Latest\n\nAutomatically refreshed from the latest successful main-branch Android build.\n\n### Downloads\n- **[Global-Messenger.apk]($APK_URL)** — direct Android installation.\n- **[Global-Messenger.aab]($AAB_URL)** — Google Play Console upload bundle.\n\nA separate immutable versioned Android release is also created for this successful build. The Install page shows both the current APK and the stored Android release history."
 
           gh release view android-latest --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fx 'Global-Messenger.apk'
           gh release view android-latest --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fx 'Global-Messenger.aab'
-          echo 'android-latest APK and AAB refreshed successfully; Install page stable download target is current.'
-      - name: Publish versioned GitHub Release
+          echo 'android-latest APK and AAB refreshed successfully.'
+      - name: Publish versioned Android release
+        if: github.ref == 'refs/heads/main' && env.ANDROID_SIGNING_AVAILABLE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_VERSION=$(node -p "require('./package.json').version")
+          VERSION_TAG="android-v${APP_VERSION}-build-${GITHUB_RUN_NUMBER}"
+          VERSION_TITLE="Global Messenger Android v${APP_VERSION} (Build ${GITHUB_RUN_NUMBER})"
+          RELEASE_API="repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG"
+
+          if ! gh api "$RELEASE_API" >/dev/null 2>&1; then
+            echo "Creating versioned Android release: $VERSION_TAG"
+            gh release create "$VERSION_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$VERSION_TITLE" \
+              --notes "## $VERSION_TITLE\n\nProduction Android APK and AAB generated from main by GitHub Actions.\n\n- **Global-Messenger.apk** — signed Android installation package.\n- **Global-Messenger.aab** — Google Play Console upload bundle.\n\nThis version is retained as part of the Android release history. The Install page always keeps the newest successful build as the current download while listing retained versioned releases below it." \
+              --target "$GITHUB_SHA"
+          fi
+
+          echo "Refreshing assets for $VERSION_TAG..."
+          RELEASE_ID=$(gh api "$RELEASE_API" --jq '.id')
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate --jq '.[] | .id' |
+          while read -r ASSET_ID; do
+            if [[ -n "$ASSET_ID" ]]; then
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID"
+            fi
+          done
+
+          gh release upload "$VERSION_TAG" \
+            release-output/Global-Messenger.apk \
+            release-output/Global-Messenger.aab \
+            --repo "$GITHUB_REPOSITORY"
+
+          APK_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION_TAG/Global-Messenger.apk"
+          AAB_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION_TAG/Global-Messenger.aab"
+          gh release edit "$VERSION_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$VERSION_TITLE" \
+            --notes "## $VERSION_TITLE\n\nProduction Android release generated from main by GitHub Actions.\n\n### Downloads\n- **[Global-Messenger.apk]($APK_URL)** — signed Android installation package.\n- **[Global-Messenger.aab]($AAB_URL)** — Google Play Console upload bundle.\n\nThis version is retained in the Android release history."
+
+          gh release view "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fx 'Global-Messenger.apk'
+          gh release view "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fx 'Global-Messenger.aab'
+          echo "Versioned Android release $VERSION_TAG published successfully."
+      - name: Publish tagged GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && env.ANDROID_SIGNING_AVAILABLE == 'true'
         uses: softprops/action-gh-release@v2
         with:
