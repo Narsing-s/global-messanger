@@ -154,11 +154,6 @@ export async function decryptMessage(conversationId: string, body: string) {
     const me = JSON.parse(localStorage.getItem('gm_user') || 'null');
     const entry = envelope?.entries?.[me?.id];
     if (envelope?.v !== 1 || !envelope?.senderKey || !entry) return '🔒 Encrypted message (not available on this device)';
-
-    // Normally the current account identity is enough. If the browser has
-    // retained an older account-scoped identity, also try those keys. This
-    // recovers messages created before a local key migration/restore without
-    // weakening the E2EE scheme or sending private keys to the server.
     const current = await getIdentity();
     const candidates = [current, ...getLocalIdentityCandidates()];
     const seen = new Set<string>();
@@ -175,7 +170,7 @@ export async function decryptMessage(conversationId: string, body: string) {
     return '🔒 Encrypted message (not available on this device)';
   } catch (error) {
     console.warn('[Global Messenger E2EE] decrypt failed', error);
-    return '🔒 Unable to decrypt this message';
+    return '🔒 Encrypted message (not available on this device)';
   }
 }
 
