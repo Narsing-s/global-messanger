@@ -3,20 +3,14 @@ import { encryptMessage } from './e2ee';
 
 const REACTION_KEY = 'gm_reaction_cache_v1';
 const DELETED_CHAT_KEY = 'gm_deleted_chats_v1';
-const identityKey = 'gm_e2ee_identity_v1';
+const IDENTITY_PREFIX = 'gm_e2ee_identity_v1';
 let installed = false;
 
 function jsonStore(key: string): Record<string, any> {
   try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch { return {}; }
 }
-
-function currentUser() {
-  try { return JSON.parse(localStorage.getItem('gm_user') || 'null'); } catch { return null; }
-}
-
-function activeTitle() {
-  return document.querySelector('.chat-heading b')?.textContent?.trim() || '';
-}
+function currentUser() { try { return JSON.parse(localStorage.getItem('gm_user') || 'null'); } catch { return null; } }
+function activeTitle() { return document.querySelector('.chat-heading b')?.textContent?.trim() || ''; }
 
 async function currentConversation() {
   const me = currentUser();
@@ -45,12 +39,9 @@ function addReactionBadge(messageId: string, emoji: string) {
   }
   badge.textContent = emoji;
 }
-
 function restoreReactionBadges() {
   const cache = jsonStore(REACTION_KEY);
-  Object.entries(cache).forEach(([messageId, emoji]) => {
-    if (typeof emoji === 'string' && emoji) addReactionBadge(messageId, emoji);
-  });
+  Object.entries(cache).forEach(([messageId, emoji]) => { if (typeof emoji === 'string' && emoji) addReactionBadge(messageId, emoji); });
 }
 
 function installApiFixes() {
@@ -103,9 +94,7 @@ function installApiFixes() {
       if (!conversation?.id) return originalEdit(id, body);
       const encryptedBody = await encryptMessage(String(conversation.id), body);
       const response = await fetch(`${API}/api/messages/${encodeURIComponent(id)}`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ body: encryptedBody })
+        method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ body: encryptedBody })
       });
       const contentType = response.headers.get('content-type') || '';
       const data = contentType.includes('application/json') ? await response.json() : {};
@@ -121,9 +110,13 @@ function installLogoutProtection() {
   const originalClear = storage.clear.bind(storage);
   (localStorage as any).__gmClearProtected = true;
   storage.clear = () => {
-    const identity = storage.getItem(identityKey);
+    const identities: Record<string, string> = {};
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
+      if (key?.startsWith(IDENTITY_PREFIX)) identities[key] = storage.getItem(key) || '';
+    }
     originalClear();
-    if (identity) storage.setItem(identityKey, identity);
+    Object.entries(identities).forEach(([key, value]) => value && storage.setItem(key, value));
   };
 }
 
@@ -131,10 +124,7 @@ async function deleteCurrentChat() {
   const conversation = await currentConversation();
   if (!conversation?.id) throw new Error('Open a conversation first.');
   if (!confirm('Delete this chat from your account? Your other chats and messages will not be affected.')) return;
-  const response = await fetch(`${API}/api/conversations/${encodeURIComponent(conversation.id)}`, {
-    method: 'DELETE',
-    headers: authHeaders()
-  });
+  const response = await fetch(`${API}/api/conversations/${encodeURIComponent(conversation.id)}`, { method: 'DELETE', headers: authHeaders() });
   const contentType = response.headers.get('content-type') || '';
   const data = contentType.includes('application/json') ? await response.json() : {};
   if (!response.ok) throw new Error(data?.message || `Unable to delete chat (${response.status})`);
@@ -181,5 +171,4 @@ export function installRuntimeFixes() {
   installChatDeleteAction();
   installReactionRestore();
 }
-
 installRuntimeFixes();
