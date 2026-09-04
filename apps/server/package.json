@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && node scripts/apply-production-security-patch.mjs && node scripts/apply-messenger-features-patch.mjs && tsx watch src/index.ts",
-    "build": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && node scripts/apply-production-security-patch.mjs && node scripts/apply-messenger-features-patch.mjs && tsc",
+    "dev": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && node scripts/apply-production-security-patch.mjs && node scripts/apply-messenger-features-patch.mjs && node scripts/apply-final-production-patch.mjs && tsx watch src/index.ts",
+    "build": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && node scripts/apply-production-security-patch.mjs && node scripts/apply-messenger-features-patch.mjs && node scripts/apply-final-production-patch.mjs && prisma generate && tsc",
     "start": "prisma migrate deploy && node dist/index.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -21,8 +21,10 @@
     "bcryptjs": "^3.0.0",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
+    "@fastify/rate-limit": "^10.2.2",
+    "dotenv": "^16.4.7",
     "firebase-admin": "^13.5.0",
-    "socket.io": "^4.8.1",
+    "fastify": "^5.2.1",
     "zod": "^3.24.0"
   },
   "devDependencies": {
