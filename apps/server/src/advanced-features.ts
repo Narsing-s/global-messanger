@@ -20,4 +20,27 @@ export async function registerAdvancedFeatures(app: FastifyInstance, prisma: Pri
   app.put('/api/conversations/:id/disappearing', auth, async (request, reply) => { const conversationId=String((request.params as any).id); const userId=userIdOf(request); const m=await prisma.conversationMember.findUnique({where:{conversationId_userId:{conversationId,userId}}}); if(!m)return reply.notFound('Chat not found'); const seconds=Number((request.body as any)?.seconds||0); const allowed=[0,86400,604800,2592000]; if(!allowed.includes(seconds))return reply.badRequest('Seconds must be 0, 86400, 604800, or 2592000'); await prisma.conversationMember.update({where:{conversationId_userId:{conversationId,userId}},data:{disappearingSeconds:seconds||null}}); return {ok:true,seconds}; });
   app.post('/api/messages/cleanup-expired', async (request, reply) => { const secret=process.env.CRON_SECRET; if(secret&&String(request.headers['x-cron-secret']||'')!==secret)return reply.code(401).send({message:'Unauthorized'}); const result=await prisma.message.deleteMany({where:{expiresAt:{lte:new Date()}}}); return {ok:true,deleted:result.count}; });
 }
-export function startExpiredMessageCleanup(prisma: PrismaClient) { const interval=Number(process.env.MESSAGE_CLEANUP_INTERVAL_MS||60000); if(interval<10000)return; setInterval(async()=>{try{await prisma.message.deleteMany({where:{expiresAt:{lte:new Date()}}});}catch(error){console.error('[Global Messenger] expired-message cleanup failed',error)}},interval).unref(); }
+
+// Normal user messages never expire. This routine only archives conversations that
+// have had no activity for 60 days; it does not delete messages or chat data.
+export function startExpiredMessageCleanup(prisma: PrismaClient) {
+  const interval = 24 * 60 * 60 * 1000;
+  const archiveInactiveChats = async () => {
+    const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+    try {
+      const stale = await prisma.conversation.findMany({
+        where: { updatedAt: { lt: cutoff } },
+        select: { id: true }
+      });
+      if (!stale.length) return;
+      await prisma.conversationMember.updateMany({
+        where: { conversationId: { in: stale.map(c => c.id) }, archivedAt: null },
+        data: { archivedAt: new Date() }
+      });
+    } catch (error) {
+      console.error('[Global Messenger] 60-day inactive-chat archive failed', error);
+    }
+  };
+  void archiveInactiveChats();
+  setInterval(() => void archiveInactiveChats(), interval).unref();
+}
