@@ -126,7 +126,7 @@ async function deleteCurrentChat() {
   const conversation = await currentConversation();
   if (!conversation?.id) throw new Error('Open a conversation first.');
   if (!confirm('Delete this chat from your account? Your other chats and messages will not be affected.')) return;
-  const response = await fetch(`${API}/api/conversations/${encodeURIComponent(conversation.id)}`, { method: 'DELETE', headers: authHeaders() });
+  const response = await fetch(`${API}/api/conversations/${encodeURIComponent(conversation.id)}/permanent`, { method: 'DELETE', headers: authHeaders() });
   const contentType = response.headers.get('content-type') || '';
   const data = contentType.includes('application/json') ? await response.json() : {};
   if (!response.ok) throw new Error(data?.message || `Unable to delete chat (${response.status})`);
