@@ -1,6 +1,6 @@
 ---
 name: Global Messenger Render Deployment
- description: Diagnoses Render frontend/backend build, routing, cache, CORS, service-worker, and production configuration problems.
+description: Diagnoses Render frontend/backend build, routing, cache, CORS, service-worker, and production configuration problems.
 tools:
   - read
   - edit
