@@ -1,6 +1,7 @@
 import { decryptMessage } from './e2ee';
 
 const PREFIX = 'gm:e2ee:v1:';
+const LEGACY_PREFIX = 'gme2ee:v1:';
 const API = ((window as any).__GM_CONFIG__?.API_URL || (import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.DEV && window.location.origin || 'https://global-messanger-backend.onrender.com');
 const cache = new Map<string, Promise<string>>();
 const keyCache = new Map<string, Promise<CryptoKey>>();
@@ -64,14 +65,11 @@ async function keys(conversationId: string): Promise<KeyBundle[]> {
 }
 
 async function legacyDecrypt(conversationId: string, body: string) {
-  const envelope = JSON.parse(body.slice(PREFIX.length));
+  const prefix = body.startsWith(LEGACY_PREFIX) ? LEGACY_PREFIX : PREFIX;
+  const envelope = JSON.parse(body.slice(prefix.length));
   const me = JSON.parse(localStorage.getItem('gm_user') || 'null');
   const entry = envelope?.entries?.[me?.id];
   if (envelope?.v !== 1 || !envelope?.senderKey || !entry?.iv || !entry?.ct) return '🔒 Encrypted message (not available on this device)';
-
-  // Try every identity still retained locally. This is important when a
-  // browser/account was migrated to a new key while old private keys remain
-  // locally available. No private key is ever sent to the server.
   for (const identity of getIdentityCandidates()) {
     try {
       const key = await derive(identity.privateKey, envelope.senderKey, conversationId);
@@ -79,9 +77,6 @@ async function legacyDecrypt(conversationId: string, body: string) {
       return dec.decode(plain);
     } catch {}
   }
-
-  // Keep the legacy recipient-id compatibility path read-only. It can help
-  // with envelopes created by older client versions without changing data.
   try {
     const recipients = await keys(conversationId);
     for (const recipient of recipients) {
@@ -100,12 +95,13 @@ async function legacyDecrypt(conversationId: string, body: string) {
 }
 
 export async function decryptMessageCompat(conversationId: string, body: string) {
-  if (typeof body !== 'string' || !body.startsWith(PREFIX)) return body;
+  if (typeof body !== 'string' || (!body.startsWith(PREFIX) && !body.startsWith(LEGACY_PREFIX))) return body;
+  const normalized = body.startsWith(LEGACY_PREFIX) ? PREFIX + body.slice(LEGACY_PREFIX.length) : body;
   const key = `${conversationId}:${body}`;
   const hit = cache.get(key); if (hit) return hit;
   const pending = (async () => {
     try {
-      const normal = await decryptMessage(conversationId, body);
+      const normal = await decryptMessage(conversationId, normalized);
       if (!normal.startsWith('🔒 Encrypted message (not available') && !normal.startsWith('🔒 Unable to decrypt')) return normal;
     } catch {}
     try { return await legacyDecrypt(conversationId, body); }
@@ -113,8 +109,5 @@ export async function decryptMessageCompat(conversationId: string, body: string)
   })();
   cache.set(key,pending);
   try { return await pending; }
-  catch {
-    cache.delete(key);
-    return '🔒 Encrypted message (not available on this device)';
-  }
+  catch { cache.delete(key); return '🔒 Encrypted message (not available on this device)'; }
 }
