@@ -1,0 +1,6 @@
+{
+  "version": "0.1.0",
+  "releaseDate": "2026-09-04",
+  "apkSize": "Published with the current Android release",
+  "notes": "Cross-platform installation page enabled. Future release automation can replace this metadata on every tagged production release."
+}
