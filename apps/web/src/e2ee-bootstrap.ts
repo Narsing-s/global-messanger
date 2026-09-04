@@ -10,34 +10,6 @@ export function installE2EE() {
   installed = true;
   void initE2EE();
 
-  if (!(window as any).__gmE2eeFetch) {
-    const originalFetch = window.fetch.bind(window);
-    (window as any).__gmE2eeFetch = originalFetch;
-    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const response = await originalFetch(input, init);
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-      if (!url.includes('/api/conversations')) return response;
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) return response;
-      try {
-        const data = await response.clone().json();
-        const decryptList = async (list: any[]) => Promise.all(list.map(async message => {
-          if (!message?.body?.startsWith?.('gm:e2ee:v1:')) return message;
-          return { ...message, body: await decryptMessage(String(message.conversationId), message.body) };
-        }));
-        if (Array.isArray(data)) {
-          const messages = await decryptList(data);
-          if (messages.some((m, i) => m !== data[i])) return new Response(JSON.stringify(messages), { status: response.status, statusText: response.statusText, headers: response.headers });
-        }
-        if (Array.isArray(data?.messages)) {
-          const messages = await decryptList(data.messages);
-          if (messages.some((m, i) => m !== data.messages[i])) return new Response(JSON.stringify({ ...data, messages }), { status: response.status, statusText: response.statusText, headers: response.headers });
-        }
-      } catch {}
-      return response;
-    };
-  }
-
   const proto: any = SocketProto;
   if (!proto.__gmE2eeEmit) {
     const originalEmit = proto.emit;
