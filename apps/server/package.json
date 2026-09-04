@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && node scripts/apply-production-security-patch.mjs && tsx watch src/index.ts",
-    "build": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && node scripts/apply-production-security-patch.mjs && tsc",
+    "dev": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && node scripts/apply-production-security-patch.mjs && node scripts/apply-messenger-features-patch.mjs && tsx watch src/index.ts",
+    "build": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && node scripts/apply-production-security-patch.mjs && node scripts/apply-messenger-features-patch.mjs && tsc",
     "start": "prisma migrate deploy && node dist/index.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
