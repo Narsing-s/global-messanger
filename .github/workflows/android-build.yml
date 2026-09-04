@@ -91,9 +91,9 @@ jobs:
           text = p.read_text()
           if 'keystore.properties' not in text:
               if p.suffix == '.kts':
-                  block = '''\nimport java.util.Properties\nval signingProps = Properties()\nval signingFile = rootProject.file("keystore.properties")\nif (signingFile.exists()) signingFile.inputStream().use { signingProps.load(it) }\nandroid {\n    signingConfigs {\n        create("release") {\n            if (signingFile.exists()) {\n                storeFile = file(signingProps["storeFile"] as String)\n                storePassword = signingProps["storePassword"] as String\n                keyAlias = signingProps["keyAlias"] as String\n                keyPassword = signingProps["keyPassword"] as String\n            }\n        }\n    }\n    buildTypes { getByName("release") { signingConfig = signingConfigs.getByName("release") } }\n}\n'''
+                  block = '''\nimport java.util.Properties\nval signingProps = Properties()\nval signingFile = rootProject.file("keystore.properties")\nif (signingFile.exists()) signingFile.inputStream().use { signingProps.load(it) }\nandroid {\n    signingConfigs {\n        create("release") {\n            if (signingFile.exists()) {\n                storeFile = rootProject.file(signingProps["storeFile"] as String)\n                storePassword = signingProps["storePassword"] as String\n                keyAlias = signingProps["keyAlias"] as String\n                keyPassword = signingProps["keyPassword"] as String\n            }\n        }\n    }\n    buildTypes { getByName("release") { signingConfig = signingConfigs.getByName("release") } }\n}\n'''
               else:
-                  block = '''\nimport java.util.Properties\ndef signingProps = new Properties()\ndef signingFile = rootProject.file("keystore.properties")\nif (signingFile.exists()) signingFile.withInputStream { signingProps.load(it) }\nandroid {\n    signingConfigs {\n        release {\n            if (signingFile.exists()) {\n                storeFile file(signingProps['storeFile'])\n                storePassword signingProps['storePassword']\n                keyAlias signingProps['keyAlias']\n                keyPassword signingProps['keyPassword']\n            }\n        }\n    }\n    buildTypes { release { signingConfig signingConfigs.release } }\n}\n'''
+                  block = '''\nimport java.util.Properties\ndef signingProps = new Properties()\ndef signingFile = rootProject.file("keystore.properties")\nif (signingFile.exists()) signingFile.withInputStream { signingProps.load(it) }\nandroid {\n    signingConfigs {\n        release {\n            if (signingFile.exists()) {\n                storeFile rootProject.file(signingProps['storeFile'])\n                storePassword signingProps['storePassword']\n                keyAlias signingProps['keyAlias']\n                keyPassword signingProps['keyPassword']\n            }\n        }\n    }\n    buildTypes { release { signingConfig signingConfigs.release } }\n}\n'''
               p.write_text(text + block)
           PY
           else
@@ -142,11 +142,13 @@ jobs:
           echo "Refreshing android-latest release $RELEASE_ID..."
 
           for asset in Global-Messenger.apk global-messenger.apk Global-Messenger.aab global-messenger.aab; do
-            ASSET_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate --jq ".[] | select(.name == \"$asset\") | .id" | head -n 1 || true)
-            if [[ -n "$ASSET_ID" ]]; then
-              echo "Deleting existing asset: $asset ($ASSET_ID)"
-              gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID"
-            fi
+            gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate --jq ".[] | select(.name == \"$asset\") | .id" |
+            while read -r ASSET_ID; do
+              if [[ -n "$ASSET_ID" ]]; then
+                echo "Deleting existing asset: $asset ($ASSET_ID)"
+                gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID"
+              fi
+            done
           done
 
           echo 'Uploading fresh APK...'
@@ -179,5 +181,3 @@ jobs:
           make_latest: true
           prerelease: false
           fail_on_unmatched_files: true
-
-# Trigger a fresh Android build after signing secrets are configured.
