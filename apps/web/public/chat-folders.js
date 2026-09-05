@@ -57,7 +57,6 @@
 
   const ensureMenuActions = () => {
     const card = document.querySelector('#gm-modern-menu .gm-wa-card'); if (!card) return;
-    const archived = read('gm_chat_archived', []);
     let pin = card.querySelector('[data-folder-action="pin"]');
     let archive = card.querySelector('[data-folder-action="archive"]');
     let del = card.querySelector('[data-folder-action="delete-chat"]');
@@ -70,10 +69,8 @@
     }
     if (!archive) {
       archive = document.createElement('button'); archive.type = 'button'; archive.className = 'gm-wa-item'; archive.dataset.folderAction = 'archive';
-      archive.innerHTML = `<span class="gm-wa-icon">▱</span><span class="gm-wa-label">${archived.length ? 'Archive chat' : 'Archive chat'}</span>`;
+      archive.innerHTML = '<span class="gm-wa-icon">▱</span><span class="gm-wa-label">Archive chat</span>';
       card.appendChild(archive);
-    } else {
-      const label = archive.querySelector('.gm-wa-label'); if (label) label.textContent = 'Archive chat';
     }
     if (!del) {
       del = document.createElement('button'); del.type = 'button'; del.className = 'gm-wa-item danger'; del.dataset.folderAction = 'delete-chat';
@@ -151,7 +148,7 @@
   function createFolderBar() {
     const list = document.querySelector('.chat-list'); if (!list || document.getElementById('gm-chat-folders')) return;
     const bar = document.createElement('div'); bar.id = 'gm-chat-folders';
-    bar.innerHTML = '<button type="button" data-gm-folder="all">Chats</button><button type="button" data-gm-folder="favorites">★ Favorites</button><button type="button" data-gm-folder="archived">▱ Archive</button>';
+    bar.innerHTML = '<button type="button" data-gm-folder="favorites">★ Favorites</button><button type="button" data-gm-folder="archived">▱ Archive</button>';
     bar.addEventListener('click', e => { const b = e.target instanceof Element ? e.target.closest('[data-gm-folder]') : null; if (!b) return; folder = b.dataset.gmFolder || 'all'; refresh(); });
     list.parentElement?.insertBefore(bar, list);
     if (!document.getElementById('gm-chat-folders-style')) { const style = document.createElement('style'); style.id = 'gm-chat-folders-style'; style.textContent = '#gm-chat-folders{display:flex;gap:6px;padding:8px 10px;overflow:auto;flex:0 0 auto}#gm-chat-folders button{border:1px solid rgba(127,140,170,.25);background:transparent;color:inherit;border-radius:999px;padding:6px 10px;font-size:11px;cursor:pointer;white-space:nowrap}#gm-chat-folders button.active{background:rgba(83,109,254,.14);border-color:rgba(83,109,254,.35)}'; document.head.appendChild(style); }
