@@ -25,8 +25,8 @@ jobs:
           p = Path('apps/server/src/index.ts')
           s = p.read_text()
           s = s.replace("'http://localhost:5173,https://web.narsingbeesetti006.workers.dev'", "'http://localhost:5173,https://web.narsingbeesetti006.workers.dev,https://global-messenger-help-centre.onrender.com'")
-          old = "  const isNativeApp =\n    /^capacitor:\\/\\/localhost$/.test(origin) ||\n    /^ionic:\\/\\/localhost$/.test(origin);\n\n  return configured.includes(origin) || isLocalDev || isNativeApp;"
-          new = "  const isNativeApp =\n    /^capacitor:\\/\\/localhost$/.test(origin) ||\n    /^ionic:\\/\\/localhost$/.test(origin);\n\n  const isHelpCentre = origin === 'https://global-messenger-help-centre.onrender.com';\n\n  return configured.includes(origin) || isLocalDev || isNativeApp || isHelpCentre;"
+          old = "  const isNativeApp =\n    /^capacitor:\\/\\/localhost$/.test(origin) ||\n    /^ionic:\\/localhost$/.test(origin);\n\n  return configured.includes(origin) || isLocalDev || isNativeApp;"
+          new = "  const isNativeApp =\n    /^capacitor:\\/\\/localhost$/.test(origin) ||\n    /^ionic:\\/localhost$/.test(origin);\n\n  const isHelpCentre = origin === 'https://global-messenger-help-centre.onrender.com';\n\n  return configured.includes(origin) || isLocalDev || isNativeApp || isHelpCentre;"
           if old not in s:
               raise SystemExit('Expected CORS block was not found')
           p.write_text(s.replace(old, new))
@@ -39,3 +39,6 @@ jobs:
           git add apps/server/src/index.ts
           git commit -m 'Repair server index from known-good commit' || exit 0
           git push
+
+      - name: Repair workflow marker
+        run: echo 'one-time repair trigger'
