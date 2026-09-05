@@ -1,158 +1,25 @@
 declare global {
-  interface Window {
-    __GM_CONFIG__?: { API_URL?: string };
-  }
+  interface Window { __GM_CONFIG__?: { API_URL?: string }; }
 }
-
+const PRODUCTION_API = 'https://global-messanger-backend.onrender.com';
 const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
-const API = configuredApi || (import.meta.env.DEV
-  ? window.location.origin
-  : 'https://global-messanger-backend.onrender.com');
+const isLoopbackApi = (value?: string) => Boolean(value && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(value));
+const API = configuredApi && (!isLoopbackApi(configuredApi) || import.meta.env.DEV) ? configuredApi : (import.meta.env.DEV ? window.location.origin : PRODUCTION_API);
 
-type ConversationResponse = {
-  id: string;
-  isGroup: boolean;
-  title: string | null;
-  members: Array<{ user: any }>;
-  messages: any[];
-  [key: string]: any;
-};
-
-function normalizeConversation(value: any): ConversationResponse {
-  const conversation = value && typeof value === 'object' ? value : {};
-  return {
-    ...conversation,
-    id: String(conversation.id ?? ''),
-    isGroup: Boolean(conversation.isGroup),
-    title: conversation.title ?? null,
-    members: Array.isArray(conversation.members)
-      ? conversation.members.filter((member: any) => member?.user?.id)
-      : [],
-    messages: Array.isArray(conversation.messages)
-      ? conversation.messages.filter(Boolean)
-      : []
-  };
-}
-
-function directPairKey(conversation: ConversationResponse): string | null {
-  if (conversation.isGroup || conversation.members.length !== 2) return null;
-  return conversation.members.map(member => String(member.user.id)).sort().join(':');
-}
-
-function normalizeConversations(value: any): ConversationResponse[] {
-  const list = Array.isArray(value) ? value : value?.conversations;
-  if (!Array.isArray(list)) return [];
-  const seenPairs = new Set<string>();
-  const seenIds = new Set<string>();
-  const result: ConversationResponse[] = [];
-  for (const raw of list) {
-    const conversation = normalizeConversation(raw);
-    if (!conversation.id || seenIds.has(conversation.id)) continue;
-    seenIds.add(conversation.id);
-    const pair = directPairKey(conversation);
-    if (pair) {
-      if (seenPairs.has(pair)) continue;
-      seenPairs.add(pair);
-    }
-    result.push(conversation);
-  }
-  return result;
-}
-
-function normalizeMessages(value: any, conversationId: string): any[] {
-  const list = Array.isArray(value) ? value : value?.messages;
-  if (!Array.isArray(list)) return [];
-  return list
-    .filter((message: any) => message && typeof message === 'object')
-    .map((message: any) => {
-      const receipts = Array.isArray(message.receipts) ? message.receipts : [];
-      const delivered = receipts.some((receipt: any) => Boolean(receipt?.deliveredAt));
-      const read = receipts.some((receipt: any) => Boolean(receipt?.readAt));
-      return {
-        ...message,
-        id: String(message.id ?? `${conversationId}-${message.createdAt ?? Math.random()}`),
-        conversationId: String(message.conversationId ?? conversationId),
-        senderId: String(message.senderId ?? ''),
-        body: typeof message.body === 'string' ? message.body : '',
-        createdAt: message.createdAt ?? new Date().toISOString(),
-        __delivered: delivered || Boolean(message.__delivered),
-        __read: read || Boolean(message.__read)
-      };
-    })
-    .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-}
-
-async function request(path: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('gm_token');
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 15000);
-  try {
-    const res = await fetch(`${API}${path}`, {
-      ...options,
-      signal: options.signal || controller.signal,
-      headers: {
-        ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      }
-    });
-    const contentType = res.headers.get('content-type') || '';
-    const text = await res.text();
-    let data: any = {};
-    if (text && contentType.includes('application/json')) {
-      try { data = JSON.parse(text); } catch { data = { message: text }; }
-    } else if (text) data = { message: text };
-    if (!res.ok) {
-      if (res.status === 401) {
-        localStorage.removeItem('gm_token');
-        localStorage.removeItem('gm_user');
-        window.dispatchEvent(new CustomEvent('gm:auth-expired'));
-        throw new Error('Your session has expired. Please sign in again.');
-      }
-      throw new Error(data?.message || `Request failed (${res.status})`);
-    }
-    return data;
-  } catch (error: any) {
-    if (error?.name === 'AbortError') throw new Error('Request timed out. Please check your connection.');
-    throw error;
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-
+type ConversationResponse = { id: string; isGroup: boolean; title: string | null; members: Array<{ user: any }>; messages: any[]; [key: string]: any };
+function normalizeConversation(value: any): ConversationResponse { const conversation = value && typeof value === 'object' ? value : {}; return { ...conversation, id: String(conversation.id ?? ''), isGroup: Boolean(conversation.isGroup), title: conversation.title ?? null, members: Array.isArray(conversation.members) ? conversation.members.filter((member: any) => member?.user?.id) : [], messages: Array.isArray(conversation.messages) ? conversation.messages.filter(Boolean) : [] }; }
+function directPairKey(conversation: ConversationResponse): string | null { if (conversation.isGroup || conversation.members.length !== 2) return null; return conversation.members.map(member => String(member.user.id)).sort().join(':'); }
+function normalizeConversations(value: any): ConversationResponse[] { const list = Array.isArray(value) ? value : value?.conversations; if (!Array.isArray(list)) return []; const seenPairs = new Set<string>(); const seenIds = new Set<string>(); const result: ConversationResponse[] = []; for (const raw of list) { const conversation = normalizeConversation(raw); if (!conversation.id || seenIds.has(conversation.id)) continue; seenIds.add(conversation.id); const pair = directPairKey(conversation); if (pair) { if (seenPairs.has(pair)) continue; seenPairs.add(pair); } result.push(conversation); } return result; }
+function normalizeMessages(value: any, conversationId: string): any[] { const list = Array.isArray(value) ? value : value?.messages; if (!Array.isArray(list)) return []; return list.filter((message: any) => message && typeof message === 'object').map((message: any) => { const receipts = Array.isArray(message.receipts) ? message.receipts : []; const delivered = receipts.some((receipt: any) => Boolean(receipt?.deliveredAt)); const read = receipts.some((receipt: any) => Boolean(receipt?.readAt)); return { ...message, id: String(message.id ?? `${conversationId}-${message.createdAt ?? Math.random()}`), conversationId: String(message.conversationId ?? conversationId), senderId: String(message.senderId ?? ''), body: typeof message.body === 'string' ? message.body : '', createdAt: message.createdAt ?? new Date().toISOString(), __delivered: delivered || Boolean(message.__delivered), __read: read || Boolean(message.__read) }; }).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); }
+async function request(path: string, options: RequestInit = {}) { const token = localStorage.getItem('gm_token'); const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), 15000); try { const res = await fetch(`${API}${path}`, { ...options, signal: options.signal || controller.signal, headers: { ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: `Bearer ${token}` } : {}) } }); const contentType = res.headers.get('content-type') || ''; const text = await res.text(); let data: any = {}; if (text && contentType.includes('application/json')) { try { data = JSON.parse(text); } catch { data = { message: text }; } } else if (text) data = { message: text }; if (!res.ok) { if (res.status === 401) { localStorage.removeItem('gm_token'); localStorage.removeItem('gm_user'); window.dispatchEvent(new CustomEvent('gm:auth-expired')); throw new Error('Your session has expired. Please sign in again.'); } throw new Error(data?.message || `Request failed (${res.status})`); } return data; } catch (error: any) { if (error?.name === 'AbortError') throw new Error('Request timed out. Please check your connection.'); throw error; } finally { window.clearTimeout(timeout); } }
 const directRequests = new Map<string, Promise<ConversationResponse>>();
-
 export const api = {
-  searchUsers: async (q: string) => {
-    const value = await request(`/api/users/search?q=${encodeURIComponent(q)}`);
-    return Array.isArray(value) ? value.filter(Boolean) : [];
-  },
+  searchUsers: async (q: string) => { const value = await request(`/api/users/search?q=${encodeURIComponent(q)}`); return Array.isArray(value) ? value.filter(Boolean) : []; },
   conversations: async () => normalizeConversations(await request('/api/conversations')),
-  direct: async (userId: string) => {
-    const key = String(userId);
-    const pending = directRequests.get(key);
-    if (pending) return pending;
-    const promise = (async () => {
-      const conversation = normalizeConversation(await request('/api/conversations/direct', {
-        method: 'POST',
-        body: JSON.stringify({ userId })
-      }));
-      if (conversation.id) {
-        try { await request(`/api/conversations/${encodeURIComponent(conversation.id)}/restore`, { method: 'POST' }); } catch {}
-      }
-      return conversation;
-    })();
-    directRequests.set(key, promise);
-    try { return await promise; } finally { if (directRequests.get(key) === promise) directRequests.delete(key); }
-  },
-  group: async (title: string, userIds: string[]) => normalizeConversation(await request('/api/conversations/group', {
-    method: 'POST', body: JSON.stringify({ title, userIds })
-  })),
-  messages: async (id: string, limit = 100) => normalizeMessages(
-    await request(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`), id
-  ),
-  syncMessages: async (id: string, after?: string, limit = 100) => ({
-    messages: normalizeMessages(await request(`/api/conversations/${encodeURIComponent(id)}/messages/sync?limit=${limit}${after ? `&after=${encodeURIComponent(after)}` : ''}`), id)
-  }),
+  direct: async (userId: string) => { const key = String(userId); const pending = directRequests.get(key); if (pending) return pending; const promise = (async () => { const conversation = normalizeConversation(await request('/api/conversations/direct', { method: 'POST', body: JSON.stringify({ userId }) })); if (conversation.id) { try { await request(`/api/conversations/${encodeURIComponent(conversation.id)}/restore`, { method: 'POST' }); } catch {} } return conversation; })(); directRequests.set(key, promise); try { return await promise; } finally { if (directRequests.get(key) === promise) directRequests.delete(key); } },
+  group: async (title: string, userIds: string[]) => normalizeConversation(await request('/api/conversations/group', { method: 'POST', body: JSON.stringify({ title, userIds }) })),
+  messages: async (id: string, limit = 100) => normalizeMessages(await request(`/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`), id),
+  syncMessages: async (id: string, after?: string, limit = 100) => ({ messages: normalizeMessages(await request(`/api/conversations/${encodeURIComponent(id)}/messages/sync?limit=${limit}${after ? `&after=${encodeURIComponent(after)}` : ''}`), id) }),
   unread: async () => request('/api/conversations/unread'),
   read: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }),
   chatInfo: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/info`),
@@ -168,11 +35,7 @@ export const api = {
   forwardMessage: (messageId: string, conversationId: string) => request('/api/messages/forward', { method: 'POST', body: JSON.stringify({ messageId, conversationId }) }),
   editMessage: (id: string, body: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ body }) }),
   deleteMessage: (id: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  upload: async (file: File) => {
-    const f = new FormData(); f.append('file', file);
-    const result = await request('/api/uploads', { method: 'POST', body: f });
-    return { ...result, url: result?.url && /^https?:\/\//i.test(result.url) ? result.url : `${API}${result?.url || ''}` };
-  },
+  upload: async (file: File) => { const f = new FormData(); f.append('file', file); const result = await request('/api/uploads', { method: 'POST', body: f }); return { ...result, url: result?.url && /^https?:\/\//i.test(result.url) ? result.url : `${API}${result?.url || ''}` }; },
   react: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }),
   unreact: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'DELETE', body: JSON.stringify({ emoji }) }),
   bookmark: (id: string) => request(`/api/messages/${encodeURIComponent(id)}/bookmark`, { method: 'POST' }),
@@ -180,5 +43,4 @@ export const api = {
   registerDevice: (token: string, platform: string) => request('/api/devices', { method: 'POST', body: JSON.stringify({ token, platform }) }),
   aiAssist: (prompt: string, context?: string) => request('/api/ai/assist', { method: 'POST', body: JSON.stringify({ prompt, context }) })
 };
-
 export { API };
