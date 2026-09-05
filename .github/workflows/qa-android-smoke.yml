@@ -1,0 +1,80 @@
+name: QA Android Smoke
+
+on:
+  push:
+    branches:
+      - 'qa/**'
+  workflow_dispatch:
+
+jobs:
+  android-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build web app
+        run: npm run build -w apps/web
+      - name: Add Android platform
+        working-directory: apps/web
+        run: npx cap add android
+      - name: Sync Capacitor
+        working-directory: apps/web
+        run: npx cap sync android
+      - name: Configure Android permissions
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('apps/web/android/app/src/main/AndroidManifest.xml')
+          text = p.read_text()
+          for perm in ['android.permission.INTERNET','android.permission.CAMERA','android.permission.RECORD_AUDIO','android.permission.POST_NOTIFICATIONS']:
+              line = f'    <uses-permission android:name="{perm}" />\n'
+              if perm not in text:
+                  text = text.replace('<application', line + '    <application', 1)
+          p.write_text(text)
+          PY
+      - name: Build debug APK
+        working-directory: apps/web/android
+        run: ./gradlew assembleDebug --stacktrace
+      - name: Run installed app in Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -no-audio -no-boot-anim
+          disable-animations: true
+          script: |
+            adb install -r apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -n com.globalmessenger.app/.MainActivity
+            sleep 8
+            adb shell dumpsys activity activities | grep -q 'com.globalmessenger.app'
+            adb shell pidof com.globalmessenger.app
+            adb logcat -d -t 400 > /tmp/global-messenger-logcat.txt
+            if grep -E 'FATAL EXCEPTION|AndroidRuntime.*FATAL|Process: com.globalmessenger.app' /tmp/global-messenger-logcat.txt; then
+              echo 'Fatal Android runtime error detected.'
+              exit 1
+            fi
+            echo 'PASS: debug APK installed, MainActivity launched, process remained alive, no fatal runtime exception.'
+      - name: Upload Android smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: global-messenger-android-smoke
+          path: |
+            apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+            /tmp/global-messenger-logcat.txt
+          if-no-files-found: ignore
