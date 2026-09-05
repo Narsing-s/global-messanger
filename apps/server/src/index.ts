@@ -10,6 +10,7 @@ import fastifyStatic from '@fastify/static';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { registerAdvancedRoutes } from './advanced.js';
+import { sendPushForMessage } from './push-notifications.js';
 import { Server } from 'socket.io';
 import { z } from 'zod';
 import path from 'node:path';
@@ -35,7 +36,8 @@ const WEB_ORIGIN =
   'http://localhost:5173,https://web.narsingbeesetti006.workers.dev';
 
 const isAllowedOrigin = (origin?: string | null) => {
-  if (!origin) return true;
+  // Allow requests without an Origin header and native Capacitor/Ionic apps.
+  if (!origin || origin === 'null') return true;
 
   const configured = WEB_ORIGIN
     .split(',')
@@ -43,10 +45,14 @@ const isAllowedOrigin = (origin?: string | null) => {
     .filter(Boolean);
 
   const isLocalDev =
-    /^https?:\/\/localhost:\d+$/.test(origin) ||
-    /^https?:\/\/127\.0\.0\.1:\d+$/.test(origin);
+    /^https?:\/\/localhost(?::\d+)?$/.test(origin) ||
+    /^https?:\/\/127\.0\.0\.1(?::\d+)?$/.test(origin);
 
-  return configured.includes(origin) || isLocalDev;
+  const isNativeApp =
+    /^capacitor:\/\/localhost$/.test(origin) ||
+    /^ionic:\/\/localhost$/.test(origin);
+
+  return configured.includes(origin) || isLocalDev || isNativeApp;
 };
 
 const UPLOAD_DIR = path.resolve(
@@ -393,6 +399,37 @@ app.get(
 );
 
 /* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/* global-messenger-e2ee-v1-routes                                           */
+/* -------------------------------------------------------------------------- */
+
+app.put('/api/crypto/identity', { preHandler: [app.authenticate] }, async (request, reply) => {
+  const { id } = authUser(request);
+  const parsed = z.object({ publicKey: z.record(z.string(), z.any()), version: z.number().int().min(1).max(1).default(1) }).safeParse(request.body);
+  if (!parsed.success) return reply.badRequest('Invalid encryption public key');
+  const encoded = JSON.stringify(parsed.data.publicKey);
+  if (encoded.length > 4096) return reply.badRequest('Encryption public key is too large');
+  await prisma.user.update({ where: { id }, data: { e2eePublicKey: encoded, e2eeKeyVersion: parsed.data.version } });
+  return { ok: true, version: parsed.data.version };
+});
+
+app.get('/api/crypto/identity', { preHandler: [app.authenticate] }, async request => {
+  const { id } = authUser(request);
+  const user = await prisma.user.findUnique({ where: { id }, select: { id: true, e2eePublicKey: true, e2eeKeyVersion: true } });
+  return { userId: id, publicKey: user?.e2eePublicKey ? JSON.parse(user.e2eePublicKey) : null, version: user?.e2eeKeyVersion ?? 1 };
+});
+
+app.get('/api/conversations/:id/crypto-keys', { preHandler: [app.authenticate] }, async (request, reply) => {
+  const { id: userId } = authUser(request);
+  const conversationId = String((request.params as any).id);
+  if (!await member(userId, conversationId)) return reply.forbidden('Not a conversation member');
+  const members = await prisma.conversationMember.findMany({
+    where: { conversationId },
+    select: { userId: true, user: { select: { e2eePublicKey: true } } }
+  });
+  return { conversationId, keys: members.map(item => ({ userId: item.userId, publicKey: item.user.e2eePublicKey ? JSON.parse(item.user.e2eePublicKey) : null })) };
+});
+
 /* Conversations                                                              */
 /* -------------------------------------------------------------------------- */
 
@@ -1463,7 +1500,25 @@ io.on(
             return;
           }
 
+          /* ---------------------- Blocked-contact delivery ---------------- */
+          // A blocker must not receive messages from the blocked sender. The
+          // sender still receives the persisted message in their own room.
+          const conversationMembers = await prisma.conversationMember.findMany({
+            where: { conversationId: data.conversationId },
+            select: { userId: true }
+          });
+          const recipientIds = conversationMembers.map(member => member.userId).filter(id => id !== userId);
+          const blockedRecipients = recipientIds.length
+            ? await prisma.userBlock.findMany({
+                where: { userId: { in: recipientIds }, blockedUserId: userId },
+                select: { userId: true }
+              })
+            : [];
+          const blockedRecipientIds = new Set(blockedRecipients.map(row => row.userId));
+
           /* -------------------------- Persist ----------------------------- */
+          const disappearing = isMember.disappearingSeconds;
+          const expiresAt = disappearing && disappearing > 0 ? new Date(Date.now() + disappearing * 1000) : null;
 
           const message =
             await prisma.message.create({
@@ -1530,11 +1585,35 @@ io.on(
               'message:new',
               {
                 ...message,
-
-                clientId:
-                  data.clientId
+                clientId: data.clientId
               }
             );
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+
+          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
 
           /* ---------------------- Delivery Ack ---------------------------- */
 
