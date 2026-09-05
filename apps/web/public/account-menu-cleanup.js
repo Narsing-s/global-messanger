@@ -4,8 +4,9 @@
     if (!profile) return;
     profile.querySelectorAll('button.icon-btn').forEach(button => {
       const title = (button.getAttribute('title') || '').toLowerCase();
+      const aria = (button.getAttribute('aria-label') || '').toLowerCase();
       const text = (button.textContent || '').toLowerCase();
-      if (title.includes('sign out') || title.includes('logout') || text.includes('sign out') || text.includes('logout') || button.querySelector('svg')) button.remove();
+      if (title.includes('sign out') || title.includes('logout') || aria.includes('sign out') || aria.includes('logout') || text.includes('sign out') || text.includes('logout')) button.remove();
     });
   };
 
@@ -17,8 +18,8 @@
 
     card.querySelectorAll('.gm-wa-item').forEach(item => {
       const label = (item.querySelector('.gm-wa-label')?.textContent || item.textContent || '').trim().toLowerCase();
-      // Account deletion is managed safely from Settings; remove destructive duplicate actions here.
-      if (label.includes('delete account') || label === 'delete') item.remove();
+      // Permanent account deletion belongs in Settings. Keep message/chat deletion separate.
+      if (label.includes('delete account') || label === 'delete account') item.remove();
     });
 
     if (!card.querySelector('[data-gm-signout]')) {
