@@ -1,0 +1,80 @@
+name: QA Browser E2E
+
+on:
+  push:
+    branches:
+      - 'qa/**'
+  workflow_dispatch:
+
+jobs:
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build web app
+        run: npm run build -w apps/web
+      - name: Start local web server
+        run: |
+          npx --yes serve@14 apps/web/dist -l 4173 > /tmp/global-messenger-serve.log 2>&1 &
+          echo $! > /tmp/global-messenger-serve.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/global-messenger-serve.log
+          exit 1
+      - name: Install Playwright
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Run browser E2E against local build and production
+        env:
+          PROD_URL: https://global-messanger.onrender.com
+          LOCAL_URL: http://127.0.0.1:4173
+        run: |
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          const targets = [['local', process.env.LOCAL_URL], ['production', process.env.PROD_URL]];
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            try {
+              for (const [name, base] of targets) {
+                const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+                const errors = [];
+                page.on('console', msg => { if (msg.type() === 'error') errors.push(`console: ${msg.text()}`); });
+                page.on('pageerror', err => errors.push(`pageerror: ${err.message}`));
+                await page.goto(`${base}/`, { waitUntil: 'networkidle', timeout: 30000 });
+                await page.locator('body').waitFor({ state: 'visible' });
+                if (!(await page.locator('body').innerText()).includes('Global Messenger')) throw new Error(`${name}: root page did not render Global Messenger`);
+                const install = await page.request.get(`${base}/install.html`);
+                if (!install.ok()) throw new Error(`${name}: install page HTTP ${install.status()}`);
+                const installText = await install.text();
+                for (const required of ['Windows / Linux / ChromeOS', 'Install Global Messenger', 'Download latest Android APK']) if (!installText.includes(required)) throw new Error(`${name}: install page missing '${required}'`);
+                const manifest = await page.request.get(`${base}/manifest.webmanifest`);
+                if (!manifest.ok()) throw new Error(`${name}: manifest HTTP ${manifest.status()}`);
+                const manifestJson = await manifest.json();
+                if (manifestJson.name !== 'Global Messenger' || manifestJson.display !== 'standalone') throw new Error(`${name}: invalid PWA manifest`);
+                const sw = await page.request.get(`${base}/sw.js`);
+                if (!sw.ok()) throw new Error(`${name}: service worker HTTP ${sw.status()}`);
+                if (!(await sw.text()).includes("self.addEventListener('fetch'")) throw new Error(`${name}: service worker missing fetch handler`);
+                await page.goto(`${base}/install.html`, { waitUntil: 'networkidle', timeout: 30000 });
+                if (!(await page.locator('h1').innerText()).includes('Get Global Messenger')) throw new Error(`${name}: install page did not render`);
+                await page.close();
+                if (errors.length) throw new Error(`${name}: browser errors\n${errors.join('\n')}`);
+                console.log(`PASS ${name}: root + install page + manifest + service worker`);
+              }
+            } finally { await browser.close(); }
+          })().catch(err => { console.error(err); process.exit(1); });
+          NODE
+      - name: Stop local server
+        if: always()
+        run: test ! -f /tmp/global-messenger-serve.pid || kill $(cat /tmp/global-messenger-serve.pid) || true
