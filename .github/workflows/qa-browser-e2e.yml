@@ -28,17 +28,19 @@ jobs:
 
       - name: Start local web server
         run: |
-          npm run preview -w apps/web -- --host 127.0.0.1 --port 4173 > /tmp/global-messenger-vite.log 2>&1 &
-          echo $! > /tmp/global-messenger-vite.pid
+          npx --yes serve@14 apps/web/dist -l 4173 > /tmp/global-messenger-serve.log 2>&1 &
+          echo $! > /tmp/global-messenger-serve.pid
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
             sleep 1
           done
-          cat /tmp/global-messenger-vite.log
+          cat /tmp/global-messenger-serve.log
           exit 1
 
-      - name: Install Playwright Chromium
-        run: npx playwright@1.55.0 install --with-deps chromium
+      - name: Install Playwright
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps chromium
 
       - name: Run browser E2E against local build and production
         env:
@@ -46,7 +48,7 @@ jobs:
           LOCAL_URL: http://127.0.0.1:4173
         run: |
           node <<'NODE'
-          const { chromium } = require(require.resolve('playwright', { paths: [process.cwd()] }));
+          const { chromium } = require('playwright');
 
           const targets = [
             ['local', process.env.LOCAL_URL],
@@ -96,4 +98,4 @@ jobs:
 
       - name: Stop local server
         if: always()
-        run: test ! -f /tmp/global-messenger-vite.pid || kill $(cat /tmp/global-messenger-vite.pid) || true
+        run: test ! -f /tmp/global-messenger-serve.pid || kill $(cat /tmp/global-messenger-serve.pid) || true
