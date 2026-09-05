@@ -15,44 +15,50 @@ const supportSchema = z.object({
 const makeRequestId = () => `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 
 export async function registerSupportRoutes(app: FastifyInstance, prisma: PrismaClient) {
-  app.post('/api/support/requests', async (request, reply) => {
-    const parsed = supportSchema.safeParse(request.body ?? {});
-    if (!parsed.success) return reply.badRequest('Please provide a valid name, email, category, subject and issue details.');
+  // Registration is intentionally idempotent. This prevents production startup
+  // failures if a route registrar is invoked more than once by a patch/plugin.
+  if (!app.hasRoute({ method: 'POST', url: '/api/support/requests' })) {
+    app.post('/api/support/requests', async (request, reply) => {
+      const parsed = supportSchema.safeParse(request.body ?? {});
+      if (!parsed.success) return reply.badRequest('Please provide a valid name, email, category, subject and issue details.');
 
-    const data = parsed.data;
-    let requestId = makeRequestId();
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const exists = await prisma.supportRequest.findUnique({ where: { requestId } });
-      if (!exists) break;
-      requestId = makeRequestId();
-    }
+      const data = parsed.data;
+      let requestId = makeRequestId();
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const exists = await prisma.supportRequest.findUnique({ where: { requestId } });
+        if (!exists) break;
+        requestId = makeRequestId();
+      }
 
-    const created = await prisma.supportRequest.create({ data: { requestId, ...data } });
-    let notification: 'sent' | 'failed' = 'sent';
-    try {
-      await sendSupportRequestEmail(created);
-    } catch (error) {
-      notification = 'failed';
-      app.log.error(error, 'Support request notification email failed');
-    }
+      const created = await prisma.supportRequest.create({ data: { requestId, ...data } });
+      let notification: 'sent' | 'failed' = 'sent';
+      try {
+        await sendSupportRequestEmail(created);
+      } catch (error) {
+        notification = 'failed';
+        app.log.error(error, 'Support request notification email failed');
+      }
 
-    return reply.code(201).send({
-      ok: true,
-      requestId: created.requestId,
-      status: created.status,
-      createdAt: created.createdAt,
-      notification,
-      message: notification === 'sent'
-        ? `Support request ${created.requestId} was submitted successfully.`
-        : `Support request ${created.requestId} was saved successfully, but the support notification email could not be delivered right now.`,
+      return reply.code(201).send({
+        ok: true,
+        requestId: created.requestId,
+        status: created.status,
+        createdAt: created.createdAt,
+        notification,
+        message: notification === 'sent'
+          ? `Support request ${created.requestId} was submitted successfully.`
+          : `Support request ${created.requestId} was saved successfully, but the support notification email could not be delivered right now.`,
+      });
     });
-  });
+  }
 
-  app.get<{ Params: { requestId: string } }>('/api/support/requests/:requestId', async (request, reply) => {
-    const requestId = String(request.params.requestId || '').trim().toUpperCase();
-    if (!/^GM-[0-9]{8}-[A-F0-9]{8}$/.test(requestId)) return reply.badRequest('Invalid support request ID.');
-    const item = await prisma.supportRequest.findUnique({ where: { requestId }, select: { requestId: true, category: true, subject: true, status: true, createdAt: true, updatedAt: true } });
-    if (!item) return reply.notFound('Support request not found.');
-    return { ok: true, ...item };
-  });
+  if (!app.hasRoute({ method: 'GET', url: '/api/support/requests/:requestId' })) {
+    app.get<{ Params: { requestId: string } }>('/api/support/requests/:requestId', async (request, reply) => {
+      const requestId = String(request.params.requestId || '').trim().toUpperCase();
+      if (!/^GM-[0-9]{8}-[A-F0-9]{8}$/.test(requestId)) return reply.badRequest('Invalid support request ID.');
+      const item = await prisma.supportRequest.findUnique({ where: { requestId }, select: { requestId: true, category: true, subject: true, status: true, createdAt: true, updatedAt: true } });
+      if (!item) return reply.notFound('Support request not found.');
+      return { ok: true, ...item };
+    });
+  }
 }
