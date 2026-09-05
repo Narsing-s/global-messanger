@@ -19,7 +19,7 @@ if (!s.includes('message-expiry-filter') && !s.includes('const disappearing = is
 if (!s.includes('upload-content-validation')) {
   s = s.replace("    if (!file) {\n      return reply.badRequest(\n        'File is required'\n      );\n    }", "    if (!file) {\n      return reply.badRequest('File is required');\n    }\n    const allowed = new Set(['image/jpeg','image/png','image/webp','image/gif','audio/mpeg','audio/wav','audio/ogg','video/mp4','video/webm','application/pdf','text/plain','application/zip']);\n    if (!allowed.has(file.mimetype.toLowerCase())) return reply.badRequest('This file type is not supported.');");
 }
-if (!s.includes('push-after-message')) {
+if (!s.includes('push-after-message') && !s.includes('sendPushForMessage(prisma, message')) {
   s = s.replace("          /* ---------------------- Delivery Ack ---------------------------- */", "          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));\n\n          /* ---------------------- Delivery Ack ---------------------------- */");
 }
 fs.writeFileSync(file, s);
