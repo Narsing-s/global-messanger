@@ -1,50 +1,17 @@
-import { encryptMessage } from './e2ee';
-import { decryptMessageCompat } from './e2ee-compat';
-import { initE2EE } from './e2ee';
 import { Socket } from 'socket.io-client';
 import './runtime-fixes';
 
+// Plain-message mode keeps the chat UI showing the exact message users send.
+// The encryption modules remain in the project for a future opt-in mode, but
+// they must not rewrite normal chat text into ciphertext on this device.
+const GM_E2EE_ENABLED = false;
 const SocketProto: any = (Socket as any).prototype;
 let installed = false;
 
 export function installE2EE() {
   if (installed) return;
   installed = true;
-  void initE2EE();
-
-  const proto: any = SocketProto;
-  if (!proto.__gmE2eeEmit) {
-    const originalEmit = proto.emit;
-    proto.__gmE2eeEmit = originalEmit;
-    proto.emit = function(event: string, ...args: any[]) {
-      const payload = args[0];
-      if (event === 'message:send' && payload && payload.type === 'text' && typeof payload.body === 'string' && !payload.body.startsWith('gm:e2ee:v1:')) {
-        void encryptMessage(payload.conversationId, payload.body).then(body => originalEmit.call(this, event, { ...payload, body })).catch(() => originalEmit.call(this, event, ...args));
-        return this;
-      }
-      return originalEmit.call(this, event, ...args);
-    };
-  }
-
-  if (!proto.__gmE2eeOn) {
-    const originalOn = proto.on;
-    proto.__gmE2eeOn = originalOn;
-    proto.on = function(event: string, listener: (...args: any[]) => any) {
-      if (event !== 'message:new' && event !== 'message:updated') return originalOn.call(this, event, listener);
-      const wrapped = async (message: any) => {
-        if (message?.body?.startsWith?.('gm:e2ee:v1:')) {
-          // Use the compatibility decryptor here too. This socket-level
-          // handler runs before the React message-list cleanup and previously
-          // converted recoverable legacy messages into a permanent
-          // "Unable to decrypt" string.
-          const body = await decryptMessageCompat(String(message.conversationId), message.body);
-          return listener({ ...message, body });
-        }
-        return listener(message);
-      };
-      return originalOn.call(this, event, wrapped);
-    };
-  }
+  if (!GM_E2EE_ENABLED) return;
 }
 
 installE2EE();
