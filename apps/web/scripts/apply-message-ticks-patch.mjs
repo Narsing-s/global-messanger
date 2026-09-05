@@ -18,6 +18,10 @@ if (!source.includes('message-ticks-v1')) {
     "function Bubble({message,own,blocked,delivered,onReply,onMenu,menu,onEdit,onDelete,onReact,reactOpen,onEmoji}"
   );
 
+  const typeAnchor = "{message:Message;own:boolean;blocked:boolean;onReply";
+  if (!source.includes(typeAnchor)) throw new Error('Message ticks patch: Bubble type anchor not found');
+  source = source.replace(typeAnchor, "{message:Message;own:boolean;blocked:boolean;delivered:boolean;onReply");
+
   const status = "{own&&(blocked?<span aria-label=\"Sent\" title=\"Sent\" style={{fontSize:'13px',lineHeight:1}}>✓</span>:<CheckCheck size={13}/>)}";
   if (!source.includes(status)) throw new Error('Message ticks patch: status anchor not found');
   source = source.replace(
@@ -26,7 +30,7 @@ if (!source.includes('message-ticks-v1')) {
   );
 
   const markerCss = `<style data-gm-message-ticks=\"v1\">.message-status{display:inline-flex;align-items:center;font-size:13px;line-height:1;letter-spacing:-2px;font-weight:800;margin-left:3px}.message-status.sent{opacity:.72}.message-status.delivered{opacity:1}</style>`;
-  source = source.replace('</div>}\nfunction Auth', `</div>}\n${markerCss}\nfunction Auth`);
+  if (source.includes('function Auth')) source = source.replace('function Auth', `${markerCss}\nfunction Auth`);
   source = source.replace('function App(){', 'function App(){/* message-ticks-v1 */');
   fs.writeFileSync(file, source);
   console.log('Message ticks patch v1 applied');
