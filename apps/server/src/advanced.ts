@@ -26,37 +26,6 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   await registerAdvancedFeatures(app, prisma);
   startExpiredMessageCleanup(prisma);
 
-  // Explicit support preflight route. The CORS plugin's generic OPTIONS route
-  // can run before the support route when WEB_ORIGIN is stale or missing on Render.
-  app.options('/api/support/requests', async (request, reply) => {
-    const origin = String(request.headers.origin || '').trim();
-    if (origin !== 'https://global-messenger-help-centre.onrender.com') {
-      return reply.code(403).send({ ok: false, message: 'CORS origin not allowed.' });
-    }
-    reply
-      .header('Access-Control-Allow-Origin', origin)
-      .header('Access-Control-Allow-Credentials', 'true')
-      .header('Access-Control-Allow-Methods', 'POST,OPTIONS')
-      .header('Access-Control-Allow-Headers', String(request.headers['access-control-request-headers'] || 'Content-Type,Authorization,Accept,Origin,X-Requested-With'))
-      .header('Access-Control-Max-Age', '86400')
-      .header('Vary', 'Origin');
-    return reply.code(204).send();
-  });
-
-  // Make Help Centre responses deterministic even if Render has a stale/missing
-  // WEB_ORIGIN value. This is scoped to the Help Centre only.
-  app.addHook('onSend', async (request, reply, payload) => {
-    const origin = String(request.headers.origin || '').trim();
-    if (origin === 'https://global-messenger-help-centre.onrender.com') {
-      reply.header('Access-Control-Allow-Origin', origin);
-      reply.header('Access-Control-Allow-Credentials', 'true');
-      reply.header('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS');
-      reply.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,Origin,X-Requested-With');
-      reply.header('Vary', 'Origin');
-    }
-    return payload;
-  });
-
   await registerSupportRoutes(app, prisma);
   app.get('/reset-password', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage()));
   app.get('/reset-password/', async (_request, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(localResetPage()));
