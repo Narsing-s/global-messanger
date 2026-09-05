@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-message-ticks-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && node scripts/apply-premium-ui-patch.mjs && vite",
-    "build": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-message-ticks-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && node scripts/apply-premium-ui-patch.mjs && tsc -b && vite build",
+    "dev": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-message-ticks-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && vite",
+    "build": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-message-ticks-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && tsc -b && vite build",
     "android:add": "cap add android",
     "android:sync": "cap sync",
     "android:open": "cap open android",
