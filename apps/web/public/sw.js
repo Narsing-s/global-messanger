@@ -1,4 +1,4 @@
-const CACHE_NAME = 'global-messenger-shell-v5';
+const CACHE_NAME = 'global-messenger-shell-v6';
 const APP_SHELL = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', event => {
