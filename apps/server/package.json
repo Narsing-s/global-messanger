@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && node scripts/apply-production-security-patch.mjs && node scripts/apply-messenger-features-patch.mjs && node scripts/apply-final-production-patch.mjs && node scripts/apply-global-cors-patch.mjs && tsx watch src/index.ts",
     "build": "node scripts/apply-blocking-patch.mjs && node scripts/apply-e2ee-patch.mjs && node scripts/apply-production-security-patch.mjs && node scripts/apply-messenger-features-patch.mjs && node scripts/apply-final-production-patch.mjs && node scripts/apply-global-cors-patch.mjs && prisma generate && tsc",
-    "start": "prisma migrate deploy && node dist/index.js",
+    "start": "node dist/index.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy"
