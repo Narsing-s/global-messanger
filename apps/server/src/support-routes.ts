@@ -4,8 +4,6 @@ import crypto from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { sendSupportRequestEmail } from './smtp.js';
 
-const HELP_CENTRE_ORIGIN = 'https://global-messenger-help-centre.onrender.com';
-
 const supportSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(320),
@@ -17,32 +15,6 @@ const supportSchema = z.object({
 const makeRequestId = () => `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 
 export async function registerSupportRoutes(app: FastifyInstance, prisma: PrismaClient) {
-  // Register an exact preflight endpoint in the support module itself. This
-  // must exist in the deployed backend because the browser sends OPTIONS before
-  // the JSON POST and otherwise Fastify returns 404 without CORS headers.
-  app.options('/api/support/requests', async (request, reply) => {
-    const origin = String(request.headers.origin || '').trim();
-    if (origin !== HELP_CENTRE_ORIGIN) {
-      return reply.code(403).send({ ok: false, message: 'CORS origin not allowed.' });
-    }
-
-    return reply
-      .code(204)
-      .header('Access-Control-Allow-Origin', HELP_CENTRE_ORIGIN)
-      .header('Access-Control-Allow-Credentials', 'true')
-      .header('Access-Control-Allow-Methods', 'POST,OPTIONS')
-      .header(
-        'Access-Control-Allow-Headers',
-        String(
-          request.headers['access-control-request-headers'] ||
-            'Content-Type,Authorization,Accept,Origin,X-Requested-With'
-        )
-      )
-      .header('Access-Control-Max-Age', '86400')
-      .header('Vary', 'Origin')
-      .send();
-  });
-
   app.post('/api/support/requests', async (request, reply) => {
     const parsed = supportSchema.safeParse(request.body ?? {});
     if (!parsed.success) return reply.badRequest('Please provide a valid name, email, category, subject and issue details.');
