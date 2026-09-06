@@ -1,0 +1,1 @@
+(() => { const value = (f, s) => f.querySelector(s)?.value?.trim() || ''; document.addEventListener('submit', e => { const f = e.target; if (!(f instanceof HTMLFormElement) || !f.closest('.auth-page')) return; e.preventDefault(); e.stopImmediatePropagation(); }, true); })();
