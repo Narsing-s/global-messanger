@@ -11,6 +11,7 @@ model User {
   id                  String               @id @default(cuid())
   username            String               @unique
   email               String?              @unique
+  phoneNumber         String?              @unique
   resetTokenHash      String?
   resetTokenExpiresAt DateTime?
   displayName         String
@@ -28,7 +29,7 @@ model User {
   createdConvos       Conversation[]       @relation("ConversationCreator")
   reactions           MessageReaction[]
   devices             PushDevice[]
-  sessions            UserSession[]
+  sessions             UserSession[]
   bookmarks           MessageBookmark[]
   pinsCreated         PinnedMessage[]      @relation("PinCreator")
   blocksCreated       UserBlock[]          @relation("BlockCreator")
@@ -77,136 +78,4 @@ model Conversation {
   messages    Message[]
   pins        PinnedMessage[]
   @@index([updatedAt])
-}
-
-model ConversationMember {
-  conversationId String
-  userId         String
-  joinedAt       DateTime @default(now())
-  lastReadAt     DateTime?
-  mutedUntil     DateTime?
-  archivedAt     DateTime?
-  disappearingSeconds Int?
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@id([conversationId, userId])
-  @@index([userId])
-}
-
-model Message {
-  id              String       @id @default(cuid())
-  clientId        String?
-  conversationId  String
-  senderId        String
-  body            String
-  type            String       @default("text")
-  attachmentUrl   String?
-  attachmentName  String?
-  attachmentMime  String?
-  attachmentSize  Int?
-  replyToId       String?
-  createdAt       DateTime     @default(now())
-  editedAt        DateTime?
-  deletedAt       DateTime?
-  expiresAt       DateTime?
-  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender          User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
-  replyTo         Message?     @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies         Message[]    @relation("MessageReply")
-  reactions       MessageReaction[]
-  bookmarks       MessageBookmark[]
-  pin             PinnedMessage?
-  receipts        MessageReceipt[]
-  @@index([conversationId, createdAt])
-  @@index([senderId, createdAt])
-  @@index([conversationId, type, createdAt])
-  @@index([expiresAt])
-  @@unique([senderId, clientId])
-}
-
-model MessageReceipt {
-  messageId   String
-  userId      String
-  deliveredAt DateTime?
-  readAt      DateTime?
-  createdAt   DateTime @default(now())
-  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@id([messageId, userId])
-  @@index([userId, readAt])
-  @@index([messageId, deliveredAt])
-}
-
-model MessageReaction {
-  messageId String
-  userId    String
-  emoji     String
-  createdAt DateTime @default(now())
-  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@id([messageId, userId, emoji])
-  @@index([messageId])
-}
-
-model MessageBookmark {
-  messageId String
-  userId    String
-  createdAt DateTime @default(now())
-  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@id([messageId, userId])
-  @@index([userId, createdAt])
-}
-
-model PinnedMessage {
-  conversationId String
-  messageId      String   @unique
-  pinnedById     String
-  createdAt      DateTime @default(now())
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  message        Message     @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  pinnedBy       User        @relation("PinCreator", fields: [pinnedById], references: [id], onDelete: Cascade)
-  @@id([conversationId, messageId])
-  @@index([conversationId, createdAt])
-}
-
-model UserBlock {
-  userId          String
-  blockedUserId   String
-  createdAt       DateTime  @default(now())
-  user            User      @relation("BlockCreator", fields: [userId], references: [id], onDelete: Cascade)
-  blockedUser     User      @relation("BlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
-  @@id([userId, blockedUserId])
-  @@index([blockedUserId])
-}
-
-model SupportRequest {
-  id           String               @id @default(cuid())
-  requestId    String               @unique
-  name         String
-  email        String
-  category     String
-  subject      String
-  details      String
-  status       String               @default("OPEN")
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
-  resolution   SupportResolution?
-  @@index([email, createdAt])
-  @@index([status, createdAt])
-}
-
-model SupportResolution {
-  id                 String        @id @default(cuid())
-  supportRequestId   String        @unique
-  resolvedById       String?
-  resolutionType     String
-  resolutionNotes    String?
-  resolutionTimeSecs Int
-  closedAt            DateTime     @default(now())
-  createdAt           DateTime     @default(now())
-  supportRequest     SupportRequest @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
-  resolvedBy         User?         @relation("SupportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
-  @@index([resolvedById, closedAt])
-  @@index([resolutionType, closedAt])
 }
