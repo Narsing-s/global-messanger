@@ -1,0 +1,36 @@
+name: Oracle Always Free Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/server/**'
+      - 'deploy/oracle/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'apps/server/prisma/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Oracle VM
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          port: ${{ secrets.ORACLE_SSH_PORT || '22' }}
+          script: |
+            set -e
+            if [ ! -d "$HOME/global-messenger" ]; then
+              git clone https://github.com/Narsing-s/global-messanger.git "$HOME/global-messenger"
+            fi
+            cd "$HOME/global-messenger"
+            git fetch origin main
+            git reset --hard origin/main
+            cd deploy/oracle
+            docker compose up -d --build
+            docker compose exec -T api npx prisma migrate deploy --schema /app/apps/server/prisma/schema.prisma
+            docker compose ps
