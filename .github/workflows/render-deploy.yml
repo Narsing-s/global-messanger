@@ -1,0 +1,10 @@
+name: Render Deploy Notice
+
+on:
+  workflow_dispatch:
+
+jobs:
+  notice:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Render deployment is managed by the Render service. This workflow intentionally does not trigger a Render build."
