@@ -1,17 +1,14 @@
 services:
+  # Single free backend service. The frontend is already deployed separately
+  # (Cloudflare), so Render does not need to rebuild the web app on every push.
   - type: web
     name: global-messenger-api
     runtime: node
-    # Paid service is required for direct Gmail SMTP.
-    plan: starter
+    plan: free
     region: singapore
-    buildCommand: rm -rf apps/server/dist && npm install --include=dev --include=optional && npm run db:generate -w apps/server && npm run db:deploy -w apps/server && npm run build -w apps/server
+    buildCommand: npm ci --include=dev --include=optional && npm run db:generate -w apps/server && npm run db:deploy -w apps/server && npm run build -w apps/server
     startCommand: npm run start -w apps/server
     healthCheckPath: /health
-    disk:
-      name: global-messenger-uploads
-      mountPath: /tmp/global-messenger/uploads
-      sizeGB: 1
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -21,9 +18,8 @@ services:
         generateValue: true
       - key: NODE_ENV
         value: production
-      # All browser-hosted Global Messenger clients, including Help Centre.
       - key: WEB_ORIGIN
-        value: https://global-messanger.onrender.com,https://global-messenger-web.onrender.com,https://global-messenger-help-centre.onrender.com
+        value: https://global-messanger.onrender.com,https://global-messenger-web.onrender.com,https://global-messenger-help-centre.onrender.com,https://web.narsingbeesetti006.workers.dev
       - key: PASSWORD_RESET_WEB_ORIGIN
         value: https://global-messanger.onrender.com
       - key: UPLOAD_DIR
@@ -43,42 +39,7 @@ services:
       - key: MAIL_FROM
         value: Global Messenger <narsingbeesetti22@gmail.com>
 
-  - type: web
-    name: global-messenger-web
-    runtime: static
-    plan: free
-    region: singapore
-    buildCommand: rm -rf node_modules apps/web/node_modules apps/web/dist && npm install --include=dev --include=optional && npm run build -w apps/web
-    staticPublishPath: apps/web/dist
-    envVars:
-      - key: VITE_API_URL
-        value: https://global-messanger-backend.onrender.com
-    routes:
-      - type: rewrite
-        source: /install
-        destination: /install.html
-      - type: rewrite
-        source: /install/
-        destination: /install.html
-      - type: rewrite
-        source: /reset-password
-        destination: /reset-password/index.html
-      - type: rewrite
-        source: /reset-password/
-        destination: /reset-password/index.html
-      - type: rewrite
-        source: /reset-password.html
-        destination: /reset-password.html
-      - type: rewrite
-        source: /reset-password.html/*
-        destination: /reset-password.html
-      - type: rewrite
-        source: /reset-password/*
-        destination: /reset-password/index.html
-      - type: rewrite
-        source: /*
-        destination: /index.html
-
+  # Lightweight static Help Centre. Its build command is intentionally tiny.
   - type: web
     name: global-messenger-help-centre
     runtime: static
