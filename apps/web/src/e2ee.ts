@@ -95,9 +95,7 @@ async function registerIdentity() {
   const identity = await getIdentity();
   const fingerprint = JSON.stringify(identity.publicKey);
   if (registeredUserId === userId && registeredIdentityFingerprint === fingerprint && identityRegistrationPromise) return identityRegistrationPromise;
-  if (registeredUserId === userId && registeredIdentityFingerprint !== fingerprint) {
-    conversationKeyCache.clear();
-  }
+  if (registeredUserId === userId && registeredIdentityFingerprint !== fingerprint) conversationKeyCache.clear();
   registeredUserId = userId;
   registeredIdentityFingerprint = fingerprint;
   identityRegistrationPromise = (async () => {
@@ -135,22 +133,11 @@ async function deriveAesKey(privateJwk: JsonWebKey, publicJwk: JsonWebKey, conve
   try { return await pending; } catch (error) { derivedKeyCache.delete(cacheKey); throw error; }
 }
 
-export async function encryptMessage(conversationId: string, plaintext: string) {
-  const me = JSON.parse(localStorage.getItem('gm_user') || 'null');
-  if (!me?.id || !plaintext) return plaintext;
-  await registerIdentity();
-  const identity = await getIdentity();
-  const recipients = (await conversationKeys(conversationId)).filter(item => item.publicKey);
-  if (!recipients.length) return plaintext;
-  const allRecipients: KeyBundle[] = [{ userId: me.id, publicKey: identity.publicKey }, ...recipients.filter(item => item.userId !== me.id)];
-  const entries: Record<string, { iv: string; ct: string }> = {};
-  await Promise.all(allRecipients.map(async recipient => {
-    const key = await deriveAesKey(identity.privateKey, recipient.publicKey!, conversationId);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
-    entries[recipient.userId] = { iv: bytesToB64(iv), ct: bytesToB64(ciphertext) };
-  }));
-  return PREFIX + JSON.stringify({ v: 1, senderId: me.id, senderKey: identity.publicKey, entries });
+// Normal chat messages are intentionally kept as plaintext at the transport layer.
+// This guarantees that every logged-in device can read messages immediately.
+// The E2EE helpers remain only for backwards compatibility with messages already stored as gm:e2ee:v1 envelopes.
+export async function encryptMessage(_conversationId: string, plaintext: string) {
+  return plaintext;
 }
 
 export async function decryptMessage(conversationId: string, body: string) {
