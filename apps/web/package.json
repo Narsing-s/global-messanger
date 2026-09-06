@@ -1,7 +1,7 @@
 {
   "name": "global-messenger-web",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-message-ticks-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && vite",
@@ -17,7 +17,7 @@
   "dependencies": {
     "@capacitor/android": "^7.4.0",
     "@capacitor/core": "^7.4.0",
-    "@capacitor/ios": "^7.4.0",
+    "@capacitor/iOS": "^7.4.0",
     "@capacitor/push-notifications": "^7.0.4",
     "lucide-react": "^0.511.0",
     "react": "^19.0.0",
