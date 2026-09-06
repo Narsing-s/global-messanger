@@ -1,12 +1,10 @@
 services:
-  # Single free backend service. The frontend is already deployed separately
-  # (Cloudflare), so Render does not need to rebuild the web app on every push.
   - type: web
     name: global-messenger-api
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm ci --include=dev --include=optional && npm run db:generate -w apps/server && npm run db:deploy -w apps/server && npm run build -w apps/server
+    buildCommand: npm ci --include=dev && npm run db:generate -w apps/server && npm run db:deploy -w apps/server && npm run build -w apps/server
     startCommand: npm run start -w apps/server
     healthCheckPath: /health
     envVars:
@@ -19,7 +17,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: WEB_ORIGIN
-        value: https://global-messanger.onrender.com,https://global-messenger-web.onrender.com,https://global-messenger-help-centre.onrender.com,https://web.narsingbeesetti006.workers.dev
+        value: https://global-messanger.onrender.com,https://global-messenger-web.onrender.com,https://global-messenger-help-centre.onrender.com
       - key: PASSWORD_RESET_WEB_ORIGIN
         value: https://global-messanger.onrender.com
       - key: UPLOAD_DIR
@@ -38,15 +36,6 @@ services:
         sync: false
       - key: MAIL_FROM
         value: Global Messenger <narsingbeesetti22@gmail.com>
-
-  # Lightweight static Help Centre. Its build command is intentionally tiny.
-  - type: web
-    name: global-messenger-help-centre
-    runtime: static
-    plan: free
-    region: singapore
-    buildCommand: echo "Global Messenger Help Centre"
-    staticPublishPath: support
 
 databases:
   - name: global-messenger-db
