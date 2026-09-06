@@ -63,6 +63,41 @@
   document.addEventListener('click',async e=>{const target=e.target?.closest?.('.chat-heading .avatar');if(!target)return;e.preventDefault();e.stopPropagation();try{const c=await currentConversation();if(c)c.isGroup?groupDrawer(c):contactDrawer(c)}catch(err){console.error(err)}},true);
   window.addEventListener('gm:options',()=>{void renderMenu()});
   window.addEventListener('resize',()=>{const m=document.getElementById('gm-modern-menu'),t=document.querySelector('.top-actions button[title="More options"]'),c=m?.querySelector('.gm-wa-card');if(m&&t&&c){const r=t.getBoundingClientRect(),w=c.offsetWidth;Object.assign(c.style,{left:`${Math.max(8,Math.min(innerWidth-w-8,r.right-w))}px`,top:`${Math.min(innerHeight-c.offsetHeight-8,r.bottom+8)}px`})}});
+  function polishContactDrawer(drawer){
+    if(!drawer||drawer.querySelector('.gm-participants')||drawer.dataset.polished==='true')return;
+    drawer.dataset.polished='true';
+    if(!document.getElementById('gm-contact-polish-style')){
+      const style=document.createElement('style');
+      style.id='gm-contact-polish-style';
+      style.textContent=`
+        .gm-contact-hero{padding:26px 22px 20px;background:linear-gradient(180deg,#202020 0%,#171717 100%)}
+        .gm-contact-sub{display:inline-flex;align-items:center;gap:6px}
+        .gm-contact-sub::before{content:'';width:7px;height:7px;border-radius:50%;background:#777}
+        .gm-contact-actions{gap:12px;margin-top:20px}.gm-contact-action{width:92px;padding:5px 4px;border-radius:10px;transition:background .15s ease}.gm-contact-action:hover{background:#292929}.gm-contact-action:focus-visible,.gm-section-row:focus-visible{outline:2px solid #25d366;outline-offset:-2px}
+        .gm-contact-action span{font-size:12px}.gm-contact-label{padding:17px 22px 8px;color:#999;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+        .gm-contact-detail-note{margin:16px auto 0;color:#999;font-size:13px}
+        .gm-section-row{width:100%;box-sizing:border-box;padding:0;background:transparent;text-align:left;font:inherit}.gm-section-row.danger .copy b,.gm-section-row.danger .ico{color:#ff8c9a}
+        @media(max-width:600px){.gm-contact-hero{padding-top:22px}.gm-contact-label{padding-left:18px;padding-right:18px}.gm-contact-action{width:88px}}
+      `;
+      document.head.appendChild(style);
+    }
+    const hero=drawer.querySelector('.gm-contact-hero');
+    const actions=drawer.querySelector('.gm-contact-actions');
+    const sections=[...drawer.querySelectorAll('.gm-section')];
+    if(hero){
+      hero.classList.add('gm-contact-identity');
+      const sub=hero.querySelector('.gm-contact-sub');
+      if(sub&&!sub.textContent.trim())sub.textContent='Contact details';
+      const labels=['Voice call','Video call','Search chat'];
+      actions?.querySelectorAll('.gm-contact-action span').forEach((label,index)=>{if(labels[index])label.textContent=labels[index]});
+    }
+    if(sections[0])sections[0].insertAdjacentHTML('beforebegin','<div class="gm-contact-label">Shared content</div>');
+    if(sections[2])sections[2].insertAdjacentHTML('beforebegin','<div class="gm-contact-label">Chat settings</div>');
+    if(sections[3])sections[3].insertAdjacentHTML('beforebegin','<div class="gm-contact-label">Conversation actions</div>');
+    drawer.querySelectorAll('[data-panel-action]').forEach(row=>{row.setAttribute('role','button');row.setAttribute('tabindex','0');row.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();row.click()}})});
+  }
+  const contactDrawerObserver=new MutationObserver(()=>{const drawer=document.getElementById('gm-contact-drawer');if(drawer)polishContactDrawer(drawer)});
+  contactDrawerObserver.observe(document.body,{childList:true});
   window.addEventListener('keydown',e=>{if(e.key==='Escape'){closeMenu();closePanel();endSelect()}});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',styles,{once:true});else styles();
 })();
