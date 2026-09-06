@@ -17,7 +17,7 @@
   "dependencies": {
     "@capacitor/android": "^7.4.0",
     "@capacitor/core": "^7.4.0",
-    "@capacitor/iOS": "^7.4.0",
+    "@capacitor/ios": "^7.4.0",
     "@capacitor/push-notifications": "^7.0.4",
     "lucide-react": "^0.511.0",
     "react": "^19.0.0",
