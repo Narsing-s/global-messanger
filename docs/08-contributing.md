@@ -55,6 +55,16 @@ For a first contribution, prefer a small bug, documentation improvement, test, a
 
 ## 4. Local development
 
+### 1. Clone the repository
+
+Fork the repository on GitHub, then clone your fork:
+
+```bash
+git clone https://github.com/YOUR-USERNAME/global-messanger.git
+cd global-messanger
+```
+### 2. Install dependencies
+
 Requirements:
 
 - Node.js 22 LTS or newer
@@ -62,27 +72,12 @@ Requirements:
 - PostgreSQL for backend development, or the repository's Docker setup
 - Android Studio only when working on Android
 
-Install dependencies:
+
+Install the project dependencies:
 
 ```bash
 npm install
 ```
-
-Start development:
-
-```bash
-npm run dev
-```
-
-Useful checks:
-
-```bash
-npm run build
-npm run verify:local
-npm run smoke
-```
-
-If a command fails, include the exact command and relevant error output in the Issue or Pull Request. Do not include secrets or private user data.
 
 ## 5. Branches
 
