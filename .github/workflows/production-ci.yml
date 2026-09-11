@@ -33,7 +33,9 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/global_messenger_ci
       JWT_SECRET: ci-only-secret
-      WEB_ORIGIN: http://127.0.0.1:5173
+      NODE_ENV: production
+      WEB_ORIGIN: https://ci.example.invalid
+      PASSWORD_RESET_WEB_ORIGIN: https://ci.example.invalid
 
     steps:
       - name: Checkout
@@ -50,6 +52,9 @@ jobs:
 
       - name: Doctor
         run: npm run doctor
+
+      - name: Validate production configuration contract
+        run: node apps/server/scripts/validate-production-config.mjs
 
       - name: Generate Prisma client
         run: npm run db:generate
