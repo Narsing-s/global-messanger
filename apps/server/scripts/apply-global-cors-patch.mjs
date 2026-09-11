@@ -34,21 +34,7 @@ const replacement = `const isAllowedOrigin = (origin?: string | null) => {
     /^capacitor:\\/\\/localhost$/.test(origin) ||
     /^ionic:\\/\\/localhost$/.test(origin);
 
-  // Vercel preview deployments use a generated hostname under the project's
-  // team namespace. Keep the allow-list scoped to Global Messenger previews.
-  const isVercelPreview =
-    /^https:\\/\\/global-messanger-[a-z0-9-]+-narsing-s-projects\\.vercel\\.app$/.test(origin);
-
-  const isHelpCentre =
-    origin === 'https://global-messenger-help-centre.onrender.com';
-
-  return (
-    configured.includes(origin) ||
-    isLocalDev ||
-    isNativeApp ||
-    isVercelPreview ||
-    isHelpCentre
-  );
+  return configured.includes(origin) || isLocalDev || isNativeApp;
 };`;
 
 source =
