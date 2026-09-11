@@ -17,7 +17,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: WEB_ORIGIN
-        value: https://global-messanger.onrender.com,https://global-messenger-web.onrender.com,https://global-messenger-help-centre.onrender.com
+        value: https://global-messanger.onrender.com,https://global-messenger-help-centre.onrender.com
       - key: PASSWORD_RESET_WEB_ORIGIN
         value: https://global-messanger.onrender.com
       - key: UPLOAD_DIR
