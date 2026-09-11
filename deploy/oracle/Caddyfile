@@ -1,4 +1,0 @@
-{$API_DOMAIN} {
-  reverse_proxy api:10000
-  encode gzip
-}
