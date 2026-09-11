@@ -33,12 +33,21 @@ if (invalidOrigins.length) {
 
 const optional = {
   SMTP_PASSWORD: 'password-reset email delivery',
-  FIREBASE_PROJECT_ID: 'FCM push notifications',
-  FIREBASE_CLIENT_EMAIL: 'FCM push notifications',
-  FIREBASE_PRIVATE_KEY: 'FCM push notifications',
   STORAGE_BUCKET: 'durable media storage',
   TURN_URLS: 'WebRTC relay/TURN support'
 };
+
+const firebaseNames = [
+  'FIREBASE_PROJECT_ID',
+  'FIREBASE_CLIENT_EMAIL',
+  'FIREBASE_PRIVATE_KEY'
+];
+const configuredFirebase = firebaseNames.filter(name => String(process.env[name] ?? '').trim());
+if (configuredFirebase.length > 0 && configuredFirebase.length !== firebaseNames.length) {
+  const missingFirebase = firebaseNames.filter(name => !String(process.env[name] ?? '').trim());
+  console.error(`FCM configuration is incomplete. Missing: ${missingFirebase.join(', ')}`);
+  process.exit(1);
+}
 
 const missingOptional = Object.entries(optional)
   .filter(([name]) => !String(process.env[name] ?? '').trim())
@@ -47,4 +56,7 @@ const missingOptional = Object.entries(optional)
 console.log('Production configuration validation passed.');
 if (missingOptional.length) {
   console.warn(`Optional production integrations not configured: ${missingOptional.join('; ')}`);
+}
+if (configuredFirebase.length === firebaseNames.length) {
+  console.log('FCM production configuration detected.');
 }
