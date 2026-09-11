@@ -1,0 +1,32 @@
+name: Render Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Trigger Render API deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger Render deploy hook
+        if: ${{ secrets.RENDER_DEPLOY_HOOK_URL != '' }}
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+            --request POST \
+            "$RENDER_DEPLOY_HOOK_URL"
+          echo "Render deployment triggered successfully."
+
+      - name: Explain missing deploy hook
+        if: ${{ secrets.RENDER_DEPLOY_HOOK_URL == '' }}
+        run: |
+          echo "RENDER_DEPLOY_HOOK_URL is not configured."
+          echo "Render auto-deploy remains the fallback; configure the repository secret to make deployments explicit and deterministic."
