@@ -4,6 +4,7 @@ const file = fileURLToPath(new URL('../src/index.ts', import.meta.url));
 let s = fs.readFileSync(file, 'utf8');
 const importMarker = "import { registerAdvancedRoutes } from './advanced.js';";
 if (!s.includes("./push-notifications.js")) s = s.replace(importMarker, `${importMarker}\nimport { sendPushForMessage } from './push-notifications.js';`);
+if (!s.includes("./support-routes.js")) s = s.replace(importMarker, `${importMarker}\nimport { registerSupportRoutes } from './support-routes.js';`);
 const authMarker = "app.decorate(\n  'authenticate',";
 if (!s.includes('session-touch-auth')) {
   const block = `const originalAuthenticate = async (request: any, reply: any) => { await request.jwtVerify(); };\n`;
@@ -21,6 +22,15 @@ if (!s.includes('upload-content-validation')) {
 }
 if (!s.includes('push-after-message') && !s.includes('sendPushForMessage(prisma, message')) {
   s = s.replace("          /* ---------------------- Delivery Ack ---------------------------- */", "          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));\n\n          /* ---------------------- Delivery Ack ---------------------------- */");
+}
+if (!s.includes('support-routes-registration')) {
+  const marker = 'app.listen(';
+  const index = s.indexOf(marker);
+  if (index !== -1) {
+    s = s.slice(0, index) + `/* support-routes-registration */\nawait registerSupportRoutes(app, prisma);\n\n` + s.slice(index);
+  } else {
+    console.warn('Support route registration marker not found; build will continue without patching index.ts.');
+  }
 }
 fs.writeFileSync(file, s);
 console.log('Final production patch applied');
