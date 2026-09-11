@@ -23,24 +23,35 @@ concurrency:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       WEB_URL: https://global-messanger.onrender.com
       API_URL: https://global-messanger-backend.onrender.com
       HELP_URL: https://global-messenger-help-centre.onrender.com
     steps:
-      - name: Check public endpoints
+      - name: Wait for public endpoints after deployment
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location --max-time 30 "$WEB_URL/" -o /tmp/web.html
-          grep -qi 'Global Messenger' /tmp/web.html
-          curl --fail --silent --show-error --location --max-time 30 "$API_URL/health" -o /tmp/health.json
-          node -e "const x=require('/tmp/health.json'); if(!x.ok) process.exit(1); console.log('health', x)"
-          curl --fail --silent --show-error --location --max-time 30 "$API_URL/ready" -o /tmp/ready.json
-          node -e "const x=require('/tmp/ready.json'); if(!x.ok || !x.ready) process.exit(1); console.log('ready', x)"
-          curl --fail --silent --show-error --location --max-time 30 "$HELP_URL/" -o /tmp/help.html
-          grep -qiE 'Help|Support|Global Messenger' /tmp/help.html
+          for attempt in $(seq 1 20); do
+            echo "Smoke readiness attempt $attempt/20"
+            if curl -fsS --location --max-time 20 "$API_URL/health" -o /tmp/health.json \
+              && curl -fsS --location --max-time 20 "$API_URL/ready" -o /tmp/ready.json \
+              && curl -fsS --location --max-time 20 "$WEB_URL/" -o /tmp/web.html \
+              && curl -fsS --location --max-time 20 "$HELP_URL/" -o /tmp/help.html; then
+              if node -e "const x=require('/tmp/health.json'); const r=require('/tmp/ready.json'); if(!x.ok || !r.ok || !r.ready) process.exit(1)"; then
+                grep -qi 'Global Messenger' /tmp/web.html
+                grep -qiE 'Help|Support|Global Messenger' /tmp/help.html
+                echo 'Public endpoints are ready.'
+                break
+              fi
+            fi
+            if [[ "$attempt" == '20' ]]; then
+              echo 'Production did not become ready within the smoke window.'
+              exit 1
+            fi
+            sleep 15
+          done
 
       - name: Check PWA assets
         shell: bash
@@ -60,13 +71,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          status=$(curl -sS -o /tmp/options.txt -w '%{http_code}' -X OPTIONS \
+          curl -sS --dump-header /tmp/options-headers.txt --output /tmp/options-body.txt -X OPTIONS \
             -H 'Origin: https://global-messenger-help-centre.onrender.com' \
             -H 'Access-Control-Request-Method: POST' \
             -H 'Access-Control-Request-Headers: content-type' \
-            "$API_URL/api/support/requests")
+            "$API_URL/api/support/requests" \
+            -w '%{http_code}' > /tmp/options-status.txt
+          status=$(cat /tmp/options-status.txt)
           test "$status" = '204' || test "$status" = '200'
-          grep -qi 'access-control-allow-origin' /tmp/options.txt || true
+          grep -qi '^access-control-allow-origin:' /tmp/options-headers.txt
           echo "support preflight HTTP $status"
 
       - name: Verify unauthenticated API protection
