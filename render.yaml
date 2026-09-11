@@ -6,7 +6,7 @@ services:
     region: singapore
     buildCommand: npm ci --include=dev && npm run db:generate -w apps/server && npm run db:deploy -w apps/server && npm run build -w apps/server
     startCommand: npm run start -w apps/server
-    healthCheckPath: /health
+    healthCheckPath: /ready
     envVars:
       - key: DATABASE_URL
         fromDatabase:
