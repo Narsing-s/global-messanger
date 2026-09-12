@@ -1,65 +1,109 @@
-# 🌍 Global Messenger
+# Global Messenger
 
-> **Private, realtime messaging for Web and Android.**
+A production-ready, realtime messaging platform for web and mobile clients.
 
-Global Messenger is a simple messaging app for people who want to chat, create groups, share files/images, and receive messages in realtime.
+## Production architecture
 
-**You do not need to understand programming to use it.** If you only want to use the app, start with the Web App or download the Android APK from Releases.
+For a reliable self-hosted deployment, the **Docker frontend is the canonical production frontend**. It serves the Vite production build through Nginx and proxies `/api`, `/socket.io`, and `/uploads` to the API service.
 
-![License](https://img.shields.io/badge/license-Apache--2.0-green)
-![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
-![React](https://img.shields.io/badge/React-Vite-61DAFB?logo=react&logoColor=black)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Prisma-4169E1?logo=postgresql&logoColor=white)
-![Socket.IO](https://img.shields.io/badge/Realtime-Socket.IO-010101?logo=socket.io&logoColor=white)
-![Android](https://img.shields.io/badge/Android-Capacitor-3DDC84?logo=android&logoColor=white)
+```text
+Browser / Mobile Web
+        |
+        v
+  Docker Web :8080
+        |
+        +---- /api/* ------> Fastify API :4000
+        +---- /socket.io/* -> Fastify + Socket.IO :4000
+        +---- /uploads/* ---> Fastify API :4000
+        |
+        +---- static Vite frontend
+```
 
----
+The repository also contains a Render Blueprint for deployments that use Render. If your Render account does not expose the latest-commit redeploy controls, use the Docker frontend instead so the frontend build is fully controlled by your Docker image.
 
-## 🚀 For normal users
+## Docker frontend
 
-### 🌐 Use the Web App
+The web frontend is built from `apps/web/Dockerfile` and exposed by Docker Compose on port `8080` by default.
 
-**Open Global Messenger:**
+### Production build
 
-https://global-messanger.onrender.com
+From the repository root:
 
-Create an account or sign in and start messaging.
+```bash
+docker compose build --no-cache --pull web
+docker compose up -d --force-recreate --no-deps web
+```
 
-> The Web App currently uses the existing public hosting service while the new independent Docker production hosting is being prepared.
+Docker's `--no-cache` forces all Dockerfile build layers to be rebuilt, while `--pull` refreshes base images. This is the recommended clean rebuild when an old frontend image is suspected.
 
-### 📱 Use Android
+To rebuild the complete stack:
 
-**Download the latest Android release:**
+```bash
+docker compose down
+docker compose build --no-cache --pull
+docker compose up -d
+```
 
-https://github.com/Narsing-s/global-messanger/releases/latest
+### Docker frontend URL
 
----
+After the stack starts locally:
 
-## 📄 License
+**Frontend:** `http://localhost:8080`
 
-Global Messenger source code is licensed under the **Apache License 2.0**.
+The browser should use the Docker frontend URL, not a stale Render frontend URL.
 
-Apache-2.0 allows personal use, commercial use, modification, self-hosting, and redistribution, subject to the license terms.
+For a server exposed through a public domain, publish port `8080` behind your reverse proxy and use that public HTTPS URL as the user-facing application URL.
 
-The **Global Messenger name, logo, and branding are not granted as trademarks** by the software license. Please do not present modified or independently hosted versions as the official Global Messenger service unless authorized.
+### Verify the running frontend
 
-See the complete [`LICENSE`](LICENSE) file and [`NOTICE`](NOTICE) for details.
+```bash
+docker compose ps web
+docker compose logs --tail=100 web
+curl -I http://localhost:8080/
+curl -I http://localhost:8080/index.html
+```
 
----
+The production Nginx configuration deliberately disables caching for `index.html` and `config.js`. Vite's hashed JS/CSS assets are immutable and can be cached safely. This prevents a deployment from loading an old HTML entry point that references an old application bundle.
 
-## 🤝 Contributing
+### Force a fresh browser load
 
-Contributions are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) before submitting changes.
+After replacing an existing container, open the Docker URL in a private/incognito window. If the browser has an old service worker or cached application data, clear site data for the Docker hostname and reload.
 
-By contributing intentionally to the project, you agree that your contribution is provided under the project's Apache-2.0 licensing terms unless a separate written agreement says otherwise.
+## Current product capabilities
 
-## 🔐 Security
+Global Messenger is designed as a modern realtime messenger with:
 
-Please report security issues privately according to [`SECURITY.md`](SECURITY.md). Do not publish passwords, API keys, database credentials, tokens, or other secrets in issues or discussions.
+- Direct conversations and group conversations
+- Realtime Socket.IO messaging
+- Online/offline presence
+- Message replies, editing, deletion and reactions
+- File/image attachments
+- Typing indicators and delivery/read behaviour
+- Emoji picker
+- Voice/video call hooks
+- Smart Assist integration
+- Mobile-responsive web experience
+- Push-notification support where the platform allows it
+- Production API and PostgreSQL backend
+- Dockerized frontend and backend deployment
 
----
+## Deployment recommendation
 
-## 📚 Documentation
+For a single predictable production frontend, use the Docker web service as the source of truth. Build the image from the current `main` branch, recreate the container, and expose only the Docker frontend to end users. Keep the API behind the frontend's same-origin `/api` and `/socket.io` routes whenever possible.
 
-See the `docs/` directory for Docker, deployment, architecture, testing, Android, and operational guides.
+## Development
+
+```bash
+npm ci
+npm run dev -w apps/web
+```
+
+Build only the frontend:
+
+```bash
+npm run build -w apps/web
+```
+
+## Repository
+
+urlGitHub repositoryhttps://github.com/Narsing-s/global-messanger
