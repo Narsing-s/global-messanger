@@ -9,7 +9,7 @@ const b32 = (s: string) => { const a='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';let bits
 const otp = (secret: string, counter: number) => { const b=Buffer.alloc(8);b.writeBigUInt64BE(BigInt(counter));const h=crypto.createHmac('sha1',b32(secret)).update(b).digest();const off=h[h.length-1]&15;const n=((h[off]&127)<<24)|(h[off+1]<<16)|(h[off+2]<<8)|h[off+3];return String(n%1000000).padStart(6,'0'); };
 const validOtp = (secret:string, code:string) => {const c=Math.floor(Date.now()/30000);return [-1,0,1].some(d=>otp(secret,c+d)===code);};
 const newRecoveryCodes = () => Array.from({length:8},()=>crypto.randomBytes(5).toString('hex').toUpperCase());
-const recoveryMatches = async (stored:string|null, code:string) => { if(!stored)return false; const hashes:string[] = (()=>{try{return JSON.parse(stored)}catch{return[]}})(); for(let i=0;i<hashes.length;i++){if(await bcrypt.compare(code,hashes[i]))return i;} return -1; };
+const recoveryMatches = async (stored:string|null, code:string): Promise<number> => { if(!stored)return -1; const hashes:string[] = (()=>{try{return JSON.parse(stored)}catch{return[]}})(); for(let i=0;i<hashes.length;i++){if(await bcrypt.compare(code,hashes[i]))return i;} return -1; };
 
 export async function registerSecurityAuth(app: FastifyInstance, prisma: PrismaClient) {
   app.post('/api/auth/2fa/verify', async (request:any, reply) => {
