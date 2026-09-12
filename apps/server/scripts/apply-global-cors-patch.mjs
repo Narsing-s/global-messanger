@@ -34,7 +34,10 @@ const replacement = `const isAllowedOrigin = (origin?: string | null) => {
     /^capacitor:\\/\\/localhost$/.test(origin) ||
     /^ionic:\\/\\/localhost$/.test(origin);
 
-  return configured.includes(origin) || isLocalDev || isNativeApp;
+  const isHelpCentre =
+    origin === 'https://global-messenger-help-centre.onrender.com';
+
+  return configured.includes(origin) || isLocalDev || isNativeApp || isHelpCentre;
 };`;
 
 source =
