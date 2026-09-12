@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const file=path.resolve(process.cwd(),'src/advanced-features.ts');
+if(!fs.existsSync(file))process.exit(0);
+let s=fs.readFileSync(file,'utf8');
+s=s.replace("select:{id:true,username:true,email:true,displayName:true,avatarUrl:true,lastSeenAt:true,privacyLastSeen:true,privacyProfilePhoto:true}","select:{id:true,username:true,email:true,phoneNumber:true,displayName:true,bio:true,avatarUrl:true,lastSeenAt:true,privacyLastSeen:true,privacyProfilePhoto:true,e2eeKeyVersion:true,createdAt:true}");
+const old="const b:any=request.body||{}; const displayName=typeof b.displayName==='string'?b.displayName.trim().slice(0,80):undefined; const avatarUrl=typeof b.avatarUrl==='string'?b.avatarUrl.trim().slice(0,1000):b.avatarUrl===null?null:undefined; if(displayName!==undefined&&!displayName)return reply.badRequest('Display name cannot be empty'); return prisma.user.update({where:{id:userIdOf(request)},data:{...(displayName!==undefined?{displayName}:{}),...(avatarUrl!==undefined?{avatarUrl}: {})},";
+const replacement="const b:any=request.body||{}; const displayName=typeof b.displayName==='string'?b.displayName.trim().slice(0,80):undefined; const username=typeof b.username==='string'?b.username.trim().slice(0,32):undefined; const bio=typeof b.bio==='string'?b.bio.trim().slice(0,280):undefined; const avatarUrl=typeof b.avatarUrl==='string'?b.avatarUrl.trim().slice(0,2048):b.avatarUrl===null?null:undefined; if(displayName!==undefined&&!displayName)return reply.badRequest('Display name cannot be empty'); if(username!==undefined&&!/^[a-zA-Z0-9_.-]{3,32}$/.test(username))return reply.badRequest('Invalid username'); return prisma.user.update({where:{id:userIdOf(request)},data:{...(displayName!==undefined?{displayName}:{}),...(username!==undefined?{username}:{}),...(bio!==undefined?{bio}:{}),...(avatarUrl!==undefined?{avatarUrl}: {})},";
+if(s.includes(old))s=s.replace(old,replacement);
+fs.writeFileSync(file,s);
