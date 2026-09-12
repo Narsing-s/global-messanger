@@ -10,32 +10,16 @@ export async function registerActivityCenter(app: FastifyInstance, prisma: Prism
   app.get('/api/notifications/center', protectedRoute, async (request: any) => {
     const userId = uid(request);
     const limit = Math.min(Math.max(Number(request.query?.limit || 50), 1), 100);
-    const memberships = await prisma.conversationMember.findMany({
-      where: { userId },
-      select: { conversationId: true, lastReadAt: true }
-    });
+    const memberships = await prisma.conversationMember.findMany({ where: { userId }, select: { conversationId: true, lastReadAt: true } });
     const conversationIds = memberships.map(m => m.conversationId);
     if (!conversationIds.length) return { items: [], unreadCount: 0 };
-
     const messages = await prisma.message.findMany({
-      where: {
-        conversationId: { in: conversationIds },
-        senderId: { not: userId },
-        deletedAt: null,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      select: {
-        id: true, conversationId: true, senderId: true, body: true, type: true, createdAt: true,
-        sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } }
-      }
+      where: { conversationId: { in: conversationIds }, senderId: { not: userId }, deletedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      orderBy: { createdAt: 'desc' }, take: limit,
+      select: { id: true, conversationId: true, senderId: true, body: true, type: true, createdAt: true, sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } }
     });
     const unreadCount = memberships.reduce((total, m) => total + messages.filter(x => x.conversationId === m.conversationId && (!m.lastReadAt || x.createdAt > m.lastReadAt)).length, 0);
-    return {
-      items: messages.map(m => ({ id: m.id, conversationId: m.conversationId, sender: m.sender, body: m.body, type: m.type, createdAt: m.createdAt })),
-      unreadCount
-    };
+    return { items: messages, unreadCount };
   });
 
   app.post('/api/notifications/center/read', protectedRoute, async (request: any, reply) => {
@@ -54,7 +38,6 @@ export async function registerActivityCenter(app: FastifyInstance, prisma: Prism
     const type = String(request.query?.type || 'all').toLowerCase();
     const limit = Math.min(Math.max(Number(request.query?.limit || 25), 1), 50);
     if (q.length < 2) return { people: [], chats: [], messages: [], files: [], photos: [], links: [], groups: [] };
-
     const memberships = await prisma.conversationMember.findMany({ where: { userId }, select: { conversationId: true } });
     const allowed = memberships.map(m => m.conversationId);
     const wants = (name: string) => type === 'all' || type === name;
@@ -67,9 +50,9 @@ export async function registerActivityCenter(app: FastifyInstance, prisma: Prism
       result.groups = wants('groups') ? conversations.filter(c => c.isGroup) : [];
     }
     if (allowed.length && (wants('messages') || wants('files') || wants('photos') || wants('links'))) {
-      const messages = await prisma.message.findMany({ where: { conversationId: { in: allowed }, deletedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }], body: { contains: q, mode: 'insensitive' } }, orderBy: { createdAt: 'desc' }, take: limit, select: { id: true, conversationId: true, senderId: true, body: true, type: true, fileUrl: true, createdAt: true, sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } });
+      const messages = await prisma.message.findMany({ where: { conversationId: { in: allowed }, deletedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }], body: { contains: q, mode: 'insensitive' } }, orderBy: { createdAt: 'desc' }, take: limit, select: { id: true, conversationId: true, senderId: true, body: true, type: true, createdAt: true, sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } } } });
       result.messages = wants('messages') ? messages : [];
-      result.files = wants('files') ? messages.filter(m => Boolean(m.fileUrl) || ['file','document'].includes(String(m.type || '').toLowerCase())) : [];
+      result.files = wants('files') ? messages.filter(m => ['file','document','attachment'].includes(String(m.type || '').toLowerCase())) : [];
       result.photos = wants('photos') ? messages.filter(m => ['image','photo'].includes(String(m.type || '').toLowerCase())) : [];
       result.links = wants('links') ? messages.filter(m => /https?:\/\//i.test(String(m.body))) : [];
     }
