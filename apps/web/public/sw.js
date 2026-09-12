@@ -1,4 +1,4 @@
-const CACHE_NAME = 'global-messenger-shell-v8';
+const CACHE_NAME = 'global-messenger-shell-v9';
 const APP_SHELL = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', event => {
@@ -18,6 +18,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
+  // Network-first prevents an older app shell from masking a fresh Docker build.
   event.respondWith(
     fetch(request).then(response => {
       if (response.ok && response.type === 'basic') {
