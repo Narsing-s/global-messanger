@@ -5,72 +5,71 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#635bff" />
     <meta name="description" content="Global Messenger — fast, secure messaging across web, desktop and mobile." />
-    <meta name="gm-build" content="mobile-auth-20260912-v3" />
-    <link rel="manifest" href="/manifest.webmanifest?v=mobile-auth-20260912-v3" />
+    <meta name="gm-build" content="mobile-auth-20260912-v4" />
+    <link rel="manifest" href="/manifest.webmanifest?v=mobile-auth-20260912-v4" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <link rel="stylesheet" href="/ui-refresh.css?v=mobile-auth-20260912-v3" />
-    <link rel="stylesheet" href="/next-ui.css?v=mobile-auth-20260912-v3" />
-    <link rel="stylesheet" href="/reference-layout.css?v=mobile-auth-20260912-v3" />
-    <link rel="stylesheet" href="/desktop-ui-fix.css?v=mobile-auth-20260912-v3" />
-    <link rel="stylesheet" href="/modern-ui-v2.css?v=mobile-auth-20260912-v3" />
-    <link rel="stylesheet" href="/modern-ui-v3.css?v=mobile-auth-20260912-v3" />
-    <link rel="stylesheet" href="/ultimate-messenger.css?v=mobile-auth-20260912-v3" />
-    <link rel="stylesheet" href="/product-center.css?v=mobile-auth-20260912-v3" />
+    <link rel="stylesheet" href="/ui-refresh.css?v=mobile-auth-20260912-v4" />
+    <link rel="stylesheet" href="/next-ui.css?v=mobile-auth-20260912-v4" />
+    <link rel="stylesheet" href="/reference-layout.css?v=mobile-auth-20260912-v4" />
+    <link rel="stylesheet" href="/desktop-ui-fix.css?v=mobile-auth-20260912-v4" />
+    <link rel="stylesheet" href="/modern-ui-v2.css?v=mobile-auth-20260912-v4" />
+    <link rel="stylesheet" href="/modern-ui-v3.css?v=mobile-auth-20260912-v4" />
+    <link rel="stylesheet" href="/ultimate-messenger.css?v=mobile-auth-20260912-v4" />
+    <link rel="stylesheet" href="/product-center.css?v=mobile-auth-20260912-v4" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23635bff'/%3E%3Cpath d='M14 18h36v24H29l-9 8v-8h-6z' fill='white'/%3E%3Ccircle cx='25' cy='30' r='3' fill='%23635bff'/%3E%3Ccircle cx='32' cy='30' r='3' fill='%23635bff'/%3E%3Ccircle cx='39' cy='30' r='3' fill='%23635bff'/%3E%3C/svg%3E" />
     <title>Global Messenger</title>
   </head>
   <body>
     <div id="root"></div>
     <script>(async function(){try{if('serviceWorker'in navigator){const registrations=await navigator.serviceWorker.getRegistrations();await Promise.all(registrations.map(r=>r.unregister()));}if('caches'in window){const keys=await caches.keys();await Promise.all(keys.filter(k=>k.startsWith('global-messenger-shell-')).map(k=>caches.delete(k)));}}catch(_){}})();</script>
-    <script src="/mobile-auth-input-fix.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-actions-fix.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/auth-operation-fix.js?v=mobile-auth-20260912-v3"></script>
-    <script type="module" src="/src/e2ee-bootstrap.ts?v=mobile-auth-20260912-v3"></script>
-    <script type="module" src="/src/main.tsx?v=mobile-auth-20260912-v3"></script>
-    <script src="/reference-layout.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/premium-shell.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/premium-shell-fix.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/premium-product-layer.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/safety-actions.js?v=mobile-auth-20260912-v3"></script>
-    <script type="module" src="/src/socket-room-fix.ts?v=mobile-auth-20260912-v3"></script>
-    <script type="module" src="/src/features.ts?v=mobile-auth-20260912-v3"></script>
-    <script type="module" src="/src/advanced-ui.ts?v=mobile-auth-20260912-v3"></script>
-    <script type="module" src="/src/group-read-receipts.ts?v=mobile-auth-20260912-v3"></script>
-    <script type="module" src="/src/notification-runtime.ts?v=mobile-auth-20260912-v3"></script>
-    <script src="/modern-profile-ui.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/modern-ui-v3.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/ultimate-messenger.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/ultimate-messenger-bridge.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/emoji-picker.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/login-prefill.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/registration-success.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/account-delete.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-controls.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-switch-fix.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-modern-menu.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-menu-trigger.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-final-actions.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-folders.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-behavior-fix.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-contact-trigger.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-folder-sync.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-contact-actions-fix.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/help-center-link.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/ai-language-tools.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/install-app.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/settings.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/settings-extra.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/account-menu-cleanup.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/stale-error-fix.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/phase1-completeness.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/phase1-shortcuts.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/product-center.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/product-center-launcher.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/advanced-feature-center-lite.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/chat-ux-layout-fix.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/reliable-chat-operations.js?v=mobile-auth-20260912-v3"></script>
-    <script src="/message-menu-stability.js?v=mobile-auth-20260912-v3"></script>
+    <script src="/mobile-auth-input-fix.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-actions-fix.js?v=mobile-auth-20260912-v4"></script>
+    <script type="module" src="/src/e2ee-bootstrap.ts?v=mobile-auth-20260912-v4"></script>
+    <script type="module" src="/src/main.tsx?v=mobile-auth-20260912-v4"></script>
+    <script src="/reference-layout.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/premium-shell.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/premium-shell-fix.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/premium-product-layer.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/safety-actions.js?v=mobile-auth-20260912-v4"></script>
+    <script type="module" src="/src/socket-room-fix.ts?v=mobile-auth-20260912-v4"></script>
+    <script type="module" src="/src/features.ts?v=mobile-auth-20260912-v4"></script>
+    <script type="module" src="/src/advanced-ui.ts?v=mobile-auth-20260912-v4"></script>
+    <script type="module" src="/src/group-read-receipts.ts?v=mobile-auth-20260912-v4"></script>
+    <script type="module" src="/src/notification-runtime.ts?v=mobile-auth-20260912-v4"></script>
+    <script src="/modern-profile-ui.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/modern-ui-v3.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/ultimate-messenger.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/ultimate-messenger-bridge.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/emoji-picker.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/login-prefill.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/registration-success.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/account-delete.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-controls.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-switch-fix.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-modern-menu.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-menu-trigger.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-final-actions.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-folders.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-behavior-fix.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-contact-trigger.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-folder-sync.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-contact-actions-fix.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/help-center-link.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/ai-language-tools.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/install-app.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/settings.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/settings-extra.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/account-menu-cleanup.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/stale-error-fix.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/phase1-completeness.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/phase1-shortcuts.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/product-center.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/product-center-launcher.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/advanced-feature-center-lite.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/chat-ux-layout-fix.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/reliable-chat-operations.js?v=mobile-auth-20260912-v4"></script>
+    <script src="/message-menu-stability.js?v=mobile-auth-20260912-v4"></script>
     <script>document.addEventListener('click',function(e){const t=e.target instanceof Element?e.target:null;const h=t?.closest('.chat-heading');if(!h||t?.closest('.top-actions,button,a'))return;e.preventDefault();e.stopImmediatePropagation();if(typeof window.__gmOpenContactInfo==='function')window.__gmOpenContactInfo();else window.dispatchEvent(new CustomEvent('gm:open-contact-info'))},true);</script>
-    <script>if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js?v=mobile-auth-20260912-v3',{scope:'/'}).catch(()=>{});</script>
+    <script>if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js?v=mobile-auth-20260912-v4',{scope:'/'}).catch(()=>{});</script>
   </body>
 </html>
