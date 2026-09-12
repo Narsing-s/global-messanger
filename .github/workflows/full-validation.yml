@@ -54,7 +54,7 @@ jobs:
           NODE_ENV: test
         run: |
           set -euo pipefail
-          ./node_modules/.bin/vite preview --host 127.0.0.1 --port 4173 --strictPort > /tmp/global-messenger-web.log 2>&1 &
+          npm exec --workspace apps/web -- vite preview --host 127.0.0.1 --port 4173 --strictPort > /tmp/global-messenger-web.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
           ready=0
