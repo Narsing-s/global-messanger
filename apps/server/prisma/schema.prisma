@@ -15,6 +15,7 @@ model User {
   resetTokenHash      String?
   resetTokenExpiresAt DateTime?
   displayName         String
+  bio                 String?
   passwordHash        String
   avatarUrl           String?
   lastSeenAt          DateTime             @default(now())
@@ -29,7 +30,7 @@ model User {
   createdConvos       Conversation[]       @relation("ConversationCreator")
   reactions           MessageReaction[]
   devices             PushDevice[]
-  sessions             UserSession[]
+  sessions            UserSession[]
   bookmarks           MessageBookmark[]
   pinsCreated         PinnedMessage[]      @relation("PinCreator")
   blocksCreated       UserBlock[]          @relation("BlockCreator")
@@ -58,7 +59,7 @@ model PushDevice {
   id          String   @id @default(cuid())
   userId      String
   token       String   @unique
-  platform   String
+  platform    String
   enabled     Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -87,11 +88,16 @@ model ConversationMember {
   lastReadAt     DateTime?
   mutedUntil     DateTime?
   archivedAt     DateTime?
+  favoriteAt     DateTime?
+  pinnedAt       DateTime?
   disappearingSeconds Int?
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([conversationId, userId])
   @@index([userId])
+  @@index([userId, favoriteAt])
+  @@index([userId, pinnedAt])
+  @@index([userId, archivedAt])
 }
 
 model Message {
@@ -132,7 +138,7 @@ model MessageReceipt {
   readAt      DateTime?
   createdAt   DateTime @default(now())
   message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([messageId, userId])
   @@index([userId, readAt])
   @@index([messageId, deliveredAt])
@@ -191,7 +197,7 @@ model SupportRequest {
   details      String
   status       String               @default("OPEN")
   createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  updatedAt   DateTime             @updatedAt
   resolution   SupportResolution?
   @@index([email, createdAt])
   @@index([status, createdAt])
