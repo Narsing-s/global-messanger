@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-message-ticks-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && vite",
     "build": "node scripts/apply-chat-stability-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-message-ticks-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && tsc -b && vite build",
+    "validate:operations": "node scripts/validate-operations.mjs",
     "android:add": "cap add android",
     "android:sync": "cap sync",
     "android:open": "cap open android",
