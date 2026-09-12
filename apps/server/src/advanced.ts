@@ -9,6 +9,7 @@ import { sendPasswordResetEmail, sendAccountDeletedEmail } from './smtp.js';
 import { registerEmailAuthRoutes } from './email-auth-routes.js';
 import { localAssist } from './local-ai.js';
 import { registerAdvancedFeatures, startExpiredMessageCleanup } from './advanced-features.js';
+import { registerAdvancedPlatform } from './advanced-platform.js';
 import { registerSupportRoutes } from './support-routes.js';
 
 type AuthRequest = { user: { id: string; username: string } };
@@ -24,6 +25,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   const auth = { preHandler: [app.authenticate] };
   await registerEmailAuthRoutes(app, prisma);
   await registerAdvancedFeatures(app, prisma);
+  await registerAdvancedPlatform(app, prisma);
   startExpiredMessageCleanup(prisma);
 
   await registerSupportRoutes(app, prisma);
