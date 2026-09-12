@@ -5,13 +5,16 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.os.Bundle;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
@@ -30,10 +33,18 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        requestWindowFocusForKeyboard();
         securityPrefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         requestRuntimePermissions();
+
         webView = new WebView(this);
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.requestFocus(View.FOCUS_DOWN);
+        webView.setBackgroundColor(Color.TRANSPARENT);
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         setContentView(webView);
+
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -41,6 +52,13 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(true);
+        s.setBuiltInZoomControls(false);
+        s.setDisplayZoomControls(false);
+        s.setSupportZoom(false);
+        s.setTextZoom(100);
+        s.setJavaScriptCanOpenWindowsAutomatically(false);
+        s.setLoadsImagesAutomatically(true);
+
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
             @Override public void onPermissionRequest(final PermissionRequest request) {
@@ -49,10 +67,16 @@ public class MainActivity extends Activity {
         });
         webView.addJavascriptInterface(new SecurityBridge(), "GlobalMessengerSecurity");
         webView.loadUrl(APP_URL);
+
         if (securityPrefs.getBoolean(BIOMETRIC_LOCK, false)) {
             webView.setVisibility(View.INVISIBLE);
             webView.postDelayed(this::authenticateForApp, 250);
         }
+    }
+
+    private void requestWindowFocusForKeyboard() {
+        Window window = getWindow();
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
 
     private boolean biometricAvailable() {
@@ -65,6 +89,7 @@ public class MainActivity extends Activity {
         if (!biometricAvailable()) {
             securityPrefs.edit().putBoolean(BIOMETRIC_LOCK, false).apply();
             webView.setVisibility(View.VISIBLE);
+            webView.requestFocus(View.FOCUS_DOWN);
             return;
         }
         Executor executor = ContextCompat.getMainExecutor(this);
@@ -72,6 +97,7 @@ public class MainActivity extends Activity {
             @Override public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
                 authenticatedThisLaunch = true;
                 webView.setVisibility(View.VISIBLE);
+                webView.requestFocus(View.FOCUS_DOWN);
             }
             @Override public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
                 if (errorCode == BiometricPrompt.ERROR_USER_CANCELED || errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
