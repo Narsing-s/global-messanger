@@ -3,22 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b1020" />
+    <meta name="theme-color" content="#635bff" />
     <meta name="description" content="Global Messenger — fast, secure messaging across web, desktop and mobile." />
-    <meta name="gm-build" content="docker-main-20260912" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Global Messenger" />
-    <link rel="manifest" href="/manifest.webmanifest?v=20260912g" />
+    <meta name="gm-build" content="aurora-docker-main-20260912" />
+    <link rel="manifest" href="/manifest.webmanifest?v=aurora20260912" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <link rel="stylesheet" href="/ui-refresh.css?v=20260912g" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230b1020'/%3E%3Cpath d='M14 18h36v24H29l-9 8v-8h-6z' fill='white'/%3E%3Ccircle cx='25' cy='30' r='3' fill='%230b1020'/%3E%3Ccircle cx='32' cy='30' r='3' fill='%230b1020'/%3E%3Ccircle cx='39' cy='30' r='3' fill='%230b1020'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/ui-refresh.css?v=aurora20260912" />
+    <link rel="stylesheet" href="/next-ui.css?v=aurora20260912" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23635bff'/%3E%3Cpath d='M14 18h36v24H29l-9 8v-8h-6z' fill='white'/%3E%3Ccircle cx='25' cy='30' r='3' fill='%23635bff'/%3E%3Ccircle cx='32' cy='30' r='3' fill='%23635bff'/%3E%3Ccircle cx='39' cy='30' r='3' fill='%23635bff'/%3E%3C/svg%3E" />
     <title>Global Messenger</title>
   </head>
   <body>
     <div id="root"></div>
-    <!-- Deployment safety: remove legacy service workers/caches before the new Docker shell starts. -->
     <script>
       (async function () {
         try {
@@ -33,40 +29,40 @@
         } catch (_) {}
       })();
     </script>
-    <script src="/chat-actions-fix.js?v=20260903k"></script>
-    <script src="/auth-operation-fix.js?v=20260906a"></script>
-    <script type="module" src="/src/e2ee-bootstrap.ts?v=20260905a"></script>
-    <script type="module" src="/src/main.tsx?v=20260912g"></script>
-    <script src="/premium-shell.js?v=20260912g"></script>
-    <script src="/premium-shell-fix.js?v=20260912g"></script>
-    <script src="/premium-product-layer.js?v=20260912g"></script>
-    <script src="/safety-actions.js?v=20260912g"></script>
-    <script type="module" src="/src/socket-room-fix.ts?v=20260903k"></script>
-    <script type="module" src="/src/features.ts?v=20260903k"></script>
-    <script type="module" src="/src/advanced-ui.ts?v=20260903k"></script>
-    <script type="module" src="/src/group-read-receipts.ts?v=20260903k"></script>
-    <script type="module" src="/src/notification-runtime.ts?v=20260905b"></script>
-    <script src="/emoji-picker.js?v=20260903k"></script>
-    <script src="/login-prefill.js?v=20260903k"></script>
-    <script src="/registration-success.js?v=20260903k"></script>
-    <script src="/account-delete.js?v=20260903l"></script>
-    <script src="/chat-controls.js?v=20260903k"></script>
-    <script src="/chat-switch-fix.js?v=20260903k"></script>
-    <script src="/chat-modern-menu.js?v=20260903k"></script>
-    <script src="/chat-menu-trigger.js?v=20260903k"></script>
-    <script src="/chat-final-actions.js?v=20260903n"></script>
-    <script src="/chat-folders.js?v=20260903n"></script>
-    <script src="/chat-behavior-fix.js?v=20260903k"></script>
-    <script src="/chat-contact-trigger.js?v=20260903k"></script>
-    <script src="/chat-folder-sync.js?v=20260903m"></script>
-    <script src="/chat-contact-actions-fix.js?v=20260903k"></script>
-    <script src="/help-center-link.js?v=20260903c"></script>
-    <script src="/ai-language-tools.js?v=20260903b"></script>
-    <script src="/install-app.js?v=20260905a"></script>
-    <script src="/settings.js?v=20260905a"></script>
-    <script src="/settings-extra.js?v=20260905b"></script>
-    <script src="/account-menu-cleanup.js?v=20260905c"></script>
-    <script src="/stale-error-fix.js?v=20260905d"></script>
+    <script src="/chat-actions-fix.js?v=aurora20260912"></script>
+    <script src="/auth-operation-fix.js?v=aurora20260912"></script>
+    <script type="module" src="/src/e2ee-bootstrap.ts?v=aurora20260912"></script>
+    <script type="module" src="/src/main.tsx?v=aurora20260912"></script>
+    <script src="/premium-shell.js?v=aurora20260912"></script>
+    <script src="/premium-shell-fix.js?v=aurora20260912"></script>
+    <script src="/premium-product-layer.js?v=aurora20260912"></script>
+    <script src="/safety-actions.js?v=aurora20260912"></script>
+    <script type="module" src="/src/socket-room-fix.ts?v=aurora20260912"></script>
+    <script type="module" src="/src/features.ts?v=aurora20260912"></script>
+    <script type="module" src="/src/advanced-ui.ts?v=aurora20260912"></script>
+    <script type="module" src="/src/group-read-receipts.ts?v=aurora20260912"></script>
+    <script type="module" src="/src/notification-runtime.ts?v=aurora20260912"></script>
+    <script src="/emoji-picker.js?v=aurora20260912"></script>
+    <script src="/login-prefill.js?v=aurora20260912"></script>
+    <script src="/registration-success.js?v=aurora20260912"></script>
+    <script src="/account-delete.js?v=aurora20260912"></script>
+    <script src="/chat-controls.js?v=aurora20260912"></script>
+    <script src="/chat-switch-fix.js?v=aurora20260912"></script>
+    <script src="/chat-modern-menu.js?v=aurora20260912"></script>
+    <script src="/chat-menu-trigger.js?v=aurora20260912"></script>
+    <script src="/chat-final-actions.js?v=aurora20260912"></script>
+    <script src="/chat-folders.js?v=aurora20260912"></script>
+    <script src="/chat-behavior-fix.js?v=aurora20260912"></script>
+    <script src="/chat-contact-trigger.js?v=aurora20260912"></script>
+    <script src="/chat-folder-sync.js?v=aurora20260912"></script>
+    <script src="/chat-contact-actions-fix.js?v=aurora20260912"></script>
+    <script src="/help-center-link.js?v=aurora20260912"></script>
+    <script src="/ai-language-tools.js?v=aurora20260912"></script>
+    <script src="/install-app.js?v=aurora20260912"></script>
+    <script src="/settings.js?v=aurora20260912"></script>
+    <script src="/settings-extra.js?v=aurora20260912"></script>
+    <script src="/account-menu-cleanup.js?v=aurora20260912"></script>
+    <script src="/stale-error-fix.js?v=aurora20260912"></script>
     <script>
       document.addEventListener('click', function (event) {
         const target = event.target instanceof Element ? event.target : null;
@@ -79,7 +75,7 @@
       }, true);
     </script>
     <script>
-      if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=20260912g', { scope: '/' }).catch(() => {});
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=aurora20260912', { scope: '/' }).catch(() => {});
     </script>
   </body>
 </html>
