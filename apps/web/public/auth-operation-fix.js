@@ -2,7 +2,7 @@
   'use strict';
   if (window.__gmAuthOperationFix) return;
   window.__gmAuthOperationFix = true;
-  const apiBase = () => (window.__GM_CONFIG__?.API_URL || 'https://global-messanger-backend.onrender.com').replace(/\/$/, '');
+  const apiBase = () => (window.__GM_CONFIG__?.API_URL || window.location.origin).replace(/\/$/, '');
   const val = (form, selector) => form.querySelector(selector)?.value?.trim() || '';
   const readJson = async response => { try { return await response.json(); } catch { return {}; } };
   async function run(form) {
