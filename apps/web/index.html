@@ -5,26 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0b1020" />
     <meta name="description" content="Global Messenger — fast, secure messaging across web, desktop and mobile." />
+    <meta name="gm-build" content="docker-main-20260912" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Global Messenger" />
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="manifest" href="/manifest.webmanifest?v=20260912g" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <link rel="stylesheet" href="/ui-refresh.css?v=20260912f" />
+    <link rel="stylesheet" href="/ui-refresh.css?v=20260912g" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230b1020'/%3E%3Cpath d='M14 18h36v24H29l-9 8v-8h-6z' fill='white'/%3E%3Ccircle cx='25' cy='30' r='3' fill='%230b1020'/%3E%3Ccircle cx='32' cy='30' r='3' fill='%230b1020'/%3E%3Ccircle cx='39' cy='30' r='3' fill='%230b1020'/%3E%3C/svg%3E" />
     <title>Global Messenger</title>
   </head>
   <body>
     <div id="root"></div>
+    <!-- Deployment safety: remove legacy service workers/caches before the new Docker shell starts. -->
+    <script>
+      (async function () {
+        try {
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(r => r.unregister()));
+          }
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.filter(k => k.startsWith('global-messenger-shell-')).map(k => caches.delete(k)));
+          }
+        } catch (_) {}
+      })();
+    </script>
     <script src="/chat-actions-fix.js?v=20260903k"></script>
     <script src="/auth-operation-fix.js?v=20260906a"></script>
     <script type="module" src="/src/e2ee-bootstrap.ts?v=20260905a"></script>
-    <script type="module" src="/src/main.tsx?v=20260906a"></script>
-    <script src="/premium-shell.js?v=20260912b"></script>
-    <script src="/premium-shell-fix.js?v=20260912c"></script>
-    <script src="/premium-product-layer.js?v=20260912d"></script>
-    <script src="/safety-actions.js?v=20260912e"></script>
+    <script type="module" src="/src/main.tsx?v=20260912g"></script>
+    <script src="/premium-shell.js?v=20260912g"></script>
+    <script src="/premium-shell-fix.js?v=20260912g"></script>
+    <script src="/premium-product-layer.js?v=20260912g"></script>
+    <script src="/safety-actions.js?v=20260912g"></script>
     <script type="module" src="/src/socket-room-fix.ts?v=20260903k"></script>
     <script type="module" src="/src/features.ts?v=20260903k"></script>
     <script type="module" src="/src/advanced-ui.ts?v=20260903k"></script>
@@ -63,7 +79,7 @@
       }, true);
     </script>
     <script>
-      if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=20260912f', { scope: '/' }).catch(() => {});
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=20260912g', { scope: '/' }).catch(() => {});
     </script>
   </body>
 </html>
