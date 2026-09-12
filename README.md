@@ -1,10 +1,10 @@
 # 🌍 Global Messenger
 
-> **Private, realtime messaging for web and Android.**
+> **Private, realtime messaging for Web and Android.**
 
-Global Messenger is a full-stack messaging application built around fast realtime communication, reliable conversation history, profiles, groups, media sharing, notifications, and Android support.
+Global Messenger is a simple messaging app for people who want to chat, create groups, share files/images, and receive messages in realtime.
 
-The project is designed as a single product with a shared TypeScript codebase for the web and Android experience.
+**You do not need to understand programming to use it.** If you only want to use the app, start with the Web App or download the Android APK from Releases.
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white)
@@ -16,379 +16,357 @@ The project is designed as a single product with a shared TypeScript codebase fo
 
 ---
 
-## ✨ Highlights
+## 🚀 For normal users
 
-- 💬 One-to-one and group conversations
-- ⚡ Realtime messaging with Socket.IO
-- 👤 Profiles, profile photos, online status, and last seen
-- ✍️ Typing indicators, replies, reactions, and message editing
-- 🗑️ **Delete for me / Delete for everyone**
-- 🧹 **Manual Clear Chat** — messages are not automatically cleared
-- 📎 Image and file sharing
-- 📌 Pinned messages and bookmarks
-- 🔕 Notifications and notification sounds
-- 🚫 User blocking
-- 📞 Voice/video calling foundation with WebRTC
-- 🔐 JWT authentication and bcrypt password hashing
-- 🔑 Password recovery with email-based reset flow
-- 📱 Android application through Capacitor
-- 🤖 Optional AI assistance — messaging works without AI
+### 🌐 Use the Web App
 
-> **Important:** Global Messenger does not automatically delete or clear users' chats. Conversation history remains available unless the user explicitly uses a message or chat deletion/clear action.
+**Open Global Messenger:**
 
----
+https://global-messanger.onrender.com
 
-## 🚀 Live Project
+Create an account or sign in and start messaging.
 
-| Service | Link |
+> The Web App currently uses the existing public hosting service while the new independent Docker production hosting is being prepared.
+
+### 📱 Use Android
+
+**Download the latest Android release:**
+
+https://github.com/Narsing-s/global-messanger/releases/latest
+
+For direct installation, download:
+
+**`Global-Messenger.apk`**
+
+### How to install the Android APK
+
+1. Download `Global-Messenger.apk` on your Android phone.
+2. Open the downloaded file.
+3. If Android asks for permission to install an app from that source, allow it.
+4. Tap **Install**.
+5. Open **Global Messenger**.
+6. Create an account or sign in.
+
+**Which file should I download?**
+
+| File | Simple explanation |
 |---|---|
-| 🌐 Web App | https://global-messanger.onrender.com |
-| 🔌 API | https://global-messanger-backend.onrender.com |
-| ❤️ API Health | https://global-messanger-backend.onrender.com/health |
-| 💻 GitHub | https://github.com/Narsing-s/global-messanger |
+| `Global-Messenger.apk` | ✅ This is the file normal Android users should install. |
+| `Global-Messenger.aab` | For Google Play Store publishing. Do not try to install it directly. |
+| `.zip` | Build files for developers. |
 
 ---
 
-## 📱 Android
+## ✨ What can I do with Global Messenger?
 
-Android builds are produced through the repository's GitHub Actions release workflow.
+- 💬 Chat with another person.
+- 👥 Create and use group chats.
+- ⚡ Receive messages in realtime.
+- 👤 Manage your profile.
+- 📎 Share images and files.
+- ✍️ Use typing indicators, replies and reactions where available.
+- 📌 Pin and bookmark messages where available.
+- 🔔 Receive notifications.
+- 🚫 Block users.
+- 🔐 Create an account and sign in securely.
+- 🔑 Reset your password by email.
+- 📱 Use the same product on Web and Android.
+- 🗑️ Delete or clear conversations using the available user controls.
 
-### Download a release
+### Your conversations are user-controlled
 
-Open the latest GitHub Release:
+Global Messenger does **not silently clear your chats**. Conversation history remains available unless you explicitly use a message or conversation deletion/clear action.
 
-**https://github.com/Narsing-s/global-messanger/releases/latest**
+---
 
-Release assets can include:
+## 🏠 What is this project?
 
-| Package | Purpose | Install directly? |
-|---|---|---|
-| `Global-Messenger.apk` | Android installation package | ✅ Yes |
-| `Global-Messenger.aab` | Google Play publishing bundle | ❌ No |
-| `.zip` | Build/artifact archive | ❌ No |
-
-### Release process
+Global Messenger has two main parts:
 
 ```text
-Code pushed to main
-        │
-        ├── Web build / deployment
-        │
-        └── Android build / verification
-
-Create a version tag
-        │
-        ▼
-      v1.0.0
-        │
-        ▼
-Android release workflow
-        │
-        ├── APK
-        ├── AAB
-        └── GitHub Release
+                 Global Messenger
+                        │
+             ┌──────────┴──────────┐
+             │                     │
+          Web App              Android App
+             │                     │
+             └──────────┬──────────┘
+                        │
+                        ▼
+                   Global API
+                        │
+              ┌─────────┴─────────┐
+              │                   │
+         Realtime chat        Database
+         Socket.IO           PostgreSQL
 ```
 
-Example:
+The Web application uses React and the Android application is built from the same product using Capacitor.
+
+The backend uses Node.js, Fastify, Socket.IO, Prisma and PostgreSQL.
+
+---
+
+## 🐳 Docker: run the whole application yourself
+
+Docker makes it possible to run Global Messenger as a complete package instead of depending on one specific hosting provider.
+
+The Docker setup contains:
+
+| Service | What it means |
+|---|---|
+| **Web** | The website users open in their browser. |
+| **API** | The part that handles login, messages, files and realtime communication. |
+| **PostgreSQL** | The database where application data is stored. |
+| **Mailpit** | A local mailbox used only for testing emails. |
+
+### Simple local Docker setup
+
+Install Docker Desktop first.
+
+Then open a terminal in the project folder and run:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+copy .env.example .env
+docker compose --profile dev up -d --build
 ```
 
-A normal push to `main` is used for development/build verification. A version tag such as `v1.0.0` is used to publish a production Android release.
+Open the application:
 
-See [`docs/06-android-play-store.md`](./docs/06-android-play-store.md) and [`docs/ANDROID_APK.md`](./docs/ANDROID_APK.md).
+**http://localhost:8080**
+
+Check the containers:
+
+```bash
+docker compose ps
+```
+
+You should see Web, API and PostgreSQL running and healthy.
+
+### Test local password-reset emails
+
+Open:
+
+**http://localhost:8025**
+
+Mailpit shows emails generated by the local Docker environment. It is for development/testing and does not deliver email to real users.
 
 ---
 
-## 🏗️ Architecture
+## ☁️ Online Docker hosting
+
+A very important point:
+
+**Docker by itself does not create an Internet website.**
+
+Docker packages the application. To make it available to everyone, the Docker containers must run on an online server/cloud machine with a public domain and HTTPS.
+
+Our target production setup is:
 
 ```text
-                         GLOBAL MESSENGER
-                                │
-               ┌────────────────┴────────────────┐
-               │                                 │
-        React + Vite Web                    Fastify API
-        TypeScript + CSS                    Node.js + TS
-               │                                 │
-        Capacitor Android                    Socket.IO
-                                                 │
-                                                 ▼
-                                      Prisma + PostgreSQL
-
-Local development:
-  Docker Compose → PostgreSQL
-  Mailpit        → local email testing
+GitHub
+   ↓
+GitHub Actions
+   ↓
+Docker images
+   ↓
+Online Docker server
+   ├── Web / Nginx
+   ├── API / Socket.IO
+   ├── PostgreSQL
+   └── Persistent media storage
+   ↓
+HTTPS
+   ↓
+Users around the world
 ```
 
-### Application layers
+This lets Global Messenger have an independent hosting path instead of depending entirely on a Render service limit.
 
-| Layer | Technology |
-|---|---|
-| Frontend | React + TypeScript + Vite |
-| UI | Responsive CSS + Lucide |
-| Backend | Node.js + Fastify + TypeScript |
-| Realtime | Socket.IO |
-| Database | PostgreSQL + Prisma |
-| Authentication | JWT + bcrypt |
-| Calls | WebRTC foundation |
-| Android | Capacitor + Android |
-| Local development | Docker Compose + Mailpit |
-| Optional AI | Provider-based integration |
+Detailed instructions are in:
+
+[`docs/DOCKER_PRODUCTION.md`](./docs/DOCKER_PRODUCTION.md)
 
 ---
 
-## 📁 Repository Structure
+## 🔐 Security — very important
 
-```text
-.
-├── apps/
-│   ├── web/                 # React web application + Capacitor Android frontend
-│   └── server/              # Fastify API, Socket.IO, Prisma and backend services
-├── android/                 # Android project files
-├── docs/                    # Product, setup, Android and contributor documentation
-├── scripts/                 # Development, verification and maintenance scripts
-├── support/                 # Supporting project resources
-├── .github/                 # GitHub Actions and repository automation
-├── docker-compose.yml       # Local PostgreSQL / Mailpit services
-├── render.yaml              # Render deployment configuration
-├── package.json             # Workspace scripts and dependencies
-└── README.md                # Project documentation
-```
+Never put private information into GitHub.
+
+Do **not** commit:
+
+- Passwords
+- Database passwords
+- JWT secrets
+- SMTP passwords
+- API keys
+- Private signing keys
+- Production `.env` files
+
+Use `.env.example` only as a template. Put real values into your local `.env` or your hosting provider's secret/environment settings.
+
+For production, use HTTPS, strong secrets, database backups, persistent media storage, secure email configuration, monitoring, and rate limiting.
 
 ---
 
-## 🛠️ Prerequisites
+## 🧑‍💻 Developer setup
 
-Install the following before running the project locally:
+If you want to develop Global Messenger instead of simply using it, install:
 
 - Node.js 22 or newer
 - npm
-- PostgreSQL, or Docker Desktop
 - Git
-- Android Studio + Android SDK for native Android builds
+- Docker Desktop, or PostgreSQL
+- Android Studio + Android SDK for Android development
 
-For Android development, use a supported JDK version required by the current Android/Gradle project configuration.
-
----
-
-## ⚙️ Local Development
-
-### 1. Clone the repository
+Clone the repository:
 
 ```bash
 git clone https://github.com/Narsing-s/global-messanger.git
 cd global-messanger
 ```
 
-### 2. Install dependencies
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-### 3. Start local services
-
-If using Docker:
+Build the application:
 
 ```bash
-docker compose up -d
+npm run build
 ```
 
-This provides the local services required by the development setup, including PostgreSQL and Mailpit where configured.
-
-### 4. Generate Prisma client
-
-```bash
-npm run db:generate
-```
-
-### 5. Apply database migrations
-
-For local development:
-
-```bash
-npm run db:migrate
-```
-
-For an existing production database:
-
-```bash
-npm run db:deploy
-```
-
-### 6. Start the application
-
-Run the web and server development workflow:
-
-```bash
-npm run dev
-```
-
-Or run them independently:
-
-```bash
-npm run dev:server
-npm run dev:web
-```
-
-Direct development commands are also available:
-
-```bash
-npm run dev:server:direct
-npm run dev:web:direct
-```
-
----
-
-## 🧪 Verification
-
-Useful project checks include:
+Run verification:
 
 ```bash
 npm run doctor
 npm run verify:local
 npm run smoke
-npm run build
 ```
 
-The verification workflow is intended to catch configuration, build, API, database, and local runtime problems before deployment.
+Start development:
+
+```bash
+npm run dev
+```
 
 ---
 
-## 🔐 Authentication & Account Recovery
+## 📱 Android releases
 
-Global Messenger uses:
+Android builds are produced through GitHub Actions.
 
-- JWT-based authentication
-- bcrypt password hashing
-- Email-based password recovery
-- Password reset links
-- Account deletion support
+**Download page:**
 
-Password-reset email delivery is handled by the application's configured mail server. Local development can use Mailpit to capture emails without sending real messages.
+https://github.com/Narsing-s/global-messanger/releases/latest
 
-**Never commit passwords, SMTP credentials, JWT secrets, database credentials, API tokens, or other private configuration to Git.** Use environment variables or the secret-management facilities of your deployment platform.
-
----
-
-## 💬 Messaging Behavior
-
-Global Messenger provides user-controlled message management:
-
-- **Delete for me** removes a message from the current user's view.
-- **Delete for everyone** removes a message for conversation participants where supported.
-- **Clear Chat** is an explicit user action.
-- **Automatic chat clearing is not enabled.**
-- Realtime reconnect logic is designed to restore the active messaging session after temporary connection loss.
-
-The product intentionally avoids silently clearing user conversations because message history can be important to users.
-
----
-
-## 📎 Media & Storage
-
-The application supports image/file sharing through the backend media flow.
-
-Production deployments should use persistent storage for uploaded media. Temporary container filesystems should not be treated as permanent message-media storage.
-
----
-
-## 📞 Calling
-
-Calling functionality provides the application foundation for voice/video communication using WebRTC.
-
-Production WebRTC deployments may require appropriate STUN/TURN infrastructure and production networking configuration.
-
----
-
-## 🤖 Optional AI
-
-AI assistance is optional. The core messaging experience does **not** depend on an AI provider.
-
-If AI features are enabled, provider credentials should be configured securely through environment variables and should never be committed to the repository.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome — bug fixes, testing, accessibility, UI improvements, Android testing, performance work, documentation, security improvements, and new features are all valuable.
-
-Recommended workflow:
+A production Android release should contain:
 
 ```text
-Use the application
-       ↓
-Find a bug / improvement
-       ↓
-Open an Issue
-       ↓
-Create a focused branch
-       ↓
-Implement + test
-       ↓
-Open a Pull Request
-       ↓
-Review + CI
-       ↓
-Merge
+Global-Messenger.apk  → direct Android installation
+Global-Messenger.aab  → Google Play Store publishing
 ```
 
-Good contributions should be focused and should avoid unrelated changes in the same pull request.
+### Version numbers
 
-Start here:
+We use normal software version numbers such as:
 
-- [Issues](https://github.com/Narsing-s/global-messanger/issues)
-- [Pull Requests](https://github.com/Narsing-s/global-messanger/pulls)
-- [`docs/08-contributing.md`](./docs/08-contributing.md)
-- [`docs/11-community-and-contributors.md`](./docs/11-community-and-contributors.md)
-- [`docs/SECURITY.md`](./docs/SECURITY.md)
-- [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)
+```text
+0.1.0  → early/public testing
+1.0.0  → first major public release
+1.1.0  → new features
+1.1.1  → bug/security fix
+```
+
+A release tag such as `v1.0.0` identifies a specific version that users can download again later.
+
+---
+
+## 🧪 Before publishing a release
+
+A release should be checked in this order:
+
+```text
+Build
+  ↓
+API health
+  ↓
+Login / registration
+  ↓
+Send message
+  ↓
+Realtime message
+  ↓
+Refresh and verify history
+  ↓
+File/image upload
+  ↓
+Password reset
+  ↓
+Android APK
+  ↓
+Publish release
+```
+
+Useful automated commands:
+
+```bash
+npm run build
+npm run verify:local
+npm run smoke
+```
 
 ---
 
 ## 📚 Documentation
 
-Project documentation is maintained under [`docs/`](./docs).
+The `docs` folder contains detailed guides.
 
-Useful guides include:
-
-- [`docs/08-contributing.md`](./docs/08-contributing.md) — contribution workflow
-- [`docs/11-community-and-contributors.md`](./docs/11-community-and-contributors.md) — community guidance
-- [`docs/06-android-play-store.md`](./docs/06-android-play-store.md) — Android and Play Store process
-- [`docs/ANDROID_APK.md`](./docs/ANDROID_APK.md) — Android APK build/release information
-- [`docs/SECURITY.md`](./docs/SECURITY.md) — security policy
+| Document | What it explains |
+|---|---|
+| [`docs/DOCKER_PRODUCTION.md`](./docs/DOCKER_PRODUCTION.md) | How Docker hosting works and how to deploy it. |
+| [`docs/SECRETS.md`](./docs/SECRETS.md) | How to protect passwords and secrets. |
+| [`docs/ANDROID_APK.md`](./docs/ANDROID_APK.md) | Android APK build/release information. |
+| [`docs/06-android-play-store.md`](./docs/06-android-play-store.md) | Android and Play Store process. |
+| [`docs/08-contributing.md`](./docs/08-contributing.md) | How developers can contribute. |
+| [`docs/11-community-and-contributors.md`](./docs/11-community-and-contributors.md) | Community and contributor guidance. |
+| [`docs/SECURITY.md`](./docs/SECURITY.md) | Security policy. |
 
 ---
 
-## 🚀 Deployment
+## 🤝 Help and contributing
 
-The repository includes deployment configuration for the current hosting setup.
+If something does not work:
 
-Before deploying:
+1. Check the latest GitHub Release.
+2. Read the relevant guide in `docs/`.
+3. Search existing GitHub Issues.
+4. Open a new issue with the problem and steps to reproduce it.
 
-1. Configure production environment variables.
-2. Configure a persistent PostgreSQL database.
-3. Configure persistent media storage.
-4. Run database migrations with `npm run db:deploy`.
-5. Verify the API health endpoint.
-6. Verify authentication and password recovery.
-7. Verify realtime reconnect and message delivery.
-8. Verify media upload/download behavior.
-9. Verify the web production build.
-10. Build and verify the Android package when releasing Android.
+GitHub:
+
+https://github.com/Narsing-s/global-messanger
+
+Issues:
+
+https://github.com/Narsing-s/global-messanger/issues
+
+Pull requests:
+
+https://github.com/Narsing-s/global-messanger/pulls
 
 ---
 
 ## 📄 License
 
-This project is licensed under the **MIT License**. See [`LICENSE`](./LICENSE).
+This project is licensed under the MIT License. See [`LICENSE`](./LICENSE).
 
 ---
 
-## 🌍 Project
+## 🌍 Official project links
 
-**Global Messenger** — one messaging product for web and Android, built with a realtime-first architecture and user-controlled conversation history.
-
-**Repository:** https://github.com/Narsing-s/global-messanger
+**Web:** https://global-messanger.onrender.com  
+**Android releases:** https://github.com/Narsing-s/global-messanger/releases/latest  
+**GitHub:** https://github.com/Narsing-s/global-messanger
