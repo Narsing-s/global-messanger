@@ -51,10 +51,16 @@ services:
       start_period: 20s
     networks: [messenger]
 
+  # Canonical production web frontend. The image builds the current apps/web
+  # source into a Vite bundle and serves it with Nginx. Port 8080 is the
+  # user-facing Docker frontend URL by default.
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-docker-main}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
     restart: unless-stopped
     init: true
     depends_on:
