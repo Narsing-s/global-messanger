@@ -23,8 +23,11 @@ model User {
   privacyProfilePhoto String               @default("everyone")
   e2eePublicKey       String?
   e2eeKeyVersion      Int                  @default(1)
+  totpSecret          String?
+  totpEnabled         Boolean              @default(false)
+  recoveryCodesHash   String?
   role                String               @default("USER")
-  createdAt            DateTime             @default(now())
+  createdAt           DateTime             @default(now())
   messages            Message[]
   memberships         ConversationMember[]
   createdConvos       Conversation[]       @relation("ConversationCreator")
@@ -37,6 +40,8 @@ model User {
   blockedBy            UserBlock[]          @relation("BlockedUser")
   messageReceipts     MessageReceipt[]
   supportResolutions  SupportResolution[]  @relation("SupportResolver")
+  passkeys            PasskeyCredential[]
+  loginHistory        LoginHistory[]
 }
 
 model UserSession {
@@ -53,6 +58,33 @@ model UserSession {
   revokedAt  DateTime?
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, revokedAt])
+}
+
+model LoginHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  method    String
+  success   Boolean  @default(true)
+  platform  String?
+  userAgent String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+}
+
+model PasskeyCredential {
+  id           String   @id @default(cuid())
+  userId       String
+  credentialId String   @unique
+  publicKey    String
+  counter      Int      @default(0)
+  deviceType   String?
+  transports   String?
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
 }
 
 model PushDevice {
@@ -116,19 +148,53 @@ model Message {
   editedAt        DateTime?
   deletedAt       DateTime?
   expiresAt       DateTime?
+  scheduledAt     DateTime?
+  scheduleStatus  String       @default("SENT")
   conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender          User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  sender          User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
   replyTo         Message?     @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
   replies         Message[]    @relation("MessageReply")
   reactions       MessageReaction[]
   bookmarks       MessageBookmark[]
   pin             PinnedMessage?
   receipts        MessageReceipt[]
+  poll            Poll?
   @@index([conversationId, createdAt])
   @@index([senderId, createdAt])
   @@index([conversationId, type, createdAt])
   @@index([expiresAt])
+  @@index([scheduledAt, scheduleStatus])
   @@unique([senderId, clientId])
+}
+
+model Poll {
+  id         String       @id @default(cuid())
+  messageId  String       @unique
+  question   String
+  multiple   Boolean      @default(false)
+  expiresAt  DateTime?
+  createdAt  DateTime     @default(now())
+  message    Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  options    PollOption[]
+}
+
+model PollOption {
+  id        String     @id @default(cuid())
+  pollId    String
+  text      String
+  position  Int
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes     PollVote[]
+  @@unique([pollId, position])
+}
+
+model PollVote {
+  optionId String
+  userId   String
+  createdAt DateTime @default(now())
+  option   PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([optionId, userId])
 }
 
 model MessageReceipt {
@@ -215,5 +281,4 @@ model SupportResolution {
   supportRequest     SupportRequest @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
   resolvedBy         User?         @relation("SupportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
   @@index([resolvedById, closedAt])
-  @@index([resolutionType, closedAt])
 }
