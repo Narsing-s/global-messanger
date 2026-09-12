@@ -7,7 +7,8 @@ Global Messenger is a secure, real-time messaging platform for Web and Android w
 ## 🧭 Start Here
 
 - **[🌍 Project Wiki](./WIKI.md)** — complete product, architecture, security, deployment, troubleshooting and roadmap reference.
-- **[🏠 Project README](../README.md)** — public project overview, setup instructions and product roadmap.
+- **[🏠 Project README](../README.md)** — public project overview, setup instructions, Android testing and product roadmap.
+- **[📱 Android APK Testing Guide](./ANDROID-TESTING.md)** — exact APK installation, backend health, CORS, registration/login, messaging, calls, E2EE and logcat troubleshooting procedure.
 
 ## 🧩 Product Centers
 
@@ -28,6 +29,20 @@ The application is organized around these major product areas:
 13. **AI Workspace** — rewriting, translation, summaries, smart search, transcription and assistant roadmap.
 
 The feature-center definitions are maintained in `apps/server/src/product-center.ts`.
+
+## 🧪 Release Testing
+
+Use the Android testing guide before accepting an APK as working. A successful Gradle build only proves that the package can be produced; it does not prove backend connectivity, authentication, realtime messaging, media, calls or E2EE work on a real device.
+
+Recommended order:
+
+```text
+APK install → app startup → /health → registration → login →
+user search → direct chat → realtime message → message operations →
+media → groups → calls → sessions/privacy → E2EE
+```
+
+The guide also covers the native Capacitor origin `capacitor://localhost`, Android `INTERNET` permission, production API configuration and `adb logcat` diagnostics.
 
 ## 🚀 Deployment Documentation
 
