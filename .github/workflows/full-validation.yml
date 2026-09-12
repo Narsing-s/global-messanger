@@ -1,0 +1,78 @@
+name: Full Stack Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Build and validate web + server
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web application
+        run: npm run build -w apps/web
+
+      - name: Verify web artifact
+        run: test -s apps/web/dist/index.html
+
+      - name: Build server application
+        run: npm run build -w apps/server
+
+      - name: Verify server artifact
+        run: test -s apps/server/dist/index.js
+
+      - name: Install Chromium for browser smoke test
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Run local browser smoke test
+        env:
+          NODE_ENV: test
+        run: |
+          npx --yes serve@14 apps/web/dist -l 4173 > /tmp/global-messenger-web.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            sleep 1
+          done
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+            const errors = [];
+            page.on('pageerror', error => errors.push(error.message));
+            page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+            await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle', timeout: 30000 });
+            const text = await page.locator('body').innerText();
+            if (!text.includes('Global Messenger')) throw new Error('Global Messenger root did not render');
+            if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`);
+            console.log('PASS: web build renders without browser errors');
+            await browser.close();
+          })().catch(error => { console.error(error); process.exit(1); });
+          NODE
