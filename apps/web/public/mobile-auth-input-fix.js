@@ -15,7 +15,7 @@
     input.style.touchAction = 'manipulation';
     input.style.userSelect = 'text';
     input.style.webkitUserSelect = 'text';
-    input.setAttribute('inputmode', input.getAttribute('inputmode') || (input.type === 'password' ? 'text' : 'text'));
+    if (!input.getAttribute('inputmode')) input.setAttribute('inputmode', input.type === 'password' ? 'text' : 'text');
 
     const focus = () => {
       if (!input.disabled && !input.readOnly) {
@@ -27,13 +27,10 @@
     input.addEventListener('touchstart', focus, { passive: true });
     input.addEventListener('pointerdown', focus, { passive: true });
     input.addEventListener('click', focus, { passive: true });
-    input.addEventListener('keydown', () => input.dataset.gmLastInteraction = String(Date.now()));
-    input.addEventListener('input', () => {
-      // WebView/React controlled inputs can occasionally miss a synthetic input
-      // after keyboard composition. Re-dispatch a trusted-style input event so
-      // React's onChange listener sees the current DOM value.
-      queueMicrotask(() => input.dispatchEvent(new Event('input', { bubbles: true })));
-    }, { passive: true, once: false });
+    input.addEventListener('keydown', () => { input.dataset.gmLastInteraction = String(Date.now()); });
+    input.addEventListener('compositionend', () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
   }
 
   function removeBlockingLayers() {
