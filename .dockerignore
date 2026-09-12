@@ -1,0 +1,16 @@
+**/node_modules
+**/dist
+**/.next
+**/.vite
+.git
+.github
+android/.gradle
+android/**/build
+coverage
+*.log
+.env
+.env.*
+!.env.example
+npm-debug.log*
+Dockerfile*
+docker-compose*.yml
