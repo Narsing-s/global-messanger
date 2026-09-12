@@ -45,6 +45,31 @@ source =
   replacement +
   source.slice(end + 3);
 
+const corsStart = source.indexOf('await app.register(cors, {');
+const corsEnd = source.indexOf('\n});', corsStart);
+
+if (corsStart === -1 || corsEnd === -1) {
+  console.error('Global CORS patch: Fastify CORS registration was not found.');
+  process.exit(1);
+}
+
+const corsReplacement = `await app.register(cors, {
+  origin: (origin, cb) => {
+    cb(null, isAllowedOrigin(origin));
+  },
+  credentials: true,
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+  preflight: true,
+  optionsSuccessStatus: 204,
+  strictPreflight: false
+});`;
+
+source =
+  source.slice(0, corsStart) +
+  corsReplacement +
+  source.slice(corsEnd + 4);
+
 fs.writeFileSync(file, source);
 
 console.log('Global CORS patch applied successfully.');
