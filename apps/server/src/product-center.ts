@@ -66,18 +66,4 @@ export async function registerProductCenterRoutes(app: FastifyInstance, prisma: 
     const ids = memberships.map(x => x.conversationId);
     return prisma.message.findMany({ where: { conversationId: { in: ids }, attachmentUrl: { not: null }, ...(q.type ? { attachmentMime: { startsWith: q.type } } : {}) }, orderBy: { createdAt: 'desc' }, take: limit, select: { id: true, conversationId: true, senderId: true, body: true, type: true, attachmentUrl: true, attachmentName: true, attachmentMime: true, attachmentSize: true, createdAt: true } });
   });
-
-  app.get('/api/search/universal', auth, async request => {
-    const userId = (request.user as AuthUser).id;
-    const q = String((request.query as any)?.q ?? '').trim();
-    if (q.length < 2) return { people: [], chats: [], messages: [], files: [], links: [], groups: [] };
-    const members = await prisma.conversationMember.findMany({ where: { userId }, select: { conversationId: true } });
-    const ids = members.map(x => x.conversationId);
-    const [people, messages] = await Promise.all([
-      prisma.user.findMany({ where: { id: { not: userId }, OR: [{ username: { contains: q, mode: 'insensitive' } }, { displayName: { contains: q, mode: 'insensitive' } }] }, take: 25, select: { id: true, username: true, displayName: true, avatarUrl: true } }),
-      prisma.message.findMany({ where: { conversationId: { in: ids }, body: { contains: q, mode: 'insensitive' } }, orderBy: { createdAt: 'desc' }, take: 50, select: { id: true, conversationId: true, senderId: true, body: true, type: true, attachmentUrl: true, attachmentName: true, attachmentMime: true, createdAt: true } })
-    ]);
-    const chats = await prisma.conversation.findMany({ where: { id: { in: ids }, OR: [{ title: { contains: q, mode: 'insensitive' } }, { isGroup: q.toLowerCase() === 'group' }] }, take: 25, select: { id: true, title: true, isGroup: true, updatedAt: true } });
-    return { people, chats, messages, files: messages.filter(x => Boolean(x.attachmentUrl)), links: messages.filter(x => /https?:\/\//i.test(x.body)), groups: chats.filter(x => x.isGroup) };
-  });
 }
