@@ -220,7 +220,142 @@ curl -I http://localhost:8080/
 curl -I http://localhost:8080/index.html
 ```
 
-`index.html` and `config.js` are deliberately not cached aggressively, while Vite's hashed assets can be cached safely. This helps prevent an old HTML entry point from loading an obsolete JavaScript bundle after deployment.
+## 🧪 How to Test the Application
+
+Do not treat **"Gradle build succeeded"** as proof that the Android application works. Test the complete user path.
+
+### 1. Test the production backend first
+
+The production API exposes an unauthenticated health endpoint:
+
+```text
+https://global-messanger-backend.onrender.com/health
+```
+
+Run from a PC:
+
+```bash
+curl -i https://global-messanger-backend.onrender.com/health
+```
+
+Expected: HTTP `200` with `ok: true`.
+
+### 2. Test Capacitor CORS
+
+Native Android requests use `capacitor://localhost`.
+
+```bash
+curl -i -X OPTIONS "https://global-messanger-backend.onrender.com/api/auth/login-email" \
+  -H "Origin: capacitor://localhost" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: content-type,authorization"
+```
+
+Expected:
+
+```text
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: capacitor://localhost
+Access-Control-Allow-Credentials: true
+```
+
+### 3. Test Android in this order
+
+```text
+Install APK
+   ↓
+Open application
+   ↓
+Backend health
+   ↓
+Create account
+   ↓
+Login
+   ↓
+Search user
+   ↓
+Direct chat
+   ↓
+Send/receive realtime message
+   ↓
+Reply/edit/delete/react
+   ↓
+Forward/star/pin/message info
+   ↓
+Send media/document
+   ↓
+Create/test group
+   ↓
+Voice/video call
+   ↓
+Profile/privacy/session tests
+   ↓
+E2EE test
+```
+
+### 4. Current Android release
+
+The latest verified Android workflow on **September 12, 2026** is **Android Build #556**, commit `05d38bc2a8199434ebf48caa2cd6140866bee87f`.
+
+The workflow successfully:
+
+- built the production web bundle
+- added/synced Capacitor Android
+- configured Android network/call/notification permissions
+- built the release APK and AAB
+- verified the APK package and signature
+- published `Global-Messenger.apk`
+
+Always install the newest successful build rather than an older APK from an earlier workflow run.
+
+### 5. If the APK says "Failed to fetch"
+
+Check:
+
+1. Phone internet connection.
+2. `/health` endpoint.
+3. Production API URL.
+4. `capacitor://localhost` CORS.
+5. Android `INTERNET` permission.
+6. Android WebView/logcat errors.
+
+With ADB:
+
+```bash
+adb devices
+adb logcat -c
+adb logcat | grep -i -E "GlobalMessenger|Capacitor|chromium|Console|Exception|Error|FATAL"
+```
+
+For Windows PowerShell:
+
+```powershell
+adb devices
+adb logcat -c
+adb logcat | Select-String "GlobalMessenger|Capacitor|chromium|Console|Exception|Error|FATAL"
+```
+
+### 6. If Create Account appears to fail
+
+The email-registration endpoint creates the account and then attempts to send the welcome email. Previously, a welcome-email failure returned HTTP `503` after the database user had already been created, making the mobile app appear broken.
+
+The current server fix makes welcome-email delivery **non-blocking**. Account creation now returns the authentication token and user even when the welcome email cannot be delivered, with `welcomeEmailSent: false`.
+
+This is especially important for APK testing because registration should not depend on the SMTP service being available.
+
+### 7. If messages show encrypted/unavailable content
+
+The chat UI must display the actual decrypted human-readable message whenever the recipient device has the required E2EE identity/key material.
+
+If a device displays:
+
+```text
+🔒 Encrypted message (not available on this device)
+```
+
+collect the Android logcat output and test the E2EE identity/key exchange. Do not expose encrypted ciphertext as the user's normal chat message.
+
+For the full Android test matrix and troubleshooting procedure, see **[Android APK Testing Guide](docs/ANDROID-TESTING.md)**.
 
 ## 💻 Local Development
 
@@ -384,6 +519,7 @@ The roadmap is intentionally split into product centers rather than isolated UI 
 ## 📚 Documentation
 
 - **[Project Wiki](docs/WIKI.md)** — architecture, product behavior, security, deployment, Android, troubleshooting and roadmap
+- **[Android APK Testing Guide](docs/ANDROID-TESTING.md)** — installation, backend/CORS checks, registration/login tests, messaging, calls, E2EE and logcat troubleshooting
 - **[Documentation index](docs/README.md)** — documentation map
 - **[Render configuration](render.yaml)** — deployment blueprint
 - **[Database schema](apps/server/prisma/schema.prisma)** — Prisma data model
