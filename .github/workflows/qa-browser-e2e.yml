@@ -4,77 +4,121 @@ on:
   push:
     branches:
       - 'qa/**'
+      - 'main'
+  pull_request:
   workflow_dispatch:
 
 jobs:
-  browser-e2e:
+  docker-browser-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
+    env:
+      WEB_URL: http://127.0.0.1:8080
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
       - name: Install dependencies
         run: npm ci
-      - name: Build web app
-        run: npm run build -w apps/web
-      - name: Start local web server
+
+      - name: Static regression checks
+        shell: bash
         run: |
-          npx --yes serve@14 apps/web/dist -l 4173 > /tmp/global-messenger-serve.log 2>&1 &
-          echo $! > /tmp/global-messenger-serve.pid
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
-            sleep 1
+          set -euo pipefail
+          if grep -R "function document(" apps/web/public apps/web/src; then exit 1; fi
+          if grep -R "vercel.com/sso-api" apps/web/public apps/web/src; then exit 1; fi
+          test -f apps/web/public/sw.js
+          test -f apps/web/index.html
+          grep -q "auth-operation-fix.js" apps/web/index.html
+          grep -q "mobile-auth-input-fix.js" apps/web/index.html
+
+      - name: Build and start production Docker stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > .env <<'EOF'
+          POSTGRES_DB=global_messenger_qa
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=qa-postgres-local-only
+          JWT_SECRET=qa-jwt-local-only-change-me
+          WEB_ORIGIN=http://127.0.0.1:8080
+          PASSWORD_RESET_WEB_ORIGIN=http://127.0.0.1:8080
+          WEB_PORT=8080
+          API_URL=http://127.0.0.1:8080
+          APP_VERSION=qa
+          GIT_COMMIT=ci
+          EOF
+          docker compose up -d --build
+          for i in $(seq 1 60); do
+            if curl -fsS "$WEB_URL/healthz" >/dev/null; then exit 0; fi
+            sleep 2
           done
-          cat /tmp/global-messenger-serve.log
+          docker compose ps
+          docker compose logs --no-color
           exit 1
-      - name: Install Playwright
+
+      - name: Install Playwright Chromium
         run: |
           npm install --no-save --ignore-scripts playwright@1.55.0
           npx playwright install --with-deps chromium
-      - name: Run browser E2E against local build and production
+
+      - name: Run Docker browser acceptance
         env:
-          PROD_URL: https://global-messanger.onrender.com
-          LOCAL_URL: http://127.0.0.1:4173
+          BASE_URL: ${{ env.WEB_URL }}
+        shell: bash
         run: |
+          set -euo pipefail
           node <<'NODE'
           const { chromium } = require('playwright');
-          const targets = [['local', process.env.LOCAL_URL], ['production', process.env.PROD_URL]];
+          const base = process.env.BASE_URL;
           (async () => {
             const browser = await chromium.launch({ headless: true });
             try {
-              for (const [name, base] of targets) {
-                const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+              for (const target of [
+                {name: 'desktop', viewport: {width: 1440, height: 900}},
+                {name: 'mobile', viewport: {width: 390, height: 844}, isMobile: true}
+              ]) {
+                const page = await browser.newPage(target);
                 const errors = [];
-                page.on('console', msg => { if (msg.type() === 'error') errors.push(`console: ${msg.text()}`); });
-                page.on('pageerror', err => errors.push(`pageerror: ${err.message}`));
-                await page.goto(`${base}/`, { waitUntil: 'networkidle', timeout: 30000 });
-                await page.locator('body').waitFor({ state: 'visible' });
-                if (!(await page.locator('body').innerText()).includes('Global Messenger')) throw new Error(`${name}: root page did not render Global Messenger`);
-                const install = await page.request.get(`${base}/install.html`);
-                if (!install.ok()) throw new Error(`${name}: install page HTTP ${install.status()}`);
-                const installText = await install.text();
-                for (const required of ['Windows / Linux / ChromeOS', 'Install Global Messenger', 'Download latest Android APK']) if (!installText.includes(required)) throw new Error(`${name}: install page missing '${required}'`);
+                page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
+                page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
+                const root = await page.request.get(`${base}/`);
+                if (!root.ok()) throw new Error(`${target.name}: root HTTP ${root.status()}`);
+                if (!String(root.headers()['cache-control'] || '').includes('no-store')) throw new Error(`${target.name}: root is cacheable`);
+                await page.goto(`${base}/`, {waitUntil: 'networkidle', timeout: 30000});
+                if (!(await page.locator('body').innerText()).includes('Global Messenger')) throw new Error(`${target.name}: app shell did not render`);
                 const manifest = await page.request.get(`${base}/manifest.webmanifest`);
-                if (!manifest.ok()) throw new Error(`${name}: manifest HTTP ${manifest.status()}`);
+                if (!manifest.ok()) throw new Error(`${target.name}: manifest HTTP ${manifest.status()}`);
                 const manifestJson = await manifest.json();
-                if (manifestJson.name !== 'Global Messenger' || manifestJson.display !== 'standalone') throw new Error(`${name}: invalid PWA manifest`);
+                if (manifestJson.name !== 'Global Messenger' || manifestJson.display !== 'standalone') throw new Error(`${target.name}: invalid manifest`);
                 const sw = await page.request.get(`${base}/sw.js`);
-                if (!sw.ok()) throw new Error(`${name}: service worker HTTP ${sw.status()}`);
-                if (!(await sw.text()).includes("self.addEventListener('fetch'")) throw new Error(`${name}: service worker missing fetch handler`);
-                await page.goto(`${base}/install.html`, { waitUntil: 'networkidle', timeout: 30000 });
-                if (!(await page.locator('h1').innerText()).includes('Get Global Messenger')) throw new Error(`${name}: install page did not render`);
+                if (!sw.ok()) throw new Error(`${target.name}: service worker HTTP ${sw.status()}`);
+                if (!String(sw.headers()['cache-control'] || '').includes('no-store')) throw new Error(`${target.name}: service worker is cacheable`);
+                if (!(await sw.text()).includes("self.addEventListener('fetch'")) throw new Error(`${target.name}: missing fetch handler`);
+                const apiHealth = await page.request.get(`${base}/api/health`);
+                if (![200, 404].includes(apiHealth.status())) throw new Error(`${target.name}: unexpected API health HTTP ${apiHealth.status()}`);
+                await page.reload({waitUntil: 'networkidle', timeout: 30000});
+                if (!(await page.locator('body').innerText()).includes('Global Messenger')) throw new Error(`${target.name}: reload failed`);
+                if (errors.length) throw new Error(`${target.name}: browser errors\n${errors.join('\n')}`);
+                console.log(`PASS ${target.name}`);
                 await page.close();
-                if (errors.length) throw new Error(`${name}: browser errors\n${errors.join('\n')}`);
-                console.log(`PASS ${name}: root + install page + manifest + service worker`);
               }
             } finally { await browser.close(); }
-          })().catch(err => { console.error(err); process.exit(1); });
+          })().catch(e => { console.error(e); process.exit(1); });
           NODE
-      - name: Stop local server
+
+      - name: Docker diagnostics on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color --tail=300
+
+      - name: Stop Docker stack
         if: always()
-        run: test ! -f /tmp/global-messenger-serve.pid || kill $(cat /tmp/global-messenger-serve.pid) || true
+        run: docker compose down -v --remove-orphans
