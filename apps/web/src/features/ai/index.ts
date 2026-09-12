@@ -1,0 +1,1 @@
+export const aiFeature = { id: 'ai', scope: ['rewrite','translation','reply-suggestions','conversation-summary','message-search','assistant','file-understanding','transcription','smart-notifications'] } as const;
