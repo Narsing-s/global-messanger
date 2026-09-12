@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-global_messenger}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - messenger_pg:/var/lib/postgresql/data
     healthcheck:
@@ -24,8 +24,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-global_messenger}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-global_messenger}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
       PASSWORD_RESET_WEB_ORIGIN: ${PASSWORD_RESET_WEB_ORIGIN:-http://localhost:8080}
       UPLOAD_DIR: /data/uploads
@@ -60,6 +60,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    environment:
+      API_URL: ${API_URL:-http://localhost:8080}
     ports:
       - "${WEB_PORT:-8080}:80"
     healthcheck:
