@@ -37,6 +37,22 @@ services:
       - key: MAIL_FROM
         value: Global Messenger <narsingbeesetti22@gmail.com>
 
+  - type: web
+    name: global-messanger-web
+    runtime: static
+    plan: free
+    region: singapore
+    rootDir: apps/web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://global-messanger-backend.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
 databases:
   - name: global-messenger-db
     databaseName: global_messenger
