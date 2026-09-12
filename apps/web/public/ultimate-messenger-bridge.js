@@ -1,0 +1,1 @@
+(()=>{if(window.__gmUltimateBridge)return;window.__gmUltimateBridge=true;const open=()=>{const b=document.getElementById('gm-settings-button');if(b)b.click();else{const x=document.querySelector('[title="Settings"]');if(x)x.click();}};window.addEventListener('gm:open-settings',open);window.addEventListener('gm:open-security',open);})();
