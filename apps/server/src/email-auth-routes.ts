@@ -22,34 +22,29 @@ async function requireSupportTeam(app: FastifyInstance, prisma: PrismaClient, re
 export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: PrismaClient) {
   app.post('/api/auth/register-email', async (request, reply) => {
     const parsed = z.object({ username: z.string().trim().min(3).max(24).regex(/^[a-zA-Z0-9_.-]+$/), displayName: z.string().trim().min(1).max(60), email: emailSchema, phoneNumber: phoneSchema, password: z.string().min(8).max(128) }).safeParse(request.body ?? {});
-    if (!parsed.success) {
-      const issue = parsed.error.issues[0]; const field = issue?.path?.[0];
-      const message = field === 'username' ? 'Username must be 3-24 characters using letters, numbers, underscore, dot or hyphen.' : field === 'displayName' ? 'Display name is required and must be 1-60 characters.' : field === 'email' ? 'Please enter a valid email address.' : field === 'phoneNumber' ? 'Please enter a valid phone number, including country code.' : field === 'password' ? 'Password must be 8-128 characters.' : 'Please check all registration fields.';
-      return reply.badRequest(message);
-    }
-    const username = parsed.data.username.toLowerCase();
-    const email = parsed.data.email.toLowerCase();
-    const phoneNumber = parsed.data.phoneNumber.replace(/[\s()-]/g, '');
+    if (!parsed.success) { const issue = parsed.error.issues[0]; const field = issue?.path?.[0]; const message = field === 'username' ? 'Username must be 3-24 characters using letters, numbers, underscore, dot or hyphen.' : field === 'displayName' ? 'Display name is required and must be 1-60 characters.' : field === 'email' ? 'Please enter a valid email address.' : field === 'phoneNumber' ? 'Please enter a valid phone number, including country code.' : field === 'password' ? 'Password must be 8-128 characters.' : 'Please check all registration fields.'; return reply.badRequest(message); }
+    const username = parsed.data.username.toLowerCase(); const email = parsed.data.email.toLowerCase(); const phoneNumber = parsed.data.phoneNumber.replace(/[\s()-]/g, '');
     const existing = await prisma.user.findFirst({ where: { OR: [{ username }, { email }, { phoneNumber }] }, select: { username: true, email: true, phoneNumber: true } });
-    if (existing?.username === username) return reply.conflict('Username is already taken');
-    if (existing?.email === email) return reply.conflict('Email is already registered');
-    if (existing?.phoneNumber === phoneNumber) return reply.conflict('Phone number is already registered');
-    const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-    const user = await prisma.user.create({ data: { username, displayName: parsed.data.displayName, email, phoneNumber, passwordHash } });
+    if (existing?.username === username) return reply.conflict('Username is already taken'); if (existing?.email === email) return reply.conflict('Email is already registered'); if (existing?.phoneNumber === phoneNumber) return reply.conflict('Phone number is already registered');
+    const passwordHash = await bcrypt.hash(parsed.data.password, 12); const user = await prisma.user.create({ data: { username, displayName: parsed.data.displayName, email, phoneNumber, passwordHash } });
     try { await sendWelcomeEmail(email, user.displayName || user.username || 'there'); } catch (error) { app.log.error(error, 'Welcome email failed'); const message = error instanceof Error && error.message.trim() ? error.message.trim() : 'Unable to send the welcome email.'; return reply.code(503).send({ message: `Account was created, but the welcome email could not be sent: ${message}` }); }
     const token = app.jwt.sign({ id: user.id, username: user.username });
+    await prisma.loginHistory.create({ data: { userId: user.id, method: 'registration', success: true, platform: 'web', userAgent: String(request.headers['user-agent'] || '').slice(0,500), ipAddress: String(request.ip || '').slice(0,64) } });
     return reply.code(201).send({ token, user: { id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl } });
   });
 
   app.post('/api/auth/login-email', async (request, reply) => {
     const parsed = z.object({ identifier: z.string().trim().min(1).max(320), password: z.string().min(1).max(128) }).safeParse(request.body ?? {});
     if (!parsed.success) return reply.badRequest('Username, email or phone number and password are required.');
-    const rawIdentifier = parsed.data.identifier.trim();
-    const identifier = rawIdentifier.toLowerCase();
-    const normalizedPhone = rawIdentifier.replace(/[\s()-]/g, '');
+    const rawIdentifier = parsed.data.identifier.trim(); const identifier = rawIdentifier.toLowerCase(); const normalizedPhone = rawIdentifier.replace(/[\s()-]/g, '');
     const user = await prisma.user.findFirst({ where: { OR: [{ email: identifier }, { username: identifier }, { phoneNumber: normalizedPhone }] } });
-    if (!user || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) return reply.unauthorized('Invalid username, email/phone number or password');
+    if (!user || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) {
+      if (user) await prisma.loginHistory.create({ data: { userId: user.id, method: 'password', success: false, platform: 'web', userAgent: String(request.headers['user-agent'] || '').slice(0,500), ipAddress: String(request.ip || '').slice(0,64) } });
+      return reply.unauthorized('Invalid username, email/phone number or password');
+    }
     await prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
+    await prisma.loginHistory.create({ data: { userId: user.id, method: user.totpEnabled ? 'password+2fa-pending' : 'password', success: true, platform: 'web', userAgent: String(request.headers['user-agent'] || '').slice(0,500), ipAddress: String(request.ip || '').slice(0,64) } });
+    if (user.totpEnabled) return { requiresTwoFactor: true, userId: user.id, user: { id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl } };
     const token = app.jwt.sign({ id: user.id, username: user.username });
     return { token, user: { id: user.id, username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl } };
   });
@@ -58,92 +53,19 @@ export async function registerEmailAuthRoutes(app: FastifyInstance, prisma: Pris
     const parsed = z.object({ requestId: supportRequestId.optional(), name: z.string().trim().min(1).max(120), email: emailSchema, category: z.string().trim().min(1).max(80), subject: z.string().trim().min(3).max(180), details: z.string().trim().min(10).max(10000) }).safeParse(request.body ?? {});
     if (!parsed.success) return reply.badRequest('Please provide a valid name, email, category, subject and issue details.');
     const data = parsed.data; let requestId = data.requestId || `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-    const existing = await prisma.supportRequest.findUnique({ where: { requestId }, select: { id: true } });
-    if (existing) requestId = `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-    const created = await prisma.supportRequest.create({ data: { requestId, name: data.name, email: data.email.toLowerCase(), category: data.category, subject: data.subject, details: data.details } });
-    let notification: 'sent' | 'failed' = 'sent';
+    const existing = await prisma.supportRequest.findUnique({ where: { requestId }, select: { id: true } }); if (existing) requestId = `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+    const created = await prisma.supportRequest.create({ data: { requestId, name: data.name, email: data.email.toLowerCase(), category: data.category, subject: data.subject, details: data.details } }); let notification: 'sent' | 'failed' = 'sent';
     try { await sendSupportRequestEmail(created); } catch (error) { notification = 'failed'; app.log.error(error, 'Support request notification email failed'); }
     return reply.code(201).send({ ok: true, requestId: created.requestId, status: created.status, createdAt: created.createdAt, notification, message: notification === 'sent' ? `Support request ${created.requestId} was submitted successfully.` : `Support request ${created.requestId} was saved successfully, but the support notification email could not be delivered right now.` });
   });
 
-  app.get('/api/support/requests/:requestId', async (request, reply) => {
-    const requestId = String((request.params as any).requestId || '').trim().toUpperCase();
-    if (!supportRequestId.safeParse(requestId).success) return reply.badRequest('Invalid support request ID.');
-    const item = await prisma.supportRequest.findUnique({ where: { requestId }, include: { resolution: { select: { resolutionType: true, resolutionNotes: true, resolutionTimeSecs: true, closedAt: true, resolvedBy: { select: { displayName: true, username: true } } } } } });
-    if (!item) return reply.notFound('Support request not found.');
-    return { ok: true, requestId: item.requestId, category: item.category, subject: item.subject, status: item.status, createdAt: item.createdAt, updatedAt: item.updatedAt, resolution: item.resolution ? { resolutionType: item.resolution.resolutionType, resolutionNotes: item.resolution.resolutionNotes, resolutionTimeSecs: item.resolution.resolutionTimeSecs, closedAt: item.resolution.closedAt, resolvedBy: item.resolution.resolvedBy?.displayName || item.resolution.resolvedBy?.username || null } : null };
-  });
-
-  app.get('/api/support/team/requests', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const agent = await requireSupportTeam(app, prisma, request, reply); if (!agent) return;
-    const query = z.object({ status: z.string().trim().optional(), limit: z.coerce.number().int().min(1).max(200).default(100) }).safeParse(request.query ?? {});
-    if (!query.success) return reply.badRequest('Invalid support request query.');
-    const where = query.data.status ? { status: query.data.status.toUpperCase() } : {};
-    const rows = await prisma.supportRequest.findMany({ where, orderBy: { createdAt: 'asc' }, take: query.data.limit, include: { resolution: { select: { resolutionType: true, resolutionNotes: true, resolutionTimeSecs: true, closedAt: true, resolvedBy: { select: { displayName: true, username: true } } } } } });
-    return { ok: true, requests: rows };
-  });
-
-  app.post('/api/support/team/requests/:requestId/close', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const agent = await requireSupportTeam(app, prisma, request, reply); if (!agent) return;
-    const requestId = String((request.params as any).requestId || '').trim().toUpperCase();
-    if (!supportRequestId.safeParse(requestId).success) return reply.badRequest('Invalid support request ID.');
-    const parsed = z.object({ resolutionType: supportResolutionType, resolutionNotes: z.string().trim().max(5000).optional() }).safeParse(request.body ?? {});
-    if (!parsed.success) return reply.badRequest('Resolution type is required.');
-    const item = await prisma.supportRequest.findUnique({ where: { requestId }, include: { resolution: true } });
-    if (!item) return reply.notFound('Support request not found.');
-    if (item.status === 'CLOSED' || item.resolution) return reply.conflict('Support request is already closed.');
-    const closedAt = new Date(); const resolutionTimeSecs = Math.max(0, Math.round((closedAt.getTime() - item.createdAt.getTime()) / 1000));
-    const result = await prisma.$transaction(async tx => { const resolution = await tx.supportResolution.create({ data: { supportRequestId: item.id, resolvedById: agent.id, resolutionType: parsed.data.resolutionType, resolutionNotes: parsed.data.resolutionNotes || null, resolutionTimeSecs, closedAt } }); const closed = await tx.supportRequest.update({ where: { id: item.id }, data: { status: 'CLOSED' } }); return { closed, resolution }; });
-    return { ok: true, requestId: result.closed.requestId, status: result.closed.status, closedAt: result.resolution.closedAt, resolutionType: result.resolution.resolutionType, resolutionTimeSecs: result.resolution.resolutionTimeSecs, resolutionTimeMinutes: Math.round((result.resolution.resolutionTimeSecs / 60) * 100) / 100, resolvedBy: agent.displayName || agent.username };
-  });
-
-  app.delete('/api/conversations/:id/permanent', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const userId = String((request.user as any).id); const conversationId = String((request.params as any).id);
-    const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } });
-    if (!membership) return reply.notFound('Chat not found.');
-    await prisma.$transaction(async tx => { await tx.conversationMember.delete({ where: { conversationId_userId: { conversationId, userId } } }); const remainingMembers = await tx.conversationMember.count({ where: { conversationId } }); if (remainingMembers === 0) await tx.conversation.delete({ where: { id: conversationId } }); });
-    return { ok: true, conversationId };
-  });
-
-  app.post('/api/conversations/:id/clear', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const userId = String((request.user as any).id); const conversationId = String((request.params as any).id);
-    const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } });
-    if (!membership) return reply.notFound('Chat not found.');
-    await prisma.message.deleteMany({ where: { conversationId } });
-    return { ok: true, conversationId };
-  });
-
-  app.post('/api/conversations/:id/report', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const userId = String((request.user as any).id); const conversationId = String((request.params as any).id);
-    const parsed = z.object({ reason: z.string().trim().min(1).max(100), details: z.string().trim().max(2000).optional() }).safeParse(request.body ?? {});
-    if (!parsed.success) return reply.badRequest('Choose a report reason.');
-    const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } });
-    if (!membership) return reply.notFound('Chat not found.');
-    const me = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, displayName: true, username: true } });
-    const conversation = await prisma.conversation.findUnique({ where: { id: conversationId }, include: { members: { include: { user: { select: { id: true, displayName: true, username: true } } } } } });
-    const reported = conversation?.members.find(m => m.userId !== userId)?.user;
-    await sendReportEmail({ reporterEmail: me?.email || undefined, reporterName: me?.displayName || me?.username, reportedName: reported?.displayName || reported?.username, conversationId, reason: parsed.data.reason, details: parsed.data.details });
-    return { ok: true, message: 'Report submitted to Global Messenger support.' };
-  });
-
-  app.post('/api/users/:id/block', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const userId = String((request.user as any).id); const blockedUserId = String((request.params as any).id);
-    if (!blockedUserId || blockedUserId === userId) return reply.badRequest('You cannot block yourself.');
-    const target = await prisma.user.findUnique({ where: { id: blockedUserId }, select: { id: true } });
-    if (!target) return reply.notFound('User not found.');
-    await prisma.userBlock.upsert({ where: { userId_blockedUserId: { userId, blockedUserId } }, create: { userId, blockedUserId }, update: {} });
-    return { ok: true, blockedUserId };
-  });
-
-  app.delete('/api/users/:id/block', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const userId = String((request.user as any).id); const blockedUserId = String((request.params as any).id);
-    await prisma.userBlock.deleteMany({ where: { userId, blockedUserId } });
-    return { ok: true, blockedUserId };
-  });
-
-  app.get('/api/users/blocked', { preHandler: [app.authenticate] }, async request => {
-    const userId = String((request.user as any).id);
-    const rows = await prisma.userBlock.findMany({ where: { userId }, select: { blockedUserId: true, createdAt: true }, orderBy: { createdAt: 'desc' } });
-    return rows;
-  });
+  app.get('/api/support/requests/:requestId', async (request, reply) => { const requestId = String((request.params as any).requestId || '').trim().toUpperCase(); if (!supportRequestId.safeParse(requestId).success) return reply.badRequest('Invalid support request ID.'); const item = await prisma.supportRequest.findUnique({ where: { requestId }, include: { resolution: { select: { resolutionType: true, resolutionNotes: true, resolutionTimeSecs: true, closedAt: true, resolvedBy: { select: { displayName: true, username: true } } } } } }); if (!item) return reply.notFound('Support request not found.'); return { ok: true, requestId: item.requestId, category: item.category, subject: item.subject, status: item.status, createdAt: item.createdAt, updatedAt: item.updatedAt, resolution: item.resolution ? { resolutionType: item.resolution.resolutionType, resolutionNotes: item.resolution.resolutionNotes, resolutionTimeSecs: item.resolution.resolutionTimeSecs, closedAt: item.resolution.closedAt, resolvedBy: item.resolution.resolvedBy?.displayName || item.resolution.resolvedBy?.username || null } : null }; });
+  app.get('/api/support/team/requests', { preHandler: [app.authenticate] }, async (request, reply) => { const agent = await requireSupportTeam(app, prisma, request, reply); if (!agent) return; const query = z.object({ status: z.string().trim().optional(), limit: z.coerce.number().int().min(1).max(200).default(100) }).safeParse(request.query ?? {}); if (!query.success) return reply.badRequest('Invalid support request query.'); const where = query.data.status ? { status: query.data.status.toUpperCase() } : {}; const rows = await prisma.supportRequest.findMany({ where, orderBy: { createdAt: 'asc' }, take: query.data.limit, include: { resolution: { select: { resolutionType: true, resolutionNotes: true, resolutionTimeSecs: true, closedAt: true, resolvedBy: { select: { displayName: true, username: true } } } } } }); return { ok: true, requests: rows; });
+  app.post('/api/support/team/requests/:requestId/close', { preHandler: [app.authenticate] }, async (request, reply) => { const agent = await requireSupportTeam(app, prisma, request, reply); if (!agent) return; const requestId = String((request.params as any).requestId || '').trim().toUpperCase(); if (!supportRequestId.safeParse(requestId).success) return reply.badRequest('Invalid support request ID.'); const parsed = z.object({ resolutionType: supportResolutionType, resolutionNotes: z.string().trim().max(5000).optional() }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('Resolution type is required.'); const item = await prisma.supportRequest.findUnique({ where: { requestId }, include: { resolution: true } }); if (!item) return reply.notFound('Support request not found.'); if (item.status === 'CLOSED' || item.resolution) return reply.conflict('Support request is already closed.'); const closedAt = new Date(); const resolutionTimeSecs = Math.max(0, Math.round((closedAt.getTime() - item.createdAt.getTime()) / 1000)); const result = await prisma.$transaction(async tx => { const resolution = await tx.supportResolution.create({ data: { supportRequestId: item.id, resolvedById: agent.id, resolutionType: parsed.data.resolutionType, resolutionNotes: parsed.data.resolutionNotes || null, resolutionTimeSecs, closedAt } }); const closed = await tx.supportRequest.update({ where: { id: item.id }, data: { status: 'CLOSED' } }); return { closed, resolution }; }); return { ok: true, requestId: result.closed.requestId, status: result.closed.status, closedAt: result.resolution.closedAt, resolutionType: result.resolution.resolutionType, resolutionTimeSecs: result.resolution.resolutionTimeSecs, resolutionTimeMinutes: Math.round((result.resolution.resolutionTimeSecs / 60) * 100) / 100, resolvedBy: agent.displayName || agent.username }; });
+  app.delete('/api/conversations/:id/permanent', { preHandler: [app.authenticate] }, async (request, reply) => { const userId = String((request.user as any).id); const conversationId = String((request.params as any).id); const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.notFound('Chat not found.'); await prisma.$transaction(async tx => { await tx.conversationMember.delete({ where: { conversationId_userId: { conversationId, userId } } }); const remainingMembers = await tx.conversationMember.count({ where: { conversationId } }); if (remainingMembers === 0) await tx.conversation.delete({ where: { id: conversationId } }); }); return { ok: true, conversationId }; });
+  app.post('/api/conversations/:id/clear', { preHandler: [app.authenticate] }, async (request, reply) => { const userId = String((request.user as any).id); const conversationId = String((request.params as any).id); const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.notFound('Chat not found.'); await prisma.message.deleteMany({ where: { conversationId } }); return { ok: true, conversationId }; });
+  app.post('/api/conversations/:id/report', { preHandler: [app.authenticate] }, async (request, reply) => { const userId = String((request.user as any).id); const conversationId = String((request.params as any).id); const parsed = z.object({ reason: z.string().trim().min(1).max(100), details: z.string().trim().max(2000).optional() }).safeParse(request.body ?? {}); if (!parsed.success) return reply.badRequest('Choose a report reason.'); const membership = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!membership) return reply.notFound('Chat not found.'); const me = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, displayName: true, username: true } }); const conversation = await prisma.conversation.findUnique({ where: { id: conversationId }, include: { members: { include: { user: { select: { id: true, displayName: true, username: true } } } } } }); const reported = conversation?.members.find(m => m.userId !== userId)?.user; await sendReportEmail({ reporterEmail: me?.email || undefined, reporterName: me?.displayName || me?.username, reportedName: reported?.displayName || reported?.username, conversationId, reason: parsed.data.reason, details: parsed.data.details }); return { ok: true, message: 'Report submitted to Global Messenger support.' }; });
+  app.post('/api/users/:id/block', { preHandler: [app.authenticate] }, async (request, reply) => { const userId = String((request.user as any).id); const blockedUserId = String((request.params as any).id); if (!blockedUserId || blockedUserId === userId) return reply.badRequest('You cannot block yourself.'); const target = await prisma.user.findUnique({ where: { id: blockedUserId }, select: { id: true } }); if (!target) return reply.notFound('User not found.'); await prisma.userBlock.upsert({ where: { userId_blockedUserId: { userId, blockedUserId } }, create: { userId, blockedUserId }, update: {} }); return { ok: true, blockedUserId }; });
+  app.delete('/api/users/:id/block', { preHandler: [app.authenticate] }, async (request, reply) => { const userId = String((request.user as any).id); const blockedUserId = String((request.params as any).id); await prisma.userBlock.deleteMany({ where: { userId, blockedUserId } }); return { ok: true, blockedUserId }; });
+  app.get('/api/users/blocked', { preHandler: [app.authenticate] }, async request => { const userId = String((request.user as any).id); const rows = await prisma.userBlock.findMany({ where: { userId }, select: { blockedUserId: true, createdAt: true }, orderBy: { createdAt: 'desc' } }); return rows; });
 }
