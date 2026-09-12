@@ -42,9 +42,8 @@ services:
     runtime: static
     plan: free
     region: singapore
-    rootDir: apps/web
-    buildCommand: npm ci && npm run build
-    staticPublishPath: dist
+    buildCommand: npm ci && npm run build -w apps/web
+    staticPublishPath: apps/web/dist
     envVars:
       - key: VITE_API_URL
         value: https://global-messanger-backend.onrender.com
