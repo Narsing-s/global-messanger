@@ -23,11 +23,11 @@
     "fastify": "^5.12.2",
     "firebase-admin": "^13.5.0",
     "socket.io": "^4.8.1",
-    "zod": "^3.24.0",
-    "tsx": "^4.19.3"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
-    "prisma": "^6.3.1"
+    "prisma": "^6.3.1",
+    "tsx": "^4.19.3"
   }
 }
