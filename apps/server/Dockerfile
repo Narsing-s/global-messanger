@@ -13,7 +13,6 @@ COPY apps/web/package.json apps/web/package.json
 RUN npm ci --include=dev
 
 COPY . .
-
 RUN npm run build -w apps/server
 
 FROM node:22-bookworm-slim AS runtime
@@ -40,4 +39,4 @@ RUN mkdir -p /data/uploads && chown -R appuser:appuser /app /data/uploads
 USER appuser
 EXPOSE 4000
 
-CMD ["node", "apps/server/dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy --schema apps/server/prisma/schema.prisma && exec node apps/server/dist/index.js"]
