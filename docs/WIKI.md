@@ -1,275 +1,431 @@
 # 🌍 Global Messenger — Project Wiki
 
-> A modern, secure, real-time messaging platform for web and Android.
+> A secure, real-time, open-source messaging platform for Web and Android, designed to grow into a complete communication workspace rather than a basic chat clone.
 
 **Repository:** `Narsing-s/global-messanger`  
-**Production web app:** `https://global-messanger.onrender.com/`  
-**Android application ID:** `com.globalmessenger.app`
+**Android application ID:** `com.globalmessenger.app`  
+**Primary production frontend:** Docker/Nginx web service  
+**Alternative deployment:** Render blueprint
 
 ---
 
 ## 📚 Contents
 
-- [Overview](#-overview)
-- [Core Features](#-core-features)
+- [Product Vision](#-product-vision)
+- [Feature Centers](#-feature-centers)
 - [Messaging](#-messaging)
-- [Privacy & Security](#-privacy--security)
-- [Disappearing Messages](#-disappearing-messages)
-- [Chat Retention](#-chat-retention)
-- [Media & Files](#-media--files)
+- [Message Operations](#-message-operations)
+- [Profile Center](#-profile-center)
+- [Chat Info](#-chat-info)
+- [Conversation Organization](#-conversation-organization)
+- [Media Center](#-media-center)
+- [Groups](#-groups)
+- [Privacy and Security](#-privacy-and-security)
+- [Encryption](#-encryption)
 - [Calls](#-calls)
 - [Notifications](#-notifications)
-- [Accounts & Sessions](#-accounts--sessions)
-- [Groups](#-groups)
+- [Accounts and Sessions](#-accounts-and-sessions)
+- [Universal Search](#-universal-search)
+- [Command Center](#-command-center)
+- [Settings Center](#-settings-center)
+- [Disappearing Messages](#-disappearing-messages)
+- [Chat Retention](#-chat-retention)
+- [Architecture](#-architecture)
 - [Project Structure](#-project-structure)
 - [Technology Stack](#-technology-stack)
 - [Environment Configuration](#-environment-configuration)
 - [Local Development](#-local-development)
-- [Production Deployment](#-production-deployment)
+- [Docker Production Deployment](#-docker-production-deployment)
 - [Android Build](#-android-build)
-- [Security Principles](#-security-principles)
 - [Troubleshooting](#-troubleshooting)
-- [Development Roadmap](#-development-roadmap)
+- [Roadmap](#-roadmap)
+- [Product Rules](#-product-rules)
+- [Contribution Guidelines](#-contribution-guidelines)
 
 ---
 
-## 🌟 Overview
+## 🎯 Product Vision
 
-Global Messenger is a full-stack real-time messenger designed around a clean chat experience, persistent conversations, privacy controls, media sharing, groups, calling, push notifications, and optional end-to-end encrypted message content.
+Global Messenger is being developed around four principles:
 
-The application has three main layers:
+1. **Reliable communication** — messages should send, arrive, reconnect and render predictably.
+2. **User-controlled privacy** — privacy, sessions, disappearing messages and security controls must be explicit.
+3. **Powerful organization** — users should be able to find, save, pin, archive and manage conversations efficiently.
+4. **Extensible communication workspace** — calls, media, notifications, AI assistance and advanced collaboration can live inside the same product.
 
-```text
-┌─────────────────────────────────────────────┐
-│                 Global Messenger             │
-├─────────────────────────────────────────────┤
-│  Web / Android Client                        │
-│  React + Vite + Capacitor                    │
-├─────────────────────────────────────────────┤
-│  Real-time Application Server                │
-│  Fastify + Socket.IO                         │
-├─────────────────────────────────────────────┤
-│  Persistent Data                             │
-│  PostgreSQL + Prisma                         │
-└─────────────────────────────────────────────┘
-```
+The current product-center definition in `apps/server/src/product-center.ts` organizes the roadmap into Profile, Chat Info, Message Tools, Organization, Media, Notifications, Security, Advanced Messaging, Calls, AI, Search, Command Center and Settings centers.
 
 ---
 
-## ✨ Core Features
+## 🧩 Feature Centers
 
-### Messaging
+| Center | Scope | Phase |
+|---|---|---:|
+| Profile Center | Profile identity, photo, bio, status, sharing | 1 |
+| Chat Info | Contact/group details, media, files, links, settings | 1 |
+| Message Tools | Forward, copy, star, pin, quote, multi-select, info | 1 |
+| Conversation Organization | Favorites, archive, filters, folders, Saved Messages | 1 |
+| Media Center | Images, video, audio, documents, progress and sharing | 1 |
+| Notification Center | Messages, mentions, groups, calls and notification history | 1 |
+| Security Center | Devices, sessions, 2FA, passkeys, biometric/PIN roadmap | 2 |
+| Advanced Messaging | Polls, scheduled messages, reminders, location and events | 3 |
+| Calls | Calling UI, history, group calls and reliability | 4 |
+| AI Workspace | Rewrite, translation, summaries, search and assistance | 5 |
+| Universal Search | People, chats, messages, files, links and groups | 1 |
+| Command Center | Unread, calls, groups, saved items, files and security | 1 |
+| Settings Center | Account, privacy, security, notifications, appearance and storage | 1 |
 
-- One-to-one conversations
-- Group conversations
-- Real-time Socket.IO delivery
-- Message editing
-- Message deletion
-- Replies
-- Reactions
-- Forwarding
-- Read and delivery indicators
-- Typing indicators
-- Message search
-- Pinned messages
-- File and media attachments
-- Voice messages
-
-### Account
-
-- Email registration
-- Username login
-- Email login
-- Password reset by email
-- Profile display name
-- Profile photo
-- Privacy controls
-- Multi-device session management
-
-### Communication
-
-- Voice calls
-- Video calls
-- Call signalling through the real-time connection
-- Push notifications on supported mobile devices
-
-### Groups
-
-- Create groups
-- Rename groups
-- Add members
-- Remove members
-- Group information
-- Group administration controls
+The table describes the **product scope/foundation**. A feature marked as foundation does not automatically mean every UI state, edge case and platform-specific behavior is complete.
 
 ---
 
 ## 💬 Messaging
 
-The chat interface is designed to show **human-readable messages only**.
+### Core conversation types
 
-Internal transport payloads, encryption envelopes, and call-signalling messages are not intended to appear as chat messages. The web client filters these internal records before rendering the conversation or chat preview.
+- One-to-one conversations
+- Group conversations
+- Realtime Socket.IO delivery
+- Online/offline presence
+- Typing indicators
+- Delivery/read behavior
+- Message replies
+- Message editing
+- Message deletion
+- Reactions
+- Search
+- Attachments
 
 ### Message lifecycle
 
 ```text
-User writes message
-       ↓
-Optional encryption
-       ↓
+Compose
+  ↓
+Client validation
+  ↓
+Optional E2EE envelope
+  ↓
 Socket.IO message:send
-       ↓
-Server validates & persists
-       ↓
-Real-time delivery
-       ↓
-Recipient decrypts when applicable
-       ↓
-Clean message bubble
+  ↓
+Authenticated server validation
+  ↓
+Database persistence
+  ↓
+Realtime recipient delivery
+  ↓
+Client decryption when applicable
+  ↓
+Human-readable message bubble
 ```
+
+The chat UI must not display internal call-signalling records, encryption envelopes or other transport-only payloads as normal user messages.
 
 ---
 
-## 🔐 Privacy & Security
+## 🛠️ Message Operations
 
-Global Messenger uses multiple layers of application security:
+The advanced message-operation center is designed to provide the controls users expect from a modern messenger, while adding stronger bulk-management capabilities.
+
+### Single-message actions
+
+- Reply / quote
+- Forward
+- Copy
+- Star / save
+- Pin / unpin
+- React
+- Edit where permitted
+- Delete where permitted
+- Message information
+- Retry failed send
+- Download attachment
+- Share attachment
+- Open link preview
+
+### Multi-select actions
+
+- Select multiple messages
+- Bulk delete
+- Bulk forward
+- Bulk share
+- Bulk save/star
+- Bulk pin where supported
+- Selection count and clear-selection controls
+
+### Message information
+
+The message-info surface is intended to expose useful delivery information such as:
+
+- Sent timestamp
+- Delivery timestamp when available
+- Read timestamp when available
+- Sender
+- Message type
+- Attachment information when applicable
+
+---
+
+## 👤 Profile Center
+
+The Profile Center provides a single place to manage and inspect identity information.
+
+### Profile capabilities
+
+- Profile photo
+- Display name
+- Username
+- About / bio
+- Online-status controls
+- Last-seen controls
+- Profile preview
+- QR/profile sharing
+- Copy username
+- Account ID / identity information
+
+Privacy controls should determine which profile information can be seen by other users.
+
+---
+
+## ℹ️ Chat Info
+
+Chat Info is the control center for an individual conversation or group.
+
+### Direct conversation
+
+- Contact profile
+- Shared media
+- Shared files
+- Shared links
+- Starred messages
+- Pinned messages
+- Search in conversation
+- Notification settings
+- Disappearing-message settings
+- Block
+- Report
+- Clear chat
+- Delete chat
+
+### Group conversation
+
+All direct-chat information plus:
+
+- Group photo
+- Group description
+- Member list
+- Add/remove members
+- Admin controls
+- Invite link
+- Group pins
+- Leave group
+
+---
+
+## 🗂️ Conversation Organization
+
+Global Messenger is intended to scale beyond a simple chronological chat list.
+
+Supported/planned organization features include:
+
+- Favorite chats
+- Pinned chats
+- Archive
+- Unread filter
+- Groups filter
+- Personal/direct-chat filter
+- Custom folders
+- Mute indicators
+- Unread badges
+- Sorting
+- Recently active conversations
+- Saved Messages
+
+The goal is to make a large number of conversations manageable without requiring users to search for everything.
+
+---
+
+## 🖼️ Media Center
+
+The media experience is designed around dedicated views rather than treating every attachment as plain text.
+
+### Supported categories
+
+- JPEG
+- PNG
+- WebP
+- GIF
+- MP3
+- WAV
+- OGG
+- MP4
+- WebM
+- PDF
+- Plain text
+- ZIP
+
+### Media features
+
+- Image viewer
+- Gallery
+- Video player
+- Audio player
+- Voice messages
+- Document preview
+- Media grid
+- Files tab
+- Links tab
+- Download/share
+- Upload progress
+- Download progress
+- Compression roadmap
+
+Production upload storage must be persistent for deployments where local container storage is ephemeral.
+
+---
+
+## 👥 Groups
+
+Groups support authenticated membership and administrative operations.
+
+Core group behavior includes:
+
+- Create group
+- Rename group
+- Group photo/description
+- Add members
+- Remove members
+- Member list
+- Admin controls
+- Invite links
+- Group messaging
+- Group pins
+- Group search
+- Leave group
+
+All membership-changing operations must remain server-authorized.
+
+---
+
+## 🔐 Privacy and Security
+
+Security is implemented in layers:
 
 - JWT-based authentication
 - Password hashing
 - Authenticated API routes
-- Production security headers
-- Request/rate protection
-- Restricted production CORS origins
-- Input validation for important endpoints
-- File MIME-type validation
-- Token hashing for stored sessions
+- Security headers
+- Rate/request protection
+- Restricted production CORS
+- Input validation
+- MIME-type validation
+- Session token hashing
 - Session revocation
-- Optional end-to-end encrypted message envelopes
+- Privacy settings
+- Optional encrypted message envelopes
 
-### End-to-end encryption
+### Security Center roadmap
 
-The web client maintains a device identity key and registers its public key with the server. Message content can be encrypted into an `gm:e2ee:v1:` envelope before transport.
+- Active device management
+- Logout other devices
+- Login history
+- Password change
+- Two-factor authentication
+- Passkeys
+- Application PIN
+- Android biometric lock
+- Screen lock
+- Blocked-user management
+- Security verification
+- Device/key management
 
-The server stores the encrypted message body rather than relying on the UI to hide raw transport data. The client decrypts supported messages before displaying them.
-
-> **Important:** Losing the browser/device identity key can prevent that device from decrypting historical encrypted messages. Production key recovery should therefore be treated as a separate security feature.
-
----
-
-## ⏱️ Disappearing Messages
-
-Disappearing Messages is an **explicit user-controlled chat option**.
-
-### Off
-
-When the option is **Off**:
-
-- Normal messages do not expire.
-- There is no automatic message deletion timer.
-- Messages remain available according to normal account/chat actions.
-
-### On
-
-When enabled for a conversation, newly created messages can receive an expiry time.
-
-Only messages with an explicit expiry timestamp are eligible for expiry cleanup.
-
-```text
-Disappearing Messages: OFF
-        ↓
-expiresAt = null
-        ↓
-Message remains
-```
-
-```text
-Disappearing Messages: ON
-        ↓
-expiresAt = creation time + selected period
-        ↓
-Message can expire
-```
-
-Existing manual **Clear Chat** and **Delete Chat** actions remain user-controlled and are not replaced by an automatic timer.
+Secrets must never be placed in source code.
 
 ---
 
-## 🗄️ Chat Retention
+## 🔒 Encryption
 
-Global Messenger does **not** automatically delete normal user messages because they are old.
+The web client maintains a device identity key and can register its public key with the server. Supported message content can be represented as an `gm:e2ee:v1:` envelope.
 
-The current retention policy is:
-
-1. Normal messages have no automatic expiry.
-2. Disappearing messages can expire only when explicitly enabled.
-3. Conversations inactive for 60+ days may be archived from the active chat list.
-4. Archiving is not the same as deleting the message database records.
-5. Opening/creating a direct conversation can restore an archived conversation to active use.
+The intended flow is:
 
 ```text
-Normal message
-    │
-    ├── Disappearing OFF → keep
-    │
-    └── Disappearing ON → expire according to selected timer
-
-Inactive conversation > 60 days
-    │
-    └── Archive from active list
-          │
-          └── Do not delete message history
+Plain message
+    ↓
+Device encryption
+    ↓
+Encrypted envelope
+    ↓
+Server persistence / transport
+    ↓
+Recipient device
+    ↓
+Device decryption
+    ↓
+Plain message in UI
 ```
 
----
+### Important limitation
 
-## 📎 Media & Files
+A device that does not possess the identity/key material required to decrypt an encrypted historical message may not be able to display its contents. Account password recovery and cryptographic identity recovery are different problems.
 
-The messenger supports file attachments through the server upload endpoint.
-
-Supported upload categories currently include common:
-
-- JPEG images
-- PNG images
-- WebP images
-- GIF images
-- MP3 audio
-- WAV audio
-- OGG audio
-- MP4 video
-- WebM video
-- PDF documents
-- Plain text
-- ZIP archives
-
-Production uploads use persistent storage configured by the deployment environment.
+Future work should provide a secure, explicit recovery mechanism without weakening the encryption model.
 
 ---
 
 ## 📞 Calls
 
-Voice and video calls use browser/mobile WebRTC capabilities with Socket.IO used for signalling.
+Voice and video calls use browser/mobile WebRTC capabilities with Socket.IO signalling.
 
-The current client includes a Google STUN server for ICE discovery. For consistently reliable production calls across restrictive NAT/firewall networks, a production TURN service should be configured as a future reliability enhancement.
+Current/foundation call features include:
+
+- Incoming call UI
+- Outgoing call UI
+- Call history
+- Missed calls
+- Mute
+- Speaker
+- Camera controls
+- Call notifications
+
+### Production reliability
+
+STUN can work for many network configurations. A production TURN service is recommended for reliable connectivity across restrictive NAT and firewall environments.
+
+Future call work includes:
+
+- Group calling
+- Screen sharing hardening
+- TURN infrastructure
+- Call-quality diagnostics
 
 ---
 
 ## 🔔 Notifications
 
-Push notification support is integrated for supported mobile environments.
+The notification center is intended to consolidate:
 
-The server can use Firebase Cloud Messaging when the required Firebase server environment variables are configured.
+- Messages
+- Mentions
+- Groups
+- Calls
+- Friend/request events where applicable
+- Notification history
+- Per-chat notification settings
+- Global notification settings
+- Sounds
+- Desktop controls
 
-No Firebase credentials are hard-coded into the repository.
+Push notification support can use Firebase Cloud Messaging when the required server environment configuration is supplied.
 
-Without Firebase credentials, the push delivery integration safely remains inactive rather than embedding a secret in source code.
+No Firebase private credential should be committed to the repository.
 
 ---
 
-## 🖥️ Accounts & Sessions
+## 🖥️ Accounts and Sessions
 
-Users can manage authenticated sessions from the application.
+Authenticated users can inspect active sessions.
 
-Session records include information such as:
+Session information may include:
 
 - Device name
 - Platform
@@ -280,26 +436,142 @@ Session records include information such as:
 - Expiration
 - Revocation state
 
-A user can revoke an individual session or revoke other active sessions.
+Users can revoke an individual session or revoke other active sessions.
 
-Authentication tokens are hashed before being stored for session tracking.
+Session tokens are hashed before persistent session tracking.
 
 ---
 
-## 👥 Groups
+## 🔎 Universal Search
 
-Group conversations support:
+The universal search center is designed to search across:
 
-- Group creation
-- Group naming
-- Member management
-- Group information
-- Group administration
-- Group messaging
-- Group pins
-- Group search and message actions
+- People
+- Chats
+- Messages
+- Files
+- Photos/media
+- Links
+- Groups
 
-Group membership and administrative operations are handled by authenticated server APIs.
+The current server foundation exposes `/api/search/universal` for authenticated search across accessible users, conversations and messages. Search results can also identify messages containing attachments or links.
+
+Future filters include sender, date, message type and attachment type.
+
+---
+
+## 🧭 Command Center
+
+The Command Center is the product's fast-navigation surface.
+
+It is designed to expose shortcuts for:
+
+- Recent conversations
+- Unread messages
+- Calls
+- Groups
+- Saved items
+- Files
+- AI assistant
+- Security status
+- Active devices
+- Quick actions
+
+The intent is to reduce the number of screens needed for common operations.
+
+---
+
+## ⚙️ Settings Center
+
+Settings are organized by responsibility rather than one long list.
+
+### Categories
+
+- Account
+- Privacy
+- Security
+- Notifications
+- Appearance
+- Chat
+- Storage
+- Language
+- About
+
+Privacy settings currently include server-backed controls for last-seen and profile-photo visibility.
+
+---
+
+## ⏱️ Disappearing Messages
+
+Disappearing Messages is explicitly user-controlled.
+
+### OFF
+
+- Normal messages do not expire.
+- No automatic deletion timer is applied.
+- Message history remains available according to normal account/chat actions.
+
+### ON
+
+Newly created messages can receive an expiry timestamp based on the selected timer.
+
+```text
+OFF → expiresAt = null → message remains
+
+ON  → expiresAt = createdAt + selected timer
+    → eligible for expiry cleanup
+```
+
+Manual **Clear Chat** and **Delete Chat** remain separate user actions.
+
+---
+
+## 🗄️ Chat Retention
+
+Normal messages are not automatically deleted simply because they are old.
+
+Current policy:
+
+1. Normal messages have no automatic expiry.
+2. Disappearing messages expire only when explicitly enabled.
+3. Conversations inactive for 60+ days may be archived from the active chat list.
+4. Archiving does not mean deleting the underlying message history.
+5. Opening/creating a direct conversation can return an archived conversation to active use.
+
+---
+
+## 🏗️ Architecture
+
+```text
+                         Browser / Android
+                                │
+                                ▼
+                   ┌─────────────────────────┐
+                   │ Docker Web / Nginx :8080│
+                   │ React + Vite build      │
+                   └───────────┬─────────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+           /api/*       /socket.io/*       /uploads/*
+              │                │                │
+              └────────────────┼────────────────┘
+                               ▼
+                   ┌─────────────────────────┐
+                   │ Fastify + Socket.IO     │
+                   │ API + Auth + Realtime   │
+                   │ :4000                   │
+                   └───────────┬─────────────┘
+                               │
+                               ▼
+                   ┌─────────────────────────┐
+                   │ PostgreSQL + Prisma     │
+                   └─────────────────────────┘
+```
+
+### Production frontend rule
+
+For predictable production behavior, the Docker frontend is the recommended frontend source of truth. It serves the current Vite build and proxies API/realtime/upload paths to the backend.
 
 ---
 
@@ -310,33 +582,35 @@ Global Messenger/
 │
 ├── apps/
 │   ├── web/
-│   │   ├── public/              # Static web assets and UI fixes
-│   │   ├── scripts/             # Build-time frontend patches
+│   │   ├── public/
+│   │   ├── scripts/
 │   │   └── src/
-│   │       ├── api.ts            # API client
-│   │       ├── main.tsx          # Main React application
-│   │       ├── features.ts       # Messenger features
-│   │       ├── e2ee.ts           # Client-side encryption
-│   │       ├── e2ee-bootstrap.ts # Encryption integration
-│   │       ├── push.ts           # Push notification client
-│   │       └── styles.css        # Application styling
+│   │       ├── api.ts
+│   │       ├── main.tsx
+│   │       ├── features.ts
+│   │       ├── e2ee.ts
+│   │       ├── e2ee-bootstrap.ts
+│   │       ├── push.ts
+│   │       └── styles.css
 │   │
 │   └── server/
 │       ├── prisma/
-│       │   ├── schema.prisma     # Database schema
-│       │   └── migrations/       # Database migrations
-│       ├── scripts/              # Server build/runtime patches
+│       │   ├── schema.prisma
+│       │   └── migrations/
+│       ├── scripts/
 │       └── src/
-│           ├── index.ts           # Fastify/Socket.IO server
+│           ├── index.ts
 │           ├── advanced-features.ts
+│           ├── product-center.ts
 │           └── push-notifications.ts
 │
 ├── docs/
-│   └── WIKI.md                   # This project wiki
+│   ├── README.md
+│   └── WIKI.md
 │
-├── .github/workflows/            # CI/CD and Android build workflows
-├── render.yaml                   # Render deployment blueprint
-├── package.json                  # Workspace configuration
+├── .github/workflows/
+├── render.yaml
+├── package.json
 └── README.md
 ```
 
@@ -347,28 +621,24 @@ Global Messenger/
 | Layer | Technology |
 |---|---|
 | Web UI | React 19 |
-| Build tool | Vite 6 |
+| Build | Vite 6 |
 | Language | TypeScript |
 | Icons | Lucide React |
-| Real-time | Socket.IO |
+| Realtime | Socket.IO |
 | Backend | Fastify 5 |
-| Database ORM | Prisma 6 |
+| ORM | Prisma 6 |
 | Database | PostgreSQL |
 | Authentication | JWT + bcrypt |
 | Mobile | Capacitor 7 |
 | Android | Native Android / Gradle |
 | Push | Firebase Cloud Messaging integration |
-| Hosting | Render |
+| Hosting | Docker / Render |
 
 ---
 
 ## ⚙️ Environment Configuration
 
-Secrets must be supplied through the deployment environment or local environment configuration.
-
-### Server configuration
-
-Typical production configuration includes:
+Typical server variables include:
 
 ```text
 DATABASE_URL
@@ -379,109 +649,110 @@ UPLOAD_DIR
 CRON_SECRET
 ```
 
-### Gmail password reset
+Optional email/push integrations must receive credentials through secure environment configuration.
 
-Password-reset mail is designed to use Gmail SMTP/Nodemailer configuration rather than requiring a third-party email API provider.
+Never commit:
 
-SMTP credentials must never be committed to GitHub.
-
-### Push notifications
-
-If FCM is enabled, configure the Firebase server credentials as environment variables. Do not put private keys directly into source files.
+- Passwords
+- JWT secrets
+- Gmail passwords
+- Firebase private keys
+- API tokens
+- Production database credentials
+- Android signing keys/keystores
 
 ---
 
 ## 💻 Local Development
 
-From the repository root:
+Install dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
-Run the complete development environment:
+Run the complete environment:
 
 ```bash
 npm run dev
 ```
 
-Run the server directly:
+Run server directly:
 
 ```bash
 npm run dev:server:direct
 ```
 
-Run the web client directly:
+Run web directly:
 
 ```bash
 npm run dev:web:direct
 ```
 
-Run the production build:
+Build:
 
 ```bash
 npm run build
 ```
 
-Run local verification:
+Verification:
 
 ```bash
 npm run verify:local
+npm run smoke
 ```
 
-Run smoke tests:
+Database:
 
 ```bash
-npm run smoke
+npm run db:generate
+npm run db:migrate
+npm run db:deploy
 ```
 
 ---
 
-## 🚀 Production Deployment
+## 🐳 Docker Production Deployment
 
-The production deployment is configured through `render.yaml`.
+### Build the web frontend
 
-High-level deployment flow:
-
-```text
-GitHub main
-    ↓
-Render build
-    ↓
-Frontend build + backend build
-    ↓
-Prisma migration deployment
-    ↓
-Fastify server
-    ↓
-React/Vite web application
+```bash
+docker compose build --no-cache --pull web
+docker compose up -d --force-recreate --no-deps web
 ```
 
-### Production checklist
+### Rebuild the complete stack
 
-Before releasing:
+```bash
+docker compose down
+docker compose build --no-cache --pull
+docker compose up -d
+```
 
-- [ ] Database connection configured
-- [ ] JWT secret configured
-- [ ] Production CORS origins verified
-- [ ] Gmail SMTP configured if password recovery is enabled
-- [ ] Persistent upload storage configured
-- [ ] Push credentials configured if push notifications are required
-- [ ] Database migrations applied
-- [ ] Web build succeeds
-- [ ] Server build succeeds
-- [ ] Login/register tested
-- [ ] Password reset tested
-- [ ] One-to-one messaging tested
-- [ ] Group messaging tested
-- [ ] Media upload tested
-- [ ] Mobile build tested
+### Local URL
+
+```text
+http://localhost:8080
+```
+
+### Verify
+
+```bash
+docker compose ps web
+docker compose logs --tail=100 web
+curl -I http://localhost:8080/
+curl -I http://localhost:8080/index.html
+```
+
+After deployment, a private/incognito window is useful for confirming that an old browser cache or service worker is not serving an earlier build.
+
+### Render
+
+The repository also contains `render.yaml` for Render-based deployment. When using Render, verify that the deployed frontend is built from the intended current commit and that backend/frontend environment variables match the production domain.
 
 ---
 
 ## 📱 Android Build
-
-The Android app is produced from the Capacitor web application.
 
 Application ID:
 
@@ -489,7 +760,7 @@ Application ID:
 com.globalmessenger.app
 ```
 
-Useful commands:
+Commands:
 
 ```bash
 npm run android:add
@@ -498,143 +769,162 @@ npm run android:open
 npm run android:run
 ```
 
-The repository also contains an Android GitHub Actions workflow capable of producing release APK/AAB artifacts when the required signing secrets are configured.
+The repository also contains Android GitHub Actions automation for release artifacts when the required signing secrets are configured.
 
-Release signing secrets should remain in GitHub Actions Secrets and must never be committed to the repository.
-
----
-
-## 🛡️ Security Principles
-
-Global Messenger follows these project rules:
-
-### Never commit
-
-- Passwords
-- JWT secrets
-- Gmail passwords
-- Firebase private keys
-- Android keystores
-- API tokens
-- Production database credentials
-
-### Always validate
-
-- Authentication state
-- User permissions
-- Group membership
-- Uploaded file types
-- Request bodies
-- Message ownership
-- Session ownership
-
-### Privacy defaults
-
-The application exposes privacy controls for last-seen information and profile photos.
+Release keys and signing secrets must remain outside the source tree.
 
 ---
 
 ## 🧪 Troubleshooting
 
-### Messages show raw technical payloads
+### The recipient sees an encrypted/unavailable message
 
-The web build contains a message-display cleanup layer that removes internal call-signalling records and decrypts supported E2EE envelopes before rendering.
+The receiving device may not have the device identity/key material required to decrypt the message. This is a cryptographic device-key issue, not something that should be solved by displaying the encrypted payload to the user.
 
-After pulling the latest code, rebuild the web application so the build-time display patch is applied.
+The long-term solution is secure multi-device key synchronization/recovery.
 
-### Encrypted message cannot be opened
+### Raw technical messages appear in chat
 
-The message may belong to a device identity that is not available in the current browser/device. E2EE identity recovery is intentionally separate from ordinary account password recovery.
+The UI should filter internal signalling/transport records and render only user-facing messages. Rebuild the current frontend after pulling changes so the latest message-display logic is included.
 
-### Password reset does not arrive
+### Login or registration does not complete
 
 Check:
 
-1. Gmail SMTP environment variables.
-2. SMTP connectivity from the hosting provider.
-3. Sender/account security settings.
-4. Application logs for the exact SMTP error.
+1. Backend process is running.
+2. Database is reachable.
+3. `WEB_ORIGIN` matches the frontend origin.
+4. Browser network requests point to the correct same-origin API or configured API URL.
+5. Authentication responses are not being blocked by CORS or stale frontend assets.
+
+### Messages fail with “Failed to fetch”
+
+Check:
+
+1. The device can reach the production domain.
+2. The backend is healthy.
+3. `/api` is correctly proxied by the frontend/reverse proxy.
+4. `/socket.io` is correctly proxied for realtime features.
+5. HTTPS is used consistently in production.
+6. The deployed frontend is not using an old localhost or stale API configuration.
 
 ### Upload fails
 
 Check:
 
 1. `UPLOAD_DIR`.
-2. Production persistent disk configuration.
-3. File MIME type.
-4. Server upload size limits.
+2. Persistent production storage.
+3. MIME type validation.
+4. Upload size limits.
 5. Storage permissions.
 
 ### Calls connect unreliably
 
-STUN can be sufficient for many networks, but restrictive NAT/firewall environments may require TURN infrastructure for dependable production WebRTC connectivity.
+STUN may not be sufficient on restrictive networks. Configure production TURN infrastructure for dependable WebRTC connectivity.
+
+### Password reset email is not received
+
+Check:
+
+1. Gmail SMTP environment variables.
+2. SMTP connectivity.
+3. Sender/account security settings.
+4. Server logs for SMTP errors.
+5. Spam/junk folder.
 
 ---
 
-## 🗺️ Development Roadmap
+## 🗺️ Roadmap
 
-### Production stability
+### Phase 1 — Core product completeness
 
-- [x] Build and environment hardening
-- [x] Authentication flows
-- [x] Realtime reconnect handling
-- [x] Message delivery reliability improvements
-- [x] Media upload handling
-- [x] Persistent upload configuration
-- [x] Production security/rate protection
-- [x] Production CORS configuration
+- [x] Profile Center foundation
+- [x] Chat Info foundation
+- [x] Advanced message-operation foundation
+- [x] Conversation organization foundation
+- [x] Media Center foundation
+- [x] Notification Center foundation
+- [x] Universal Search foundation
+- [x] Command Center foundation
+- [x] Settings Center foundation
+- [ ] Finish every UI state for multi-select/bulk operations
+- [ ] Finish complete message-info views
+- [ ] Finish end-to-end forwarding/share flows across all conversation types
 
-### Messenger UX
+### Phase 2 — Security Center
 
-- [x] Contact/profile APIs
-- [x] Chat information
-- [x] Group administration
-- [x] Message search
-- [x] Media/files
-- [x] Pinned messages
-- [x] Read/delivery indicators
-- [x] Mobile-oriented UI improvements
-
-### Advanced messenger
-
-- [ ] Production TURN-based call reliability
-- [x] Push notification integration
-- [x] Multi-device sessions
+- [x] Active sessions foundation
+- [x] Session revocation
 - [x] Privacy controls
-- [x] Message forwarding
-- [x] Optional disappearing messages
-- [x] Android/Capacitor integration
-- [ ] Final Play Store release validation
+- [ ] Two-factor authentication
+- [ ] Passkeys
+- [ ] App PIN
+- [ ] Android biometric lock
+- [ ] Security verification
+- [ ] Secure device/key management and recovery
+
+### Phase 3 — Advanced Messaging
+
+- [ ] Polls
+- [ ] Scheduled messages
+- [ ] Reminders
+- [ ] Live location
+- [ ] Contact sharing
+- [ ] Events/calendar
+- [ ] Advanced media tools
+
+### Phase 4 — Advanced Calls
+
+- [x] Incoming/outgoing call foundation
+- [x] Call history foundation
+- [ ] Production TURN
+- [ ] Group calls
+- [ ] Screen sharing hardening
+- [ ] Call-quality diagnostics
+
+### Phase 5 — AI Workspace
+
+- [ ] Rewrite
+- [ ] Translation
+- [ ] Smart replies
+- [ ] Conversation summaries
+- [ ] AI message search
+- [ ] File understanding
+- [ ] Voice transcription
+- [ ] Smart notifications
 
 ---
 
 ## 📌 Product Rules
 
-These rules are important to preserve during future development:
+These rules should be preserved during future development:
 
 1. **Do not automatically delete normal user messages.**
-2. **Do not introduce automatic clear-chat behavior.**
-3. **Disappearing Messages must remain an explicit user-controlled option.**
-4. **Off means normal messages remain persistent.**
-5. **Manual Clear Chat/Delete Chat actions remain available to the user.**
-6. **A 60-day inactive-chat policy may archive old conversations from the active list, but must not silently delete their message history.**
-7. **Never expose internal encryption or call-signalling payloads in the human chat interface.**
-8. **Never commit secrets or private credentials to the repository.**
-9. **Do not replace working core messenger behavior with third-party API dependencies without a clear product requirement.**
+2. **Do not silently introduce automatic clear-chat behavior.**
+3. **Disappearing Messages must remain explicitly user-controlled.**
+4. **When Disappearing Messages is OFF, normal messages remain persistent.**
+5. **Manual Clear Chat/Delete Chat remains a user action.**
+6. **Archiving inactive conversations must not silently delete their message history.**
+7. **Never display encryption envelopes or call-signalling payloads as human chat messages.**
+8. **Never commit secrets or private credentials.**
+9. **Preserve authentication, authorization and realtime behavior when changing UI features.**
+10. **Prefer existing project capabilities over unnecessary third-party API dependencies.**
+11. **Document architecture/product changes when adding major features.**
 
 ---
 
 ## 🤝 Contribution Guidelines
 
-Before changing a core messenger feature:
+Before changing a core feature:
 
-1. Understand the existing API and database flow.
-2. Preserve authentication and authorization checks.
-3. Preserve realtime behavior.
-4. Preserve message history unless the user explicitly requests deletion.
+1. Read the relevant API, UI and database flow.
+2. Preserve authorization checks.
+3. Preserve realtime delivery and reconnect behavior.
+4. Preserve message history unless deletion is explicitly requested by the user.
 5. Keep technical transport data out of the chat UI.
-6. Run the appropriate build/verification checks.
-7. Update this wiki when architecture or product behavior changes.
+6. Test desktop and mobile-responsive behavior.
+7. Run build/verification/smoke checks.
+8. Update `README.md` and this wiki when behavior or architecture changes.
 
 ---
 
@@ -642,12 +932,14 @@ Before changing a core messenger feature:
 
 | Document | Purpose |
 |---|---|
-| `docs/WIKI.md` | Complete project overview and operational reference |
-| `README.md` | Quick project introduction and setup |
-| `render.yaml` | Production deployment configuration |
+| `README.md` | Public project introduction, setup and product roadmap |
+| `docs/WIKI.md` | Detailed architecture, product behavior, security and operations |
+| `docs/README.md` | Documentation index |
+| `render.yaml` | Render deployment blueprint |
 | `apps/server/prisma/schema.prisma` | Database model reference |
+| `apps/server/src/product-center.ts` | Product-center feature definitions and foundation APIs |
 | `.github/workflows/` | CI/CD and Android automation |
 
 ---
 
-**Global Messenger** — built for clean conversations, reliable communication, and user-controlled privacy.
+**Global Messenger** — secure conversations, realtime delivery, powerful organization, and a foundation for an advanced communication workspace.
