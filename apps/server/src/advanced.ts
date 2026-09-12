@@ -11,6 +11,7 @@ import { localAssist } from './local-ai.js';
 import { registerAdvancedFeatures, startExpiredMessageCleanup } from './advanced-features.js';
 import { registerAdvancedPlatform } from './advanced-platform.js';
 import { registerSupportRoutes } from './support-routes.js';
+import { registerActivityCenter } from './activity-center.js';
 
 type AuthRequest = { user: { id: string; username: string } };
 type IdParams = { id: string };
@@ -26,6 +27,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   await registerEmailAuthRoutes(app, prisma);
   await registerAdvancedFeatures(app, prisma);
   await registerAdvancedPlatform(app, prisma);
+  await registerActivityCenter(app, prisma);
   startExpiredMessageCleanup(prisma);
 
   await registerSupportRoutes(app, prisma);
