@@ -53,13 +53,19 @@ jobs:
         env:
           NODE_ENV: test
         run: |
-          npx --yes serve@14 apps/web/dist -l 4173 > /tmp/global-messenger-web.log 2>&1 &
+          set -euo pipefail
+          ./node_modules/.bin/vite preview --host 127.0.0.1 --port 4173 --strictPort > /tmp/global-messenger-web.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
+          ready=0
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then ready=1; break; fi
             sleep 1
           done
+          if [[ "$ready" != "1" ]]; then
+            cat /tmp/global-messenger-web.log || true
+            exit 1
+          fi
           node <<'NODE'
           const { chromium } = require('playwright');
           (async () => {
@@ -69,8 +75,15 @@ jobs:
             page.on('pageerror', error => errors.push(error.message));
             page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
             await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle', timeout: 30000 });
+            await page.locator('#root').waitFor({ state: 'attached', timeout: 10000 });
+            await page.waitForFunction(() => {
+              const root = document.querySelector('#root');
+              return !!root && root.childElementCount > 0;
+            }, null, { timeout: 15000 });
+            const title = await page.title();
+            if (title !== 'Global Messenger') throw new Error(`Unexpected document title: ${title}`);
             const text = await page.locator('body').innerText();
-            if (!text.includes('Global Messenger')) throw new Error('Global Messenger root did not render');
+            if (!text.includes('Global Messenger')) throw new Error('Global Messenger app shell did not render');
             if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`);
             console.log('PASS: web build renders without browser errors');
             await browser.close();
