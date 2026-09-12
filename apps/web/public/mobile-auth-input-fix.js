@@ -19,7 +19,7 @@
 
     const focus = () => {
       if (!input.disabled && !input.readOnly) {
-        input.focus({ preventScroll: true });
+        try { input.focus({ preventScroll: true }); } catch (_) { input.focus(); }
         const end = input.value.length;
         try { input.setSelectionRange(end, end); } catch (_) {}
       }
@@ -27,31 +27,51 @@
     input.addEventListener('touchstart', focus, { passive: true });
     input.addEventListener('pointerdown', focus, { passive: true });
     input.addEventListener('click', focus, { passive: true });
-    input.addEventListener('keydown', () => { input.dataset.gmLastInteraction = String(Date.now()); });
-    input.addEventListener('compositionend', () => {
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    });
   }
 
-  function removeBlockingLayers() {
-    document.querySelectorAll('.auth-page *').forEach((node) => {
-      const el = node;
-      if (!(el instanceof HTMLElement)) return;
-      const cs = getComputedStyle(el);
-      if (cs.position === 'fixed' && cs.zIndex !== 'auto' && Number(cs.zIndex) > 1000 && !el.closest('.auth-card')) {
-        el.style.pointerEvents = 'none';
+  function ensureAuthTouchSurface() {
+    const auth = document.querySelector('.auth-page');
+    const card = auth?.querySelector('.auth-card');
+    if (!auth || !card) return;
+
+    // Android WebView can retain a transparent fixed overlay from a previous UI
+    // layer. Never let an auth-page overlay block the actual card/form.
+    auth.style.pointerEvents = 'auto';
+    auth.style.touchAction = 'manipulation';
+    card.style.pointerEvents = 'auto';
+    card.style.touchAction = 'manipulation';
+    card.querySelectorAll('input,button,textarea,select,a,label').forEach((node) => {
+      if (node instanceof HTMLElement) node.style.pointerEvents = 'auto';
+    });
+
+    document.querySelectorAll('.auth-page > *, .auth-page .auth-overlay, .auth-page .modal-backdrop').forEach((node) => {
+      if (!(node instanceof HTMLElement) || node === card || card.contains(node)) return;
+      const cs = getComputedStyle(node);
+      if (cs.position === 'fixed' || cs.position === 'absolute') {
+        const z = Number.parseInt(cs.zIndex || '0', 10);
+        if (z >= 1000) node.style.pointerEvents = 'none';
       }
     });
   }
 
   function scan() {
     document.querySelectorAll('.auth-page input').forEach(harden);
-    removeBlockingLayers();
+    ensureAuthTouchSurface();
+  }
+
+  let scheduled = false;
+  function scheduleScan() {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      scan();
+    });
   }
 
   const start = () => {
     scan();
-    new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
+    new MutationObserver(scheduleScan).observe(document.body, { childList: true, subtree: true });
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
