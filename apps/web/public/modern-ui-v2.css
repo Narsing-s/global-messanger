@@ -1,0 +1,57 @@
+/* Global Messenger — modern Aurora UI v2 */
+:root{--gm-primary:#5b63f6;--gm-primary-2:#7b61ff;--gm-ink:#172033;--gm-muted:#7f899d;--gm-border:#e8ebf3;--gm-surface:#fff;--gm-soft:#f7f8fc}
+
+@media (min-width:761px){
+  body{background:#eef1f8}
+  .shell{padding:0!important;gap:0!important;background:#eef1f8!important}
+  .sidebar{width:390px!important;min-width:390px!important;max-width:390px!important;border:0!important;border-right:1px solid var(--gm-border)!important;border-radius:0!important;background:rgba(255,255,255,.96)!important;box-shadow:8px 0 30px rgba(28,38,75,.045)!important}
+  .conversation{border:0!important;border-radius:0!important;background:#fff!important;box-shadow:none!important}
+
+  /* Keep the signed-in identity at the very top, as in the earlier UI, but with the newer visual language. */
+  .profile{order:-2!important;margin:0!important;padding:16px 18px!important;min-height:84px!important;border:0!important;border-bottom:1px solid var(--gm-border)!important;border-radius:0!important;background:linear-gradient(135deg,#f8f8ff,#fff)!important}
+  .profile:before{content:"";position:absolute;left:0;top:0;width:4px;height:84px;background:linear-gradient(180deg,var(--gm-primary),var(--gm-primary-2));border-radius:0 4px 4px 0}
+  .profile .avatar.big{width:52px!important;height:52px!important;border-radius:17px!important;background:linear-gradient(145deg,#6875ff,#6651e8)!important;box-shadow:0 7px 18px rgba(91,99,246,.24)!important;overflow:hidden!important}
+  .profile-text b{font-size:15px!important;font-weight:800!important;color:#172033!important}
+  .profile-text span{font-size:12px!important;color:#7b8599!important;margin-top:3px!important}
+  .profile .icon-btn{margin-left:auto;background:#f1f3fb!important;color:#68738a!important}
+  .profile .icon-btn:hover{background:#e9ebff!important;color:var(--gm-primary)!important}
+
+  .brand{order:-1!important;height:64px!important;padding:0 20px!important;border-bottom:1px solid var(--gm-border)!important;background:#fff!important}
+  .brand-icon{width:38px!important;height:38px!important;border-radius:13px!important}
+  .brand b{font-size:16px!important}
+  .brand span{font-size:10px!important;letter-spacing:.08em}
+
+  .search{margin:14px 16px 12px!important;height:46px!important;border-radius:15px!important;background:#f5f7fb!important;border-color:#e5e8f0!important}
+  .search:focus-within{background:#fff!important;border-color:#aeb5ff!important;box-shadow:0 0 0 4px rgba(91,99,246,.08)!important}
+  .nav{padding:0 14px 12px!important}
+  .nav button{height:40px!important;border-radius:13px!important}
+  .section-title{padding:12px 20px 7px!important;color:#9aa3b5!important}
+  .chat-list{padding:2px 9px 12px!important}
+  .chat-item{padding:11px 10px!important;border-radius:14px!important}
+  .chat-item.selected{background:linear-gradient(100deg,#eef0ff,#f7f7ff)!important;box-shadow:inset 3px 0 var(--gm-primary),0 3px 12px rgba(45,55,110,.04)!important}
+
+  .topbar{height:76px!important;min-height:76px!important;padding:0 26px!important;background:rgba(255,255,255,.97)!important;border-bottom:1px solid var(--gm-border)!important}
+  .chat-heading{gap:11px!important}
+  .chat-heading .avatar{width:46px!important;height:46px!important;border-radius:15px!important;box-shadow:0 5px 15px rgba(40,52,100,.12)!important}
+  .chat-heading b{font-size:15px!important;font-weight:800!important;color:#172033!important}
+  .chat-heading span{font-size:11px!important;color:#7f899d!important}
+  .top-actions{gap:5px!important}
+  .top-actions .icon-btn{width:40px!important;height:40px!important;border-radius:13px!important;background:#f6f7fb!important}
+  .top-actions .icon-btn:hover{background:#eceeff!important;color:var(--gm-primary)!important}
+
+  .messages{padding-top:25px!important;padding-bottom:24px!important;background:radial-gradient(circle at 10% 0,#f3f4ff 0,transparent 25%),linear-gradient(180deg,#fff,#fafbfe)!important}
+  .bubble{max-width:min(70%,560px)!important;border-radius:19px 19px 19px 6px!important;box-shadow:0 2px 8px rgba(24,34,65,.035)!important}
+  .own .bubble{border-radius:19px 19px 6px 19px!important;box-shadow:0 5px 16px rgba(82,96,232,.16)!important}
+  .composer-wrap{padding-top:12px!important;background:rgba(255,255,255,.98)!important}
+  .composer{min-height:58px!important;border-radius:19px!important;background:#fff!important}
+}
+
+/* Profile photos: the React UI can still fall back to initials when no image exists. */
+.profile .avatar.big img,.chat-heading .avatar img,.chat-item .avatar img,.search-results .avatar img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+.avatar.has-photo{font-size:0!important}
+
+@media(max-width:760px){
+  .profile{min-height:74px!important;padding:12px 14px!important}
+  .profile .avatar.big{width:48px!important;height:48px!important;border-radius:15px!important}
+  .topbar{background:#fff!important}
+}
