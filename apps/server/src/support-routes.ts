@@ -15,8 +15,21 @@ const supportSchema = z.object({
 const makeRequestId = () => `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 
 export async function registerSupportRoutes(app: FastifyInstance, prisma: PrismaClient) {
-  // Registration is intentionally idempotent. This prevents production startup
-  // failures if a route registrar is invoked more than once by a patch/plugin.
+  // Keep the Help Centre preflight explicit. This remains reliable even when
+  // an upstream CORS plugin or generated patch changes route registration.
+  if (!app.hasRoute({ method: 'OPTIONS', url: '/api/support/requests' })) {
+    app.options('/api/support/requests', async (request, reply) => {
+      const origin = String(request.headers.origin || '');
+      const allowed = origin === 'https://global-messenger-help-centre.onrender.com';
+      if (allowed) reply.header('access-control-allow-origin', origin);
+      reply
+        .header('access-control-allow-methods', 'POST, OPTIONS')
+        .header('access-control-allow-headers', 'content-type, authorization')
+        .header('access-control-max-age', '86400');
+      return reply.code(204).send();
+    });
+  }
+
   if (!app.hasRoute({ method: 'POST', url: '/api/support/requests' })) {
     app.post('/api/support/requests', async (request, reply) => {
       const parsed = supportSchema.safeParse(request.body ?? {});
