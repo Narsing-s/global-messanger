@@ -42,6 +42,7 @@ model User {
   supportResolutions  SupportResolution[]  @relation("SupportResolver")
   passkeys            PasskeyCredential[]
   loginHistory        LoginHistory[]
+  pollVotes           PollVote[]
 }
 
 model UserSession {
@@ -276,8 +277,8 @@ model SupportResolution {
   resolutionType     String
   resolutionNotes    String?
   resolutionTimeSecs Int
-  closedAt           DateTime     @default(now())
-  createdAt          DateTime     @default(now())
+  closedAt            DateTime     @default(now())
+  createdAt           DateTime     @default(now())
   supportRequest     SupportRequest @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
   resolvedBy         User?         @relation("SupportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
   @@index([resolvedById, closedAt])
