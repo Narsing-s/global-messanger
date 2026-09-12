@@ -3,20 +3,84 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: global_messenger
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DB:-global_messenger}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
       - messenger_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [messenger]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-global_messenger}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      PASSWORD_RESET_WEB_ORIGIN: ${PASSWORD_RESET_WEB_ORIGIN:-http://localhost:8080}
+      UPLOAD_DIR: /data/uploads
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-Global Messenger <no-reply@localhost>}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - messenger_uploads:/data/uploads
+    expose:
+      - "4000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [messenger]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    init: true
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [messenger]
 
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
+    profiles: ["dev"]
     ports:
-      - "2525:1025"
       - "8025:8025"
+    networks: [messenger]
 
 volumes:
   messenger_pg:
+  messenger_uploads:
+
+networks:
+  messenger:
+    driver: bridge
