@@ -14,13 +14,13 @@ ENV VITE_APP_VERSION=$APP_VERSION
 ENV VITE_GIT_COMMIT=$GIT_COMMIT
 
 # Install only the web workspace. The server workspace contains mediasoup,
-# whose native worker is not needed to build the browser bundle. Avoiding the
-# server workspace here makes the frontend image independent of native SFU
-# compilation and keeps this image smaller and more reliable.
+# whose native worker is not needed to build the browser bundle. Explicitly
+# include optional dependencies because Vite/esbuild needs the Linux-native
+# esbuild binary inside this image.
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
 RUN --mount=type=cache,id=global-messenger-npm,target=/root/.npm,sharing=locked \
-    npm ci --workspace apps/web --include-workspace-root=false --ignore-scripts --no-audit --no-fund
+    npm install --workspace apps/web --include-workspace-root=false --include=dev --include=optional --ignore-scripts --no-audit --no-fund
 
 COPY apps/web ./apps/web
 RUN npm run build -w apps/web
