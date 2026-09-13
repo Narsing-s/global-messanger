@@ -1,7 +1,7 @@
 (() => {
   if (window.__gmSettingsExtraLoaded) return;
   window.__gmSettingsExtraLoaded = true;
-  const API = window.__GM_CONFIG__?.API_URL || (location.hostname === 'localhost' ? location.origin : 'https://global-messanger-backend.onrender.com');
+  const API = () => (window.__GM_CONFIG__?.API_URL || localStorage.getItem('gm_api_url') || (location.hostname === 'localhost' ? location.origin : 'https://global-messenger-api.narsingbeesetti006.workers.dev')).replace(/\/$/, '');
   const token = () => localStorage.getItem('gm_token') || '';
   const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -10,7 +10,7 @@
     if (!box) return;
     box.innerHTML = '<div class="gm-note">Loading blocked contacts…</div>';
     try {
-      const r = await fetch(`${API}/api/users/blocked`, { headers: { Authorization: `Bearer ${token()}` } });
+      const r = await fetch(`${API()}/api/users/blocked`, { headers: { Authorization: `Bearer ${token()}` } });
       const rows = await r.json().catch(() => []);
       if (!r.ok) throw Error(rows.message || 'Unable to load blocked contacts');
       if (!Array.isArray(rows) || !rows.length) { box.innerHTML = '<div class="gm-note">No blocked contacts.</div>'; return; }
@@ -20,7 +20,7 @@
         if (!id || !confirm('Unblock this contact?')) return;
         btn.disabled = true;
         try {
-          const r = await fetch(`${API}/api/users/${encodeURIComponent(id)}/block`, { method: 'DELETE', headers: { Authorization: `Bearer ${token()}` } });
+          const r = await fetch(`${API()}/api/users/${encodeURIComponent(id)}/block`, { method: 'DELETE', headers: { Authorization: `Bearer ${token()}` } });
           if (!r.ok) { const d = await r.json().catch(() => ({})); throw Error(d.message || 'Unable to unblock contact'); }
           await loadBlocked(root);
         } catch (e) { btn.disabled = false; alert(e.message || 'Unable to unblock contact'); }
