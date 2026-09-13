@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { io } from 'socket.io-client';
 
 const BASE = (process.env.E2E_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
