@@ -44,18 +44,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          # The production Render service is fixed and public. Do not allow a
-          # stale GitHub secret to redirect the Cloudflare Worker to an invalid
-          # or HTTP upstream.
           BACKEND_API_URL='https://global-messanger-backend.onrender.com'
           : "${CLOUDFLARE_API_URL:=https://global-messenger-api.narsingbeesetti006.workers.dev}"
           : "${CLOUDFLARE_WEB_ORIGIN:=https://global-messenger-web.narsingbeesetti006.workers.dev}"
-
           BACKEND_API_URL="${BACKEND_API_URL%/}"
           CLOUDFLARE_API_URL="${CLOUDFLARE_API_URL%/}"
           CLOUDFLARE_WEB_ORIGIN="${CLOUDFLARE_WEB_ORIGIN%/}"
-
           {
             echo "BACKEND_API_URL=$BACKEND_API_URL"
             echo "CLOUDFLARE_API_URL=$CLOUDFLARE_API_URL"
@@ -92,6 +86,8 @@ jobs:
         working-directory: apps/api-worker
         run: |
           set -euo pipefail
+          # Wrangler v4 reads the account from CLOUDFLARE_ACCOUNT_ID.
+          # Do not pass the removed --account-id CLI flag.
           wrangler deploy \
             --name global-messenger-api \
             --var "UPSTREAM_API:${BACKEND_API_URL}" \
@@ -136,10 +132,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RniE 'vercel\.app' apps/web/dist; then
+          if grep -RniE 'vercel\\.app' apps/web/dist; then
             echo 'Retired Vercel URL found in production web artifact.'
             exit 1
           fi
 
-      # Production endpoint is intentionally canonicalized above; this workflow
-      # must remain the single source of truth for the Cloudflare deployment.
+      # Retriggered after the Wrangler v4 account-id CLI incompatibility fix.
