@@ -63,7 +63,7 @@ export async function registerGlobalCompletionRoutes(app: FastifyInstance, prism
   app.post('/api/moderation/reports', a, async (request, reply) => {
     const p = z.object({ targetType: z.enum(['user','message','conversation','media']), targetId: z.string().min(1).max(200), reason: z.string().min(1).max(500), details: z.string().max(5000).optional() }).safeParse(request.body ?? {});
     if (!p.success) return reply.badRequest('Invalid abuse report'); const user = userOf(request);
-    return entity(prisma, user.id, 'moderation-report', { ...p.data, reporterId: user.id, status: 'open', timeline: [{ at: new Date().toISOString(), action: 'created', actor: user.id }] }, 'moderation-report', 'open');
+    return entity(prisma, user.id, 'moderation-report', { ...p.data, reporterId: user.id, timeline: [{ at: new Date().toISOString(), action: 'created', actor: user.id }] }, 'open');
   });
   app.get('/api/moderation/reports', a, async request => prisma.globalEntity.findMany({ where: { ownerId: userOf(request).id, kind: 'security', name: 'moderation-report', status: { not: 'deleted' } }, orderBy: { createdAt: 'desc' }, take: 100 }));
 
