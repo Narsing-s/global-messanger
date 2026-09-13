@@ -143,3 +143,6 @@ jobs:
             echo 'Retired Vercel URL found in production web artifact.'
             exit 1
           fi
+
+      # Force a fresh production deployment whenever this workflow itself is repaired.
+      # This marker intentionally lives in the workflow so the push trigger runs it.
