@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "validate:operations": "node scripts/validate-operations.mjs",
+    "e2e:release": "node scripts/release-e2e.mjs",
     "android:add": "cap add android",
     "android:sync": "cap sync",
     "android:open": "cap open android",
