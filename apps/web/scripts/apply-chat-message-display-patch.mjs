@@ -1,6 +1,7 @@
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-const file = new URL('../src/main.tsx', import.meta.url).pathname;
+const file = fileURLToPath(new URL('../src/main.tsx', import.meta.url));
 let source = fs.readFileSync(file, 'utf8');
 
 if (!source.includes('chat-message-display-v3')) {
@@ -74,8 +75,8 @@ function installMessageQuickActions(){
     "s.on('message:new',async(m:Message)=>{const clean=await cleanIncomingMessage(m);if(!clean)return;if(clean.senderId!==me.id)messagePing();setMessages(p=>p.some(x=>x.id===clean.id)?p:[...p,clean]);setChats(p=>p.map(c=>c.id===clean.conversationId?{...c,messages:[clean,...(c.messages||[]).filter((x:any)=>x.id!==clean.id)]}:c))});"
   );
   source = source.replace(
-    "api.conversations().then(data=>{setChats(Array.isArray(data)?data:[]);const next:Record<string,boolean>={};",
-    "api.conversations().then(async data=>{const cleaned=await Promise.all((Array.isArray(data)?data:[]).map(cleanConversation));setChats(cleaned);const next:Record<string,boolean>={};"
+    "api.conversations().then(data=>{setChats(Array.isArray(data)?data:[]);const next:Record<string,boolean>={}",
+    "api.conversations().then(async data=>{const cleaned=await Promise.all((Array.isArray(data)?data:[]).map(cleanConversation));setChats(cleaned);const next:Record<string,boolean>={"
   );
   source = source.replace(
     "(Array.isArray(data)?data:[]).forEach((c:Chat)=>c.members?.forEach",
