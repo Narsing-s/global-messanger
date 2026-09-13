@@ -5,11 +5,7 @@ WORKDIR /app
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    build-essential \
     ca-certificates \
-    python3 \
-    python3-pip \
-    python-is-python3 \
   && rm -rf /var/lib/apt/lists/*
 
 ARG APP_VERSION=dev
@@ -17,16 +13,16 @@ ARG GIT_COMMIT=unknown
 ENV VITE_APP_VERSION=$APP_VERSION
 ENV VITE_GIT_COMMIT=$GIT_COMMIT
 
+# Install only the web workspace. The server workspace contains mediasoup,
+# whose native worker is not needed to build the browser bundle. Avoiding the
+# server workspace here makes the frontend image independent of native SFU
+# compilation and keeps this image smaller and more reliable.
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
-COPY apps/server/package.json apps/server/package.json
-
-# Keep Docker builds resilient while the workspace lockfile is being brought
-# back in sync with mediasoup/Rollup dependencies.
 RUN --mount=type=cache,id=global-messenger-npm,target=/root/.npm,sharing=locked \
-    npm install --include=dev --no-audit --no-fund
+    npm ci --workspace apps/web --include-workspace-root=false --ignore-scripts --no-audit --no-fund
 
-COPY . .
+COPY apps/web ./apps/web
 RUN npm run build -w apps/web
 
 FROM nginx:1.29-alpine AS runtime
