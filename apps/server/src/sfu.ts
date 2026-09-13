@@ -5,7 +5,9 @@ import * as mediasoup from 'mediasoup';
 let worker: mediasoup.types.Worker | null = null;
 const routers = new Map<string, mediasoup.types.Router>();
 const transports = new Map<string, mediasoup.types.WebRtcTransport>();
+const transportRooms = new Map<string, string>();
 const producers = new Map<string, mediasoup.types.Producer>();
+const producerRooms = new Map<string, string>();
 const consumers = new Map<string, mediasoup.types.Consumer>();
 
 const codecs: mediasoup.types.RtpCodecCapability[] = [
@@ -26,6 +28,7 @@ async function getRouter(roomId: string) {
   if (existing && !existing.closed) return existing;
   const router = await (await getWorker()).createRouter({ mediaCodecs: codecs });
   routers.set(roomId, router);
+  router.on('workerclose', () => routers.delete(roomId));
   return router;
 }
 
@@ -33,12 +36,14 @@ export async function registerSfu(app: FastifyInstance, _prisma: PrismaClient) {
   app.get('/api/sfu/:roomId/capabilities', { preHandler: [app.authenticate] }, async request => ({ routerRtpCapabilities: (await getRouter(String((request.params as any).roomId))).rtpCapabilities }));
 
   app.post('/api/sfu/:roomId/transport', { preHandler: [app.authenticate] }, async request => {
-    const router = await getRouter(String((request.params as any).roomId));
+    const roomId = String((request.params as any).roomId);
+    const router = await getRouter(roomId);
     const announcedAddress = process.env.MEDIASOUP_ANNOUNCED_IP || undefined;
     const listenIp = process.env.MEDIASOUP_LISTEN_IP || '0.0.0.0';
     const transport = await router.createWebRtcTransport({ listenInfos: [{ protocol: 'udp', ip: listenIp, ...(announcedAddress ? { announcedAddress } : {}) }, { protocol: 'tcp', ip: listenIp, ...(announcedAddress ? { announcedAddress } : {}) }], enableUdp: true, enableTcp: true, preferUdp: true, initialAvailableOutgoingBitrate: 1500000, enableSctp: true, maxSctpMessageSize: 262144 });
-    transports.set(transport.id, transport);
-    transport.on('routerclose', () => transports.delete(transport.id));
+    transports.set(transport.id, transport); transportRooms.set(transport.id, roomId);
+    const cleanup = () => { transports.delete(transport.id); transportRooms.delete(transport.id); };
+    transport.on('routerclose', cleanup); transport.on('close', cleanup);
     return { id: transport.id, iceParameters: transport.iceParameters, iceCandidates: transport.iceCandidates, dtlsParameters: transport.dtlsParameters, sctpParameters: transport.sctpParameters };
   });
 
@@ -48,23 +53,37 @@ export async function registerSfu(app: FastifyInstance, _prisma: PrismaClient) {
   });
 
   app.post('/api/sfu/transport/:id/produce', { preHandler: [app.authenticate] }, async request => {
-    const transport = transports.get(String((request.params as any).id)); if (!transport) throw app.httpErrors.notFound('SFU transport not found');
+    const transportId = String((request.params as any).id);
+    const transport = transports.get(transportId); const roomId = transportRooms.get(transportId);
+    if (!transport || !roomId) throw app.httpErrors.notFound('SFU transport not found');
     const body: any = request.body ?? {};
+    if (body.kind !== 'audio' && body.kind !== 'video') throw app.httpErrors.badRequest('Invalid media kind');
     const producer = await transport.produce({ kind: body.kind, rtpParameters: body.rtpParameters, appData: body.appData });
-    producers.set(producer.id, producer); producer.on('transportclose', () => producers.delete(producer.id));
+    producers.set(producer.id, producer); producerRooms.set(producer.id, roomId);
+    const cleanup = () => { producers.delete(producer.id); producerRooms.delete(producer.id); };
+    producer.on('transportclose', cleanup); producer.on('close', cleanup);
     return { id: producer.id };
   });
 
-  app.get('/api/sfu/:roomId/producers', { preHandler: [app.authenticate] }, async request => ({ roomId: String((request.params as any).roomId), producerIds: [...producers.keys()] }));
+  app.get('/api/sfu/:roomId/producers', { preHandler: [app.authenticate] }, async request => {
+    const roomId = String((request.params as any).roomId);
+    return { roomId, producerIds: [...producers.keys()].filter(id => producerRooms.get(id) === roomId) };
+  });
 
   app.post('/api/sfu/transport/:id/consume', { preHandler: [app.authenticate] }, async request => {
-    const transport = transports.get(String((request.params as any).id)); if (!transport) throw app.httpErrors.notFound('SFU transport not found');
-    const body: any = request.body ?? {};
-    const router = [...routers.values()].find(r => !r.closed && r.canConsume({ producerId: body.producerId, rtpCapabilities: body.rtpCapabilities }));
-    if (!router) throw app.httpErrors.badRequest('Producer cannot be consumed by this client');
-    const consumer = await transport.consume({ producerId: body.producerId, rtpCapabilities: body.rtpCapabilities, paused: true });
-    consumers.set(consumer.id, consumer); consumer.on('transportclose', () => consumers.delete(consumer.id));
-    return { id: consumer.id, producerId: body.producerId, kind: consumer.kind, rtpParameters: consumer.rtpParameters, type: consumer.type, producerPaused: consumer.producerPaused };
+    const transportId = String((request.params as any).id);
+    const transport = transports.get(transportId); const roomId = transportRooms.get(transportId);
+    if (!transport || !roomId) throw app.httpErrors.notFound('SFU transport not found');
+    const body: any = request.body ?? {}; const producerId = String(body.producerId);
+    if (producerRooms.get(producerId) !== roomId) throw app.httpErrors.forbidden('Producer belongs to another call room');
+    const producer = producers.get(producerId); if (!producer) throw app.httpErrors.notFound('SFU producer not found');
+    const router = await getRouter(roomId);
+    if (!router.canConsume({ producerId, rtpCapabilities: body.rtpCapabilities })) throw app.httpErrors.badRequest('Producer cannot be consumed by this client');
+    const consumer = await transport.consume({ producerId, rtpCapabilities: body.rtpCapabilities, paused: true });
+    consumers.set(consumer.id, consumer);
+    const cleanup = () => consumers.delete(consumer.id);
+    consumer.on('transportclose', cleanup); consumer.on('producerclose', cleanup);
+    return { id: consumer.id, producerId, kind: consumer.kind, rtpParameters: consumer.rtpParameters, type: consumer.type, producerPaused: consumer.producerPaused };
   });
 
   app.post('/api/sfu/consumer/:id/resume', { preHandler: [app.authenticate] }, async request => { const c = consumers.get(String((request.params as any).id)); if (!c) throw app.httpErrors.notFound('Consumer not found'); await c.resume(); return { ok: true }; });
