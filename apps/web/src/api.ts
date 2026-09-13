@@ -2,14 +2,13 @@ declare global {
   interface Window { __GM_CONFIG__?: { API_URL?: string }; }
 }
 
+const CLOUDFLARE_API = 'https://global-messenger-api.narsingbeesetti006.workers.dev';
 const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL || localStorage.getItem('gm_api_url') || '';
 const isLoopbackApi = (value?: string) => Boolean(value && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(value));
 const isNative = ['capacitor:', 'ionic:', 'file:', 'null'].includes(window.location.protocol);
-// A native WebView's localhost is the phone, not the Docker server. Prefer an explicitly
-// configured API URL and persist the URL selected during mobile authentication.
 const API = configuredApi && (!isLoopbackApi(configuredApi) || import.meta.env.DEV)
   ? configuredApi.replace(/\/$/, '')
-  : (isNative ? (localStorage.getItem('gm_api_url') || 'https://global-messanger-backend.onrender.com') : window.location.origin);
+  : (isNative ? (localStorage.getItem('gm_api_url') || CLOUDFLARE_API) : (import.meta.env.DEV ? window.location.origin : CLOUDFLARE_API));
 
 type ConversationResponse = { id: string; isGroup: boolean; title: string | null; members: Array<{ user: any }>; messages: any[]; [key: string]: any };
 function normalizeConversation(value: any): ConversationResponse { const conversation = value && typeof value === 'object' ? value : {}; return { ...conversation, id: String(conversation.id ?? ''), isGroup: Boolean(conversation.isGroup), title: conversation.title ?? null, members: Array.isArray(conversation.members) ? conversation.members.filter((member: any) => member?.user?.id) : [], messages: Array.isArray(conversation.messages) ? conversation.messages.filter(Boolean) : [] }; }
