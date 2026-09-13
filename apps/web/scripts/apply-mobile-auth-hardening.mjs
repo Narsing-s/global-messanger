@@ -12,8 +12,11 @@ let source = fs.readFileSync(mainFile, 'utf8');
 // the user enter the public HTTPS Docker URL and persists it as gm_api_url.
 if (!source.includes('gm-mobile-auth-v2')) {
   const start = source.indexOf('function Auth(');
-  const end = source.indexOf('function Bubble(', start);
-  if (start < 0 || end < 0) throw new Error('Mobile auth hardening: Auth/Bubble anchors not found');
+  // Bubble is declared before Auth in the current source. The old patch searched for
+  // Bubble after Auth, so it failed every build even though Auth was present. Replace
+  // Auth through the render statement instead; this is independent of function order.
+  const end = source.indexOf('\n\ncreateRoot', start);
+  if (start < 0 || end < 0) throw new Error('Mobile auth hardening: Auth/render anchors not found');
 
   const auth = `function Auth({register,setRegister,username,setUsername,password,setPassword,displayName,setDisplayName,error,setError}:{register:boolean;setRegister:(v:boolean)=>void;username:string;setUsername:(v:string)=>void;password:string;setPassword:(v:string)=>void;displayName:string;setDisplayName:(v:string)=>void;error:string;setError:(v:string)=>void}){
   const [email,setEmail]=useState(''),[confirm,setConfirm]=useState(''),[loading,setLoading]=useState(false);
