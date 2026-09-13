@@ -11,15 +11,27 @@ services:
       MEDIASOUP_ANNOUNCED_IP: ${MEDIASOUP_ANNOUNCED_IP:-}
       MEDIASOUP_RTC_MIN_PORT: 40000
       MEDIASOUP_RTC_MAX_PORT: 49999
-      TURN_URL: ${TURN_URL:-}
-      TURN_USERNAME: ${TURN_USERNAME:-}
-      TURN_CREDENTIAL: ${TURN_CREDENTIAL:-}
+      TURN_URL: ${TURN_URL:-turn:turn.example.com:3478}
+      TURN_USERNAME: ${TURN_USERNAME:-global-messenger}
+      TURN_CREDENTIAL: ${TURN_CREDENTIAL:-change-me}
+      TURN_REQUIRED: ${TURN_REQUIRED:-false}
       CLAMDSCAN_PATH: /usr/bin/clamdscan
     ports:
       - "${MEDIASOUP_RTC_MIN_PORT:-40000}-${MEDIASOUP_RTC_MAX_PORT:-49999}:40000-49999/udp"
       - "${MEDIASOUP_RTC_MIN_PORT:-40000}-${MEDIASOUP_RTC_MAX_PORT:-49999}:40000-49999/tcp"
     depends_on:
       - clamav
+      - turn
+
+  turn:
+    image: coturn/coturn:4.18
+    restart: unless-stopped
+    command: ["-n", "--log-file=stdout", "--fingerprint", "--lt-cred-mech", "--realm=${TURN_REALM:-global-messenger}", "--user=${TURN_USERNAME:-global-messenger}:${TURN_CREDENTIAL:-change-me}", "--min-port=49160", "--max-port=49200", "--no-multicast-peers", "--no-cli"]
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "5349:5349/tcp"
+      - "49160-49200:49160-49200/udp"
 
   clamav:
     image: clamav/clamav:stable
