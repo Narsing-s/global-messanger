@@ -14,6 +14,10 @@
     "android:sync": "cap sync",
     "android:open": "cap open android",
     "android:run": "cap run android",
+    "ios:add": "cap add ios",
+    "ios:sync": "cap sync",
+    "ios:open": "cap open ios",
+    "ios:run": "cap run ios",
     "mobile:sync": "cap sync"
   },
   "dependencies": {
