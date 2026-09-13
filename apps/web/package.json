@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "validate:operations": "node scripts/validate-operations.mjs",
     "e2e:release": "node scripts/release-e2e.mjs",
+    "e2e:remainder": "node scripts/remainder-e2e.mjs",
     "android:add": "cap add android",
     "android:sync": "cap sync",
     "android:open": "cap open android",
