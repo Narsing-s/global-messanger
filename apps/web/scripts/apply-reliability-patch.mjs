@@ -3,91 +3,56 @@ import path from 'node:path';
 
 const file = path.resolve(process.cwd(), 'src/main.tsx');
 let source = fs.readFileSync(file, 'utf8');
-const replaceOnce = (needle, replacement, label) => {
-  if (!source.includes(needle)) throw new Error(`Web reliability patch anchor not found: ${label}`);
-  source = source.replace(needle, replacement);
-};
-const replaceIfPresent = (needle, replacement) => {
-  if (source.includes(needle)) source = source.replace(needle, replacement);
-};
 
-if (!source.includes('const OUTBOX_KEY=')) {
-  replaceOnce(
-    "type Message={id:string;conversationId:string;senderId:string;body:string;createdAt:string;editedAt?:string|null;deletedAt?:string|null;sender?:User;type?:string;attachmentUrl?:string|null;attachmentName?:string|null;attachmentMime?:string|null;attachmentSize?:number|null;replyToId?:string|null;clientId?:string};",
-    "type Message={id:string;conversationId:string;senderId:string;body:string;createdAt:string;editedAt?:string|null;deletedAt?:string|null;sender?:User;type?:string;attachmentUrl?:string|null;attachmentName?:string|null;attachmentMime?:string|null;attachmentSize?:number|null;replyToId?:string|null;clientId?:string;receipts?:Array<{userId:string;deliveredAt?:string|null;readAt?:string|null}>;__delivered?:boolean;__read?:boolean};const OUTBOX_KEY='gm_message_outbox_v1';const OUTBOX_MAX=200;const readOutbox=():any[]=>{try{const v=JSON.parse(localStorage.getItem(OUTBOX_KEY)||'[]');return Array.isArray(v)?v.slice(-OUTBOX_MAX):[]}catch{return[]}};const writeOutbox=(v:any[])=>localStorage.setItem(OUTBOX_KEY,JSON.stringify(v.slice(-OUTBOX_MAX)));const queueMessage=(v:any)=>{const q=readOutbox();if(!q.some(x=>x.clientId===v.clientId)){q.push(v);writeOutbox(q)}};",
-    'message type + outbox helpers'
-  );
+const write = () => fs.writeFileSync(file, source);
+const once = (marker, fn) => { if (source.includes(marker)) return false; fn(); return true; };
+
+/* Durable client outbox + message status metadata. */
+if (!source.includes("gm_message_outbox_v1")) {
+  const typePattern = /type Message = \{([^}]+)\};/;
+  const match = source.match(typePattern);
+  if (!match) throw new Error('Web reliability patch: Message type anchor not found');
+  const fields = match[1].trim();
+  source = source.replace(typePattern, `type Message = {${fields}; __delivered?:boolean; __read?:boolean};`);
+  const helpers = `\nconst OUTBOX_KEY='gm_message_outbox_v1';\nconst OUTBOX_MAX=200;\nconst readOutbox=():any[]=>{try{const v=JSON.parse(localStorage.getItem(OUTBOX_KEY)||'[]');return Array.isArray(v)?v.slice(-OUTBOX_MAX):[]}catch{return[]}};\nconst writeOutbox=(v:any[])=>localStorage.setItem(OUTBOX_KEY,JSON.stringify(v.slice(-OUTBOX_MAX)));\nconst queueMessage=(v:any)=>{const q=readOutbox();if(!q.some(x=>x.clientId===v.clientId)){q.push(v);writeOutbox(q)}};\n`;
+  source = source.replace(/(const initials=)/, helpers + '$1');
 }
 
-if (!source.includes('flush-outbox-on-connect')) {
-  replaceOnce(
-    "s.on('connect',()=>setSocketError(''));",
-    "s.on('connect',()=>{setSocketError('');const q=readOutbox();q.forEach(item=>s.emit('message:send',item));});",
-    'flush-outbox-on-connect'
-  );
+/* Reconnect flushes queued sends. */
+if (!source.includes('gm-outbox-flush')) {
+  const connect = /s\.on\('connect',\(\)=>setSocketError\(''\)\);/;
+  if (!connect.test(source)) throw new Error('Web reliability patch: connect anchor not found');
+  source = source.replace(connect, "s.on('connect',()=>{setSocketError('');readOutbox().forEach(item=>s.emit('message:send',item));}); // gm-outbox-flush");
 }
 
-if (!source.includes("s.on('message:ack'")) {
-  replaceOnce(
-    "s.on('message:delivered',()=>setSocketError(''));",
-    "s.on('message:ack',(d:any)=>{if(d?.clientId){writeOutbox(readOutbox().filter(x=>x.clientId!==d.clientId));}});s.on('message:delivered',()=>setSocketError(''));",
-    'message ack handler'
-  );
+/* ACK removes an item from the durable outbox. */
+if (!source.includes('gm-message-ack')) {
+  const delivered = /s\.on\('message:delivered',\(\)=>setSocketError\(''\)\);/;
+  if (!delivered.test(source)) throw new Error('Web reliability patch: delivery listener anchor not found');
+  source = source.replace(delivered, "s.on('message:ack',(d:any)=>{if(d?.clientId)writeOutbox(readOutbox().filter(x=>x.clientId!==d.clientId));});s.on('message:delivered',()=>setSocketError('')); // gm-message-ack");
 }
 
-if (!source.includes('ordered-message-new')) {
-  replaceOnce(
-    "s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>p.some(x=>x.id===m.id)?p:[...p,m]);setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[])]}:c))});",
-    "s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>[...p.filter(x=>x.id!==m.id),m].sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()));setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[]).filter(x=>x.id!==m.id)]}:c))});",
-    'ordered-message-new'
-  );
+/* Ordered, duplicate-safe realtime events. */
+if (!source.includes('gm-ordered-message-new')) {
+  const event = /s\.on\('message:new',\(m:Message\)=>\{[^\n]+\}\);/;
+  if (!event.test(source)) throw new Error('Web reliability patch: message:new anchor not found');
+  source = source.replace(event, "s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>[...p.filter(x=>x.id!==m.id),m].sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()));setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[]).filter(x=>x.id!==m.id)]}:c));}); // gm-ordered-message-new");
 }
 
-if (!source.includes('delivery-and-read-status')) {
-  const deliveredAnchor = "s.on('message:delivered',()=>setSocketError(''));";
-  if (source.includes(deliveredAnchor)) {
-    source = source.replace(
-      deliveredAnchor,
-      "s.on('message:delivered',(d:any)=>{setSocketError('');if(d?.messageId)setMessages(p=>p.map(x=>x.id===d.messageId?{...x,__delivered:true}:x));});s.on('message:read',(d:any)=>{const ids=new Set(Array.isArray(d?.messageIds)?d.messageIds:[]);if(ids.size)setMessages(p=>p.map(x=>ids.has(x.id)?{...x,__read:true,__delivered:true}:x));});"
-    );
-  }
+/* Persisted delivery/read receipt UI state. */
+if (!source.includes('gm-receipt-events')) {
+  const ack = "s.on('message:delivered',()=>setSocketError(''));";
+  if (!source.includes(ack)) throw new Error('Web reliability patch: receipt anchor not found');
+  source = source.replace(ack, "s.on('message:delivered',(d:any)=>{setSocketError('');if(d?.messageId)setMessages(p=>p.map(x=>x.id===d.messageId?{...x,__delivered:true}:x));});s.on('message:read',(d:any)=>{const ids=new Set(Array.isArray(d?.messageIds)?d.messageIds:[]);if(ids.size)setMessages(p=>p.map(x=>ids.has(x.id)?{...x,__read:true,__delivered:true}:x));}); // gm-receipt-events");
 }
 
-const activeLoad = "api.messages(id).then(data=>{if(requestId!==messageRequest.current||active?.id!==id)return;setMessages(Array.isArray(data)?data.filter(m=>m?.conversationId===id):[])}).catch";
-if (!source.includes('incremental-sync-on-open')) {
-  replaceOnce(
-    activeLoad,
-    "api.messages(id).then(data=>{if(requestId!==messageRequest.current||active?.id!==id)return;const ordered=Array.isArray(data)?data.filter(m=>m?.conversationId===id).sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()):[];setMessages(ordered);const last=ordered[ordered.length-1]?.createdAt;return api.syncMessages(id,last).then(extra=>{if(requestId!==messageRequest.current||active?.id!==id)return;const synced=Array.isArray(extra)?extra:(Array.isArray(extra?.messages)?extra.messages:[]);setMessages(p=>[...p.filter(x=>x.conversationId!==id||!synced.some(y=>y.id===x.id)),...synced].sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()));}).catch(()=>{});}).catch",
-    'incremental-sync-on-open'
-  );
+/* Offline sends become visible immediately and survive reloads/reconnects. */
+if (!source.includes('gm-offline-send')) {
+  const branch = "if(!socket?.connected){setSocketError('Reconnecting to Global Messenger…');socket?.connect();return}";
+  if (!source.includes(branch)) throw new Error('Web reliability patch: send offline branch not found');
+  const replacement = "if(!socket?.connected){const queued={conversationId:active.id,body,type:'text',replyToId:reply?.id||null,clientId:crypto.randomUUID(),queuedAt:new Date().toISOString()};queueMessage(queued);const optimistic:Message={id:`local-${queued.clientId}`,conversationId:active.id,senderId:user?.id||'',body,createdAt:new Date().toISOString(),type:'text',replyToId:queued.replyToId,clientId:queued.clientId};setMessages(p=>[...p,optimistic]);setText('');setReply(null);setSocketError('Offline — message saved and will send automatically when you reconnect.');socket?.connect();return} // gm-offline-send";
+  source = source.replace(branch, replacement);
 }
 
-if (!source.includes('active-conversation-reconnect-sync')) {
-  replaceOnce(
-    "socket.emit('conversation:join',id);",
-    "socket.emit('conversation:join',id);const onReconnect=()=>{socket.emit('conversation:join',id);socket.emit('conversation:sync',{conversationId:id});};socket.on('connect',onReconnect);",
-    'active-conversation-reconnect-sync'
-  );
-  replaceOnce(
-    "return()=>{if(socket.connected)socket.emit('conversation:leave',id)}",
-    "return()=>{socket.off('connect',onReconnect);if(socket.connected)socket.emit('conversation:leave',id)}",
-    'active-conversation-reconnect-cleanup'
-  );
-}
-
-const offlineBranch = "if(!socket?.connected){setSocketError('Realtime connection is not connected. Reconnecting…');socket?.connect();return}";
-if (!source.includes('offline outbox saved')) {
-  replaceOnce(
-    offlineBranch,
-    "if(!socket?.connected){const queued={conversationId:active.id,body,type:'text',replyToId:reply?.id||null,clientId:crypto.randomUUID(),queuedAt:new Date().toISOString()};queueMessage(queued);setSocketError('You are offline. Message saved and will send automatically when connection returns.');setText('');setReply(null);socket?.connect();return}",
-    'offline outbox saved'
-  );
-}
-
-// chat-stability-patch may already own this UI (blocked-message state).
-replaceIfPresent(
-  "{own&&<CheckCheck size={13}/>}",
-  "{own&&<span className={`message-status ${message.__read?'read':(message.__delivered?'delivered':'sent')}`} aria-label={message.__read?'Read':(message.__delivered?'Delivered':'Sent')}>{message.__delivered||message.__read?'✓✓':'✓'}</span>}",
-);
-
-fs.writeFileSync(file, source);
+write();
+console.log('Global Messenger web reliability patch applied.');
