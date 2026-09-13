@@ -14,6 +14,7 @@ Global Messenger is a full-stack, real-time messaging platform for Web and Andro
 - **[⚡ Performance Release Gate](./15-performance-release-gate.md)** — P0 speed, offline, retry, realtime and production SLO requirements.
 - **[🧪 Testing & QA](./04-testing.md)** — browser, Android, two-user realtime, media, groups, calls, E2EE and release-gate testing.
 - **[🌍 Global-Market Blueprint](./14-global-market-blueprint.md)** — global product, privacy, scale and ecosystem roadmap.
+- **[🚀 Remaining Global Features](./15-remaining-global-features.md)** — implementation checklist for every remaining global-market capability.
 
 ## 📖 Documentation Map
 
@@ -36,6 +37,7 @@ Global Messenger is a full-stack, real-time messaging platform for Web and Andro
 | `13-external-production-setup.md` | External production service setup |
 | `14-global-market-blueprint.md` | Global-market product blueprint |
 | `15-performance-release-gate.md` | P0 performance/reliability release gate |
+| `15-remaining-global-features.md` | Complete remaining-feature implementation checklist |
 | `WIKI.md` | Detailed product/architecture reference |
 
 ## 🧩 Product Centers
@@ -89,7 +91,7 @@ Profile/privacy/sessions
 E2EE behavior
 ```
 
-See **[Performance Release Gate](./15-performance-release-gate.md)** and **[Testing & QA](./04-testing.md)** before production deployment.
+See **[Performance Release Gate](./15-performance-release-gate.md)**, **[Remaining Global Features](./15-remaining-global-features.md)** and **[Testing & QA](./04-testing.md)** before production deployment.
 
 ## 🚀 Deployment
 
