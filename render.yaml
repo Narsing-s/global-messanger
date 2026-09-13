@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: global-messenger-api
+    name: global-messenger-api-new
     runtime: node
     plan: free
     region: singapore
@@ -10,16 +10,16 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: global-messenger-db
+          name: global-messenger-db-new
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
       - key: NODE_ENV
         value: production
       - key: WEB_ORIGIN
-        value: https://global-messanger.onrender.com,https://global-messanger-eg5rp9aqb-narsing-s-projects.vercel.app,https://web.narsingbeesetti006.workers.dev,https://global-messenger-help-centre.onrender.com
+        value: https://global-messanger-web-new.onrender.com
       - key: PASSWORD_RESET_WEB_ORIGIN
-        value: https://global-messanger-eg5rp9aqb-narsing-s-projects.vercel.app
+        value: https://global-messanger-web-new.onrender.com
       - key: UPLOAD_DIR
         value: /tmp/global-messenger/uploads
       - key: SMTP_HOST
@@ -31,14 +31,14 @@ services:
       - key: SMTP_STARTTLS
         value: "false"
       - key: SMTP_USER
-        value: narsingbeesetti22@gmail.com
+        sync: false
       - key: SMTP_PASSWORD
         sync: false
       - key: MAIL_FROM
-        value: Global Messenger <narsingbeesetti22@gmail.com>
+        sync: false
 
   - type: web
-    name: global-messanger-web
+    name: global-messanger-web-new
     runtime: static
     plan: free
     region: singapore
@@ -46,14 +46,14 @@ services:
     staticPublishPath: apps/web/dist
     envVars:
       - key: VITE_API_URL
-        value: https://global-messanger-backend.onrender.com
+        value: https://global-messenger-api-new.onrender.com
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
 
 databases:
-  - name: global-messenger-db
+  - name: global-messenger-db-new
     databaseName: global_messenger
     plan: free
     region: singapore
