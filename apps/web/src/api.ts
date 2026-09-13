@@ -22,6 +22,22 @@ async function request(path: string, options: RequestInit = {}) {
     return data;
   } catch (error: any) { if (error?.name === 'AbortError') throw new Error('Request timed out. Please check your connection.'); throw error; } finally { window.clearTimeout(timeout); }
 }
+
+export function uploadWithProgress(file: File, onProgress?: (percent: number) => void, signal?: AbortSignal): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API}/api/uploads`);
+    const token = localStorage.getItem('gm_token'); if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.responseType = 'json';
+    xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress?.(Math.round(event.loaded / event.total * 100)); };
+    xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) { const result = xhr.response || {}; resolve({ ...result, url: result?.url && /^https?:\/\//i.test(result.url) ? result.url : `${API}${result?.url || ''}` }); } else reject(new Error(xhr.response?.message || `Upload failed (${xhr.status})`)); };
+    xhr.onerror = () => reject(new Error('Upload failed. Check your connection.'));
+    xhr.onabort = () => reject(new DOMException('Upload cancelled', 'AbortError'));
+    if (signal) { if (signal.aborted) return xhr.abort(); signal.addEventListener('abort', () => xhr.abort(), { once: true }); }
+    const form = new FormData(); form.append('file', file); xhr.send(form);
+  });
+}
+
 const directRequests = new Map<string, Promise<ConversationResponse>>();
 
 export const api = {
@@ -33,15 +49,15 @@ export const api = {
   syncMessages: async (id: string, after?: string, limit = 100) => ({ messages: normalizeMessages(await request(`/api/conversations/${encodeURIComponent(id)}/messages/sync?limit=${limit}${after ? `&after=${encodeURIComponent(after)}` : ''}`), id) }),
   unread: async () => request('/api/conversations/unread'), read: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }), chatInfo: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/info`),
   pins: (id: string) => request(`/api/conversations/${encodeURIComponent(id)}/pins`), pin: (conversationId: string, messageId: string) => request(`/api/conversations/${encodeURIComponent(conversationId)}/pins`, { method: 'POST', body: JSON.stringify({ messageId }) }), unpin: (conversationId: string, messageId: string) => request(`/api/conversations/${encodeURIComponent(conversationId)}/pins/${encodeURIComponent(messageId)}`, { method: 'DELETE' }),
-  searchMessages: async (q: string, conversationId?: string) => request(`/api/messages/search?q=${encodeURIComponent(q)}${conversationId ? `&conversationId=${encodeURIComponent(conversationId)}` : ''}`),
+  searchMessages: async (q: string, conversationId?: string, filters?: { senderId?: string; from?: string; to?: string; type?: string; hasAttachment?: boolean }) => { const params = new URLSearchParams({ q }); if (conversationId) params.set('conversationId', conversationId); for (const [k,v] of Object.entries(filters || {})) if (v !== undefined && v !== '') params.set(k, String(v)); return request(`/api/messages/search?${params}`); },
   profile: () => request('/api/profile/me'), updateProfile: (data: { displayName?: string; avatarUrl?: string | null }) => request('/api/profile/me', { method: 'PATCH', body: JSON.stringify(data) }),
   productFeatures: () => request('/api/product/features'), sessions: () => request('/api/account/sessions'), revokeSession: (id: string) => request(`/api/account/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }), revokeOtherSessions: (currentSessionId?: string) => request('/api/account/sessions/revoke-others', { method: 'POST', body: JSON.stringify({ currentSessionId }) }),
   privacySettings: () => request('/api/privacy/settings'), updatePrivacySettings: (data: { privacyLastSeen?: 'everyone'|'contacts'|'nobody'; privacyProfilePhoto?: 'everyone'|'contacts'|'nobody' }) => request('/api/privacy/settings', { method: 'PATCH', body: JSON.stringify(data) }),
   media: (conversationId?: string, type?: string, limit = 100) => request(`/api/media?limit=${limit}${conversationId ? `&conversationId=${encodeURIComponent(conversationId)}` : ''}${type ? `&type=${encodeURIComponent(type)}` : ''}`),
   renameGroup: (id: string, title: string) => request(`/api/conversations/${encodeURIComponent(id)}/group`, { method: 'PATCH', body: JSON.stringify({ title }) }), addGroupMember: (id: string, userId: string) => request(`/api/conversations/${encodeURIComponent(id)}/members`, { method: 'POST', body: JSON.stringify({ userId }) }), removeGroupMember: (id: string, userId: string) => request(`/api/conversations/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
   forwardMessage: (messageId: string, conversationId: string) => request('/api/messages/forward', { method: 'POST', body: JSON.stringify({ messageId, conversationId }) }), editMessage: (id: string, body: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ body }) }), deleteMessage: (id: string) => request(`/api/messages/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  upload: async (file: File) => { const f = new FormData(); f.append('file', file); const result = await request('/api/uploads', { method: 'POST', body: f }); return { ...result, url: result?.url && /^https?:\/\//i.test(result.url) ? result.url : `${API}${result?.url || ''}` }; },
+  upload: async (file: File, onProgress?: (percent: number) => void, signal?: AbortSignal) => uploadWithProgress(file, onProgress, signal),
   react: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }), unreact: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'DELETE', body: JSON.stringify({ emoji }) }), bookmark: (id: string) => request(`/api/messages/${encodeURIComponent(id)}/bookmark`, { method: 'POST' }), unbookmark: (id: string) => request(`/api/messages/${encodeURIComponent(id)}/bookmark`, { method: 'DELETE' }),
-  registerDevice: (token: string, platform: string) => request('/api/devices', { method: 'POST', body: JSON.stringify({ token, platform }) }), aiAssist: (prompt: string, context?: string) => request('/api/ai/assist', { method: 'POST', body: JSON.stringify({ prompt, context }) })
+  registerDevice: (token: string, platform: string) => request('/api/devices', { method: 'POST', body: JSON.stringify({ token, platform })), aiAssist: (prompt: string, context?: string) => request('/api/ai/assist', { method: 'POST', body: JSON.stringify({ prompt, context }))
 };
-export { API };
+export { API, request };
