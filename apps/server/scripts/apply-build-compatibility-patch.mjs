@@ -4,6 +4,7 @@ import path from 'node:path';
 const root = process.cwd();
 const schemaPath = path.resolve(root, 'prisma/schema.prisma');
 const productionPath = path.resolve(root, 'src/production-capabilities.ts');
+const completionPath = path.resolve(root, 'src/global-completion.ts');
 const marketPath = path.resolve(root, 'src/global-market-platform.ts');
 const sfuPath = path.resolve(root, 'src/sfu.ts');
 
@@ -15,8 +16,15 @@ if (fs.existsSync(schemaPath)) {
   }
 }
 
+if (fs.existsSync(completionPath)) {
+  let s = fs.readFileSync(completionPath, 'utf8');
+  s = s.replace(/prisma\.globalEntity\.create\(\{ data: \{ ownerId, kind: 'security', name, data, status \} \}\)/g, "prisma.globalEntity.create({ data: { ownerId, kind: 'security', name, data: data as any, status } })");
+  fs.writeFileSync(completionPath, s);
+}
+
 if (fs.existsSync(productionPath)) {
   let s = fs.readFileSync(productionPath, 'utf8');
+  s = s.replace(/type EntityKind = 'call'\|'webhook'\|'bot'\|'miniapp'\|'business'\|'catalog'\|'ticket'\|'ai'\|'security'\|'region';/g, "type EntityKind = string;");
   s = s.replace(/async function entity\(prisma: PrismaClient, ownerId: string, kind: EntityKind, data: any, (?:name = kind, status = 'active'|status = 'active')\)/, "async function entity(prisma: PrismaClient, ownerId: string, kind: EntityKind, data: any, name = kind, status = 'active')");
   s = s.replace(/String\(request\.params\.id\)/g, 'String((request.params as any).id)');
   s = s.replace(/callId: request\.params/g, 'callId: (request.params as any)');
@@ -27,7 +35,7 @@ if (fs.existsSync(productionPath)) {
 if (fs.existsSync(marketPath)) {
   let s = fs.readFileSync(marketPath, 'utf8');
   s = s.replace(/request\.body\?\.url/g, '(request.body as any)?.url');
-  s = s.replace(/request\.body\?\.events/g, '(request.body as any)?.events');
+  s = s.replace(/request\.body\?\.events/g, '((request.body as any)?.events)');
   fs.writeFileSync(marketPath, s);
 }
 
