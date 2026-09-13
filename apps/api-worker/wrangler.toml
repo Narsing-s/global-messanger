@@ -3,5 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2026-08-31"
 
 [vars]
-UPSTREAM_API = "https://global-messenger-api.onrender.com"
+# Set this to the public HTTPS URL of the Fastify backend runtime.
+# Do not put DATABASE_URL or database credentials here.
+UPSTREAM_API = ""
 ALLOWED_ORIGIN = "https://global-messenger-web.narsingbeesetti006.workers.dev"
