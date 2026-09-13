@@ -1,0 +1,58 @@
+name: Production Capabilities Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: global_messenger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d global_messenger"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/global_messenger
+      JWT_SECRET: ci-only-secret-change-me
+      WEB_ORIGIN: http://localhost:8080
+      REGION_ID: ci-primary
+      REGIONS: ci-primary
+      TURN_REQUIRED: "false"
+      SFU_PROVIDER: mediasoup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --include=dev
+      - name: Generate Prisma client
+        run: npm run db:generate
+      - name: Deploy migrations
+        run: npm run db:deploy
+      - name: Build web and server
+        run: npm run build
+      - name: Validate operations
+        run: npm run verify:operations
+      - name: Validate production capability sources
+        run: |
+          test -f apps/server/src/production-capabilities.ts
+          test -f apps/server/src/sfu.ts
+          test -f apps/web/src/sfu-client.ts
+          test -f apps/web/src/call-media.ts
+          test -f deploy/docker-compose.global.yml
+          test -f deploy/nginx/global.conf
