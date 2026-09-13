@@ -23,9 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_VERSION: '22'
-      CLOUDFLARE_API_URL: ${{ secrets.CLOUDFLARE_API_URL }}
-      CLOUDFLARE_WEB_ORIGIN: ${{ secrets.CLOUDFLARE_WEB_ORIGIN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      BACKEND_API_URL: 'https://global-messanger-backend.onrender.com'
+      CLOUDFLARE_API_URL: 'https://global-messenger-api.narsingbeesetti006.workers.dev'
+      CLOUDFLARE_WEB_ORIGIN: 'https://global-messenger-web.narsingbeesetti006.workers.dev'
 
     steps:
       - name: Checkout
@@ -39,22 +40,6 @@ jobs:
 
       - name: Install dependencies
         run: npm install --include=dev --no-audit --no-fund
-
-      - name: Resolve production endpoints
-        shell: bash
-        run: |
-          set -euo pipefail
-          BACKEND_API_URL='https://global-messanger-backend.onrender.com'
-          : "${CLOUDFLARE_API_URL:=https://global-messenger-api.narsingbeesetti006.workers.dev}"
-          : "${CLOUDFLARE_WEB_ORIGIN:=https://global-messenger-web.narsingbeesetti006.workers.dev}"
-          BACKEND_API_URL="${BACKEND_API_URL%/}"
-          CLOUDFLARE_API_URL="${CLOUDFLARE_API_URL%/}"
-          CLOUDFLARE_WEB_ORIGIN="${CLOUDFLARE_WEB_ORIGIN%/}"
-          {
-            echo "BACKEND_API_URL=$BACKEND_API_URL"
-            echo "CLOUDFLARE_API_URL=$CLOUDFLARE_API_URL"
-            echo "CLOUDFLARE_WEB_ORIGIN=$CLOUDFLARE_WEB_ORIGIN"
-          } >> "$GITHUB_ENV"
 
       - name: Validate deployment configuration
         shell: bash
@@ -86,8 +71,6 @@ jobs:
         working-directory: apps/api-worker
         run: |
           set -euo pipefail
-          # Wrangler v4 reads the account from CLOUDFLARE_ACCOUNT_ID.
-          # Do not pass the removed --account-id CLI flag.
           wrangler deploy \
             --name global-messenger-api \
             --var "UPSTREAM_API:${BACKEND_API_URL}" \
@@ -113,12 +96,29 @@ jobs:
             status=$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/health.json -w '%{http_code}' "${CLOUDFLARE_API_URL}/health" || true)
             echo "API smoke attempt $attempt: HTTP $status"
             cat /tmp/health.json 2>/dev/null || true
-            if [ "$status" = "200" ]; then
+            if [ "$status" = "200" ] && node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/health.json','utf8')); if(!x.ok || x.service!=='global-messenger') process.exit(1)"; then
               exit 0
             fi
             sleep 5
           done
           exit 1
+
+      - name: Smoke test Socket.IO endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=$(curl -sS --connect-timeout 10 --max-time 30 \
+            -o /tmp/socket.txt -w '%{http_code}' \
+            "${CLOUDFLARE_API_URL}/socket.io/?EIO=4&transport=polling" || true)
+          echo "Socket.IO unauthenticated handshake HTTP $status"
+          cat /tmp/socket.txt 2>/dev/null || true
+          # Authentication should reject the connection, but it must be a Socket.IO response,
+          # never the web application's HTML shell.
+          if grep -qi '<!doctype html' /tmp/socket.txt; then
+            echo 'Socket.IO endpoint incorrectly returned the web application HTML.'
+            exit 1
+          fi
+          test "$status" != '200' || grep -q '^0' /tmp/socket.txt || true
 
       - name: Smoke test web Worker
         shell: bash
@@ -136,5 +136,3 @@ jobs:
             echo 'Retired Vercel URL found in production web artifact.'
             exit 1
           fi
-
-      # Retriggered after the Wrangler v4 account-id CLI incompatibility fix.
