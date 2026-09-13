@@ -6,21 +6,20 @@ const root = new URL('..', import.meta.url);
 const read = file => readFile(new URL(file, root), 'utf8');
 const main = await read('src/main.tsx');
 const api = await read('src/api.ts');
-const featureFiles = await collect(new URL('src/', import.meta.url));
 
 async function collect(dir, files = []) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     if (['node_modules', 'dist', 'android', 'ios'].includes(entry.name)) continue;
-    const path = join(fileURLToPath(dir), entry.name);
-    if (entry.isDirectory()) await collect(new URL(`${entry.name}/`, `file://${path}/`), files);
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) await collect(path, files);
     else if (/\.(ts|tsx|js|mjs)$/.test(entry.name)) files.push(path);
   }
   return files;
 }
 
-const webSource = (await Promise.all(featureFiles.map(file => readFile(file, 'utf8')))).join('\n');
-const serverRoot = fileURLToPath(new URL('../../server/src/', import.meta.url));
-const serverFiles = await collect(new URL('../../server/src/', import.meta.url));
+const webFiles = await collect(fileURLToPath(new URL('../src/', import.meta.url)));
+const webSource = (await Promise.all(webFiles.map(file => readFile(file, 'utf8')))).join('\n');
+const serverFiles = await collect(fileURLToPath(new URL('../../server/src/', import.meta.url)));
 const server = (await Promise.all(serverFiles.map(file => readFile(file, 'utf8')))).join('\n');
 
 const requiredUi = [
@@ -81,7 +80,6 @@ const requiredApiMethods = [
 ];
 const missingApiMethods = requiredApiMethods.filter(name => !new RegExp(`\\b${name}\\s*:`).test(api));
 
-// Check every literal API path used by the web client against a stable server route prefix.
 const paths = [...api.matchAll(/['\"](\/api\/[^'\"`$]+)['\"`]/g)].map(m => m[1]);
 const uniquePaths = [...new Set(paths)];
 const routeMisses = uniquePaths.filter(path => {
