@@ -13,6 +13,7 @@ import { registerAdvancedPlatform } from './advanced-platform.js';
 import { registerSupportRoutes } from './support-routes.js';
 import { registerActivityCenter } from './activity-center.js';
 import { registerGlobalMarketPlatform } from './global-market-platform.js';
+import { registerGlobalCompletionRoutes } from './global-completion.js';
 
 type AuthRequest = { user: { id: string; username: string } };
 type IdParams = { id: string };
@@ -30,6 +31,7 @@ export async function registerAdvancedRoutes(app: FastifyInstance, prisma: Prism
   await registerAdvancedPlatform(app, prisma);
   await registerActivityCenter(app, prisma);
   await registerGlobalMarketPlatform(app, prisma);
+  await registerGlobalCompletionRoutes(app, prisma);
   startExpiredMessageCleanup(prisma);
 
   await registerSupportRoutes(app, prisma);
