@@ -51,9 +51,9 @@ services:
       start_period: 20s
     networks: [messenger]
 
-  # Canonical production web frontend. The image builds the current apps/web
-  # source into a Vite bundle and serves it with Nginx. Port 8080 is the
-  # user-facing Docker frontend URL by default.
+  # Canonical production web frontend. API_URL is optional: when omitted,
+  # browser clients use same-origin /api routing. Native APK clients must be
+  # built/configured with the public Docker HTTPS URL or can set it on login.
   web:
     build:
       context: .
@@ -67,7 +67,7 @@ services:
       api:
         condition: service_healthy
     environment:
-      API_URL: ${API_URL:-http://localhost:8080}
+      API_URL: ${API_URL:-}
     ports:
       - "${WEB_PORT:-8080}:80"
     healthcheck:
