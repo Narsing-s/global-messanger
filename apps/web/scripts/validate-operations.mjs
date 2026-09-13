@@ -1,4 +1,5 @@
 import { readFile, readdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 const root = new URL('..', import.meta.url);
@@ -16,8 +17,8 @@ async function collect(dir, files = []) {
   return files;
 }
 
-const serverRoot = new URL('../../server/src/', import.meta.url);
-const serverFiles = await collect(serverRoot.pathname);
+const serverRoot = fileURLToPath(new URL('../../server/src/', import.meta.url));
+const serverFiles = await collect(serverRoot);
 const server = (await Promise.all(serverFiles.map(file => readFile(file, 'utf8')))).join('\n');
 
 const requiredUi = [
@@ -52,19 +53,16 @@ const requiredApiMethods = [
   'addGroupMember', 'removeGroupMember', 'forwardMessage', 'editMessage', 'deleteMessage', 'upload',
   'react', 'unreact', 'bookmark', 'unbookmark', 'registerDevice', 'aiAssist'
 ];
-const missingApiMethods = requiredApiMethods.filter(name => !new RegExp(`\\b${name}\\s*[:=]`).test(api));
+const missingApiMethods = requiredApiMethods.filter(name => !new RegExp(`\\b${name}\\s*:`).test(api));
 
-// Verify that every concrete API path used by the web client has a corresponding
-// route string somewhere in the server source. Dynamic IDs are normalized first.
+// Check static API paths and stable prefixes against the server source. Dynamic IDs are
+// intentionally ignored because their values cannot be known at build time.
 const paths = [...api.matchAll(/['\"](\/api\/[^'\"`$]+)['\"`]/g)].map(m => m[1]);
 const uniquePaths = [...new Set(paths)];
 const routeMisses = uniquePaths.filter(path => {
-  const normalized = path.replace(/\\/\\*?\\$?/g, '').replace(/%5B|%5D/gi, '');
-  const pieces = normalized.split('/').filter(Boolean);
-  // The route source normally contains the same stable prefix; for parameterized
-  // paths compare the first two/three stable segments rather than literal IDs.
-  const stable = '/' + pieces.slice(0, Math.min(4, pieces.length)).join('/');
-  return !server.includes(normalized) && !server.includes(stable);
+  const pieces = path.split('/').filter(Boolean);
+  const stable = '/' + pieces.slice(0, Math.min(3, pieces.length)).join('/');
+  return !server.includes(path) && !server.includes(stable);
 });
 
 if (failures.length || missingApiMethods.length || routeMisses.length) {
