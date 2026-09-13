@@ -5,10 +5,9 @@
   const apiBase = () => (window.__GM_CONFIG__?.API_URL || window.location.origin).replace(/\/$/, '');
   const val = (form, selector) => form.querySelector(selector)?.value?.trim() || '';
   const readJson = async response => { try { return await response.json(); } catch { return {}; } };
+  const isRegisterForm = form => Boolean(form.querySelector('input[autocomplete="name"]') || form.querySelector('input[type="email"]') || form.querySelector('#gm-phone-number'));
   function ensurePhoneField(form) {
-    const text = (form.textContent || '').toLowerCase();
-    if (!(text.includes('create your account') || text.includes('create account'))) return;
-    if (form.querySelector('#gm-phone-number')) return;
+    if (!isRegisterForm(form) || form.querySelector('#gm-phone-number')) return;
     const label = document.createElement('label');
     label.textContent = 'Phone number';
     const input = document.createElement('input');
@@ -21,8 +20,7 @@
   function scan(){ document.querySelectorAll('.auth-page form').forEach(form => ensurePhoneField(form)); }
   async function run(form) {
     ensurePhoneField(form);
-    const text = (form.textContent || '').toLowerCase();
-    const registering = text.includes('create your account') || text.includes('create account');
+    const registering = isRegisterForm(form);
     const identifier = val(form, 'input[autocomplete="username"]');
     const password = val(form, 'input[type="password"]');
     if (!identifier || !password) throw new Error('Please enter the required login details.');
