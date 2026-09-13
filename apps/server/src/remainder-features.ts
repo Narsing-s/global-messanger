@@ -1,0 +1,91 @@
+import type { FastifyInstance } from 'fastify';
+import type { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
+import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
+
+type AuthRequest = { user: { id: string; username: string } };
+const auth = { preHandler: [] as any[] };
+
+function uid(request: any): string { return (request.user as AuthRequest['user']).id; }
+function access(app: FastifyInstance) { return { preHandler: [app.authenticate] }; }
+
+function base32Decode(value: string): Buffer {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '';
+  for (const ch of value.replace(/=+$/,'').toUpperCase()) {
+    const n = alphabet.indexOf(ch);
+    if (n < 0) throw new Error('Invalid TOTP secret');
+    bits += n.toString(2).padStart(5,'0');
+  }
+  const out: number[] = [];
+  for (let i=0; i+8<=bits.length; i+=8) out.push(parseInt(bits.slice(i,i+8),2));
+  return Buffer.from(out);
+}
+function totp(secret: string, counter: number): string {
+  const key = base32Decode(secret);
+  const b = Buffer.alloc(8); b.writeBigUInt64BE(BigInt(counter));
+  const digest = crypto.createHmac('sha1', key).update(b).digest();
+  const offset = digest[digest.length-1] & 15;
+  const code = ((digest[offset]&127)<<24 | (digest[offset+1]&255)<<16 | (digest[offset+2]&255)<<8 | (digest[offset+3]&255)) % 1000000;
+  return String(code).padStart(6,'0');
+}
+function verifyTotp(secret: string, token: string): boolean {
+  const now = Math.floor(Date.now()/30000);
+  return [-1,0,1].some(delta => totp(secret, now+delta) === token);
+}
+function randomBase32(bytes=20): string {
+  const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; const raw=crypto.randomBytes(bytes); let bits='';
+  for(const n of raw) bits += n.toString(2).padStart(8,'0');
+  let out=''; for(let i=0;i+5<=bits.length;i+=5) out += alphabet[parseInt(bits.slice(i,i+5),2)];
+  return out;
+}
+
+export async function registerRemainderFeatures(app: FastifyInstance, prisma: PrismaClient) {
+  const a = access(app);
+
+  /* ------------------------------- profile -------------------------------- */
+  app.get('/api/profile/me', a, async request => {
+    const id=uid(request); return prisma.user.findUnique({ where:{id}, select:{id:true,username:true,email:true,phoneNumber:true,displayName:true,bio:true,avatarUrl:true,lastSeenAt:true,privacyLastSeen:true,privacyProfilePhoto:true,totpEnabled:true,e2eeKeyVersion:true} });
+  });
+  app.patch('/api/profile/me', a, async (request, reply) => {
+    const parsed=z.object({displayName:z.string().trim().min(1).max(60).optional(),username:z.string().trim().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/).optional(),bio:z.string().max(160).optional(),avatarUrl:z.string().url().max(2048).nullable().optional(),email:z.string().email().max(320).nullable().optional(),phoneNumber:z.string().max(32).nullable().optional()}).safeParse(request.body??{});
+    if(!parsed.success) return reply.badRequest('Invalid profile data'); const id=uid(request); const data:any={...parsed.data}; if(data.username) data.username=data.username.toLowerCase();
+    if(data.username){const hit=await prisma.user.findFirst({where:{username:data.username,id:{not:id}}}); if(hit)return reply.conflict('Username is already taken');}
+    return prisma.user.update({where:{id},data,select:{id:true,username:true,email:true,phoneNumber:true,displayName:true,bio:true,avatarUrl:true,lastSeenAt:true,privacyLastSeen:true,privacyProfilePhoto:true}});
+  });
+  app.get('/api/profile/:username', a, async (request, reply) => { const username=String((request.params as any).username).toLowerCase(); const user=await prisma.user.findUnique({where:{username},select:{id:true,username:true,displayName:true,bio:true,avatarUrl:true,lastSeenAt:true,privacyLastSeen:true,privacyProfilePhoto:true}}); if(!user)return reply.notFound('Profile not found'); return user; });
+
+  /* -------------------------- sessions / security -------------------------- */
+  app.get('/api/account/login-history', a, async request => prisma.loginHistory.findMany({where:{userId:uid(request)},orderBy:{createdAt:'desc'},take:100}));
+  app.post('/api/account/password/change', a, async (request, reply) => { const p=z.object({currentPassword:z.string().min(1),newPassword:z.string().min(8).max(128)}).safeParse(request.body??{}); if(!p.success)return reply.badRequest('Current and new password are required'); const id=uid(request); const u=await prisma.user.findUnique({where:{id},select:{passwordHash:true}}); if(!u||!(await bcrypt.compare(p.data.currentPassword,u.passwordHash)))return reply.unauthorized('Current password is incorrect'); await prisma.user.update({where:{id},data:{passwordHash:await bcrypt.hash(p.data.newPassword,12)}}); await prisma.userSession.updateMany({where:{userId:id,revokedAt:null},data:{revokedAt:new Date()}}); return {ok:true,sessionsRevoked:true}; });
+  app.get('/api/security/status', a, async request => { const id=uid(request); const [u,sessions,history]=await Promise.all([prisma.user.findUnique({where:{id},select:{totpEnabled:true,e2eeKeyVersion:true,e2eePublicKey:true}}),prisma.userSession.findMany({where:{userId:id,revokedAt:null},select:{id: true,deviceName:true,platform:true,userAgent:true,createdAt:true,lastSeenAt:true,expiresAt:true},orderBy:{lastSeenAt:'desc'}}),prisma.loginHistory.findMany({where:{userId:id},take:10,orderBy:{createdAt:'desc'}})]); return {twoFactorEnabled:Boolean(u?.totpEnabled),encryptionConfigured:Boolean(u?.e2eePublicKey),encryptionKeyVersion:u?.e2eeKeyVersion??1,activeSessions:sessions,loginHistory:history}; });
+  app.post('/api/security/2fa/setup', a, async request => { const id=uid(request); const secret=randomBase32(); await prisma.user.update({where:{id},data:{totpSecret:secret,totpEnabled:false}}); const u=await prisma.user.findUnique({where:{id},select:{username:true}}); return {secret,issuer:'Global Messenger',account:u?.username??'user',otpauth:`otpauth://totp/Global%20Messenger:${encodeURIComponent(u?.username??'user')}?secret=${secret}&issuer=Global%20Messenger&algorithm=SHA1&digits=6&period=30`}; });
+  app.post('/api/security/2fa/verify', a, async (request, reply) => { const p=z.object({code:z.string().regex(/^\d{6}$/)}).safeParse(request.body??{}); if(!p.success)return reply.badRequest('A 6 digit verification code is required'); const id=uid(request); const u=await prisma.user.findUnique({where:{id},select:{totpSecret:true}}); if(!u?.totpSecret||!verifyTotp(u.totpSecret,p.data.code))return reply.unauthorized('Invalid authenticator code'); await prisma.user.update({where:{id},data:{totpEnabled:true}}); return {ok:true,enabled:true}; });
+  app.post('/api/security/2fa/disable', a, async (request, reply) => { const p=z.object({password:z.string().min(1)}).safeParse(request.body??{}); if(!p.success)return reply.badRequest('Password is required'); const id=uid(request); const u=await prisma.user.findUnique({where:{id},select:{passwordHash:true}}); if(!u||!(await bcrypt.compare(p.data.password,u.passwordHash)))return reply.unauthorized('Password is incorrect'); await prisma.user.update({where:{id},data:{totpSecret:null,totpEnabled:false,recoveryCodesHash:null}}); return {ok:true,enabled:false}; });
+
+  /* ---------------------------- privacy / blocks --------------------------- */
+  app.patch('/api/privacy/settings', a, async (request, reply) => { const p=z.object({lastSeen:z.enum(['everyone','contacts','nobody']).optional(),profilePhoto:z.enum(['everyone','contacts','nobody']).optional()}).safeParse(request.body??{}); if(!p.success)return reply.badRequest('Invalid privacy settings'); const id=uid(request); return prisma.user.update({where:{id},data:{...(p.data.lastSeen?{privacyLastSeen:p.data.lastSeen}:{}) ,...(p.data.profilePhoto?{privacyProfilePhoto:p.data.profilePhoto}:{})},select:{privacyLastSeen:true,privacyProfilePhoto:true}}); });
+  app.get('/api/blocked', a, async request => prisma.userBlock.findMany({where:{userId:uid(request)},include:{blockedUser:{select:{id:true,username:true,displayName:true,avatarUrl:true}}},orderBy:{createdAt:'desc'}}));
+  app.post('/api/blocked/:userId', a, async (request, reply) => { const id=uid(request), blockedUserId=String((request.params as any).userId); if(id===blockedUserId)return reply.badRequest('You cannot block yourself'); const target=await prisma.user.findUnique({where:{id:blockedUserId},select:{id:true}}); if(!target)return reply.notFound('User not found'); await prisma.userBlock.upsert({where:{userId_blockedUserId:{userId:id,blockedUserId}},create:{userId:id,blockedUserId},update:{}}); return {ok:true,blockedUserId}; });
+  app.delete('/api/blocked/:userId', a, async request => { const blockedUserId=String((request.params as any).userId); await prisma.userBlock.deleteMany({where:{userId:uid(request),blockedUserId}}); return {ok:true}; });
+
+  /* --------------------------- conversation tools -------------------------- */
+  app.patch('/api/conversations/:id/organization', a, async (request, reply) => { const id=uid(request), conversationId=String((request.params as any).id); const p=z.object({favorite:z.boolean().optional(),pinned:z.boolean().optional(),archived:z.boolean().optional(),mutedUntil:z.string().datetime().nullable().optional(),disappearingSeconds:z.number().int().min(0).max(604800).nullable().optional()}).safeParse(request.body??{}); if(!p.success)return reply.badRequest('Invalid conversation settings'); const member=await prisma.conversationMember.findUnique({where:{conversationId_userId:{conversationId,userId:id}}}); if(!member)return reply.notFound('Conversation not found'); return prisma.conversationMember.update({where:{conversationId_userId:{conversationId,userId:id}},data:{...(p.data.favorite!==undefined?{favoriteAt:p.data.favorite?new Date():null}:{}),...(p.data.pinned!==undefined?{pinnedAt:p.data.pinned?new Date():null}:{}),...(p.data.archived!==undefined?{archivedAt:p.data.archived?new Date():null}:{}),...(p.data.mutedUntil!==undefined?{mutedUntil:p.data.mutedUntil?new Date(p.data.mutedUntil):null}:{}),...(p.data.disappearingSeconds!==undefined?{disappearingSeconds:p.data.disappearingSeconds}: {})}}); });
+  app.get('/api/conversations/organized', a, async request => { const id=uid(request); const q=String((request.query as any)?.filter??'all'); const where:any={userId:id}; if(q==='favorites')where.favoriteAt={not:null}; if(q==='pinned')where.pinnedAt={not:null}; if(q==='archived')where.archivedAt={not:null}; if(q==='active')where.archivedAt=null; const rows=await prisma.conversationMember.findMany({where,include:{conversation:{include:{members:{include:{user:{select:{id:true,username:true,displayName:true,avatarUrl:true}}}},messages:{orderBy:{createdAt:'desc'},take:1,select:{id:true,body:true,createdAt:true,senderId:true,type:true}}}}},orderBy:{conversation:{updatedAt:'desc'}}}); return rows; });
+
+  /* ----------------------------- message tools ---------------------------- */
+  app.get('/api/messages/:id/info', a, async (request, reply) => { const id=uid(request), messageId=String((request.params as any).id); const m=await prisma.message.findUnique({where:{id:messageId},include:{sender:{select:{id:true,username:true,displayName:true}},receipts:{include:{user:{select:{id:true,username:true,displayName:true}}}},reactions:true,bookmarks:true,pin:true}}); if(!m)return reply.notFound('Message not found'); const member=await prisma.conversationMember.findUnique({where:{conversationId_userId:{conversationId:m.conversationId,userId:id}}}); if(!member)return reply.forbidden('Not a conversation member'); return m; });
+  app.post('/api/messages/bulk-delete', a, async (request, reply) => { const p=z.object({messageIds:z.array(z.string()).min(1).max(100)}).safeParse(request.body??{}); if(!p.success)return reply.badRequest('messageIds required'); const id=uid(request); const messages=await prisma.message.findMany({where:{id:{in:p.data.messageIds}},select:{id:true,senderId:true,conversationId:true}}); const allowed=(await prisma.conversationMember.findMany({where:{userId:id,conversationId:{in:[...new Set(messages.map(x=>x.conversationId))]}},select:{conversationId:true}})).map(x=>x.conversationId); const owned=messages.filter(m=>allowed.includes(m.conversationId)&&m.senderId===id).map(m=>m.id); if(owned.length)await prisma.message.updateMany({where:{id:{in:owned}},data:{deletedAt:new Date(),body:'This message was deleted'}}); return {ok:true,deleted:owned.length}; });
+  app.post('/api/messages/bulk-forward', a, async (request, reply) => { const p=z.object({messageIds:z.array(z.string()).min(1).max(50),conversationId:z.string()}).safeParse(request.body??{}); if(!p.success)return reply.badRequest('messageIds and conversationId required'); const id=uid(request); const target=await prisma.conversationMember.findUnique({where:{conversationId_userId:{conversationId:p.data.conversationId,userId:id}}}); if(!target)return reply.forbidden('Not a target conversation member'); const source=await prisma.message.findMany({where:{id:{in:p.data.messageIds}},orderBy:{createdAt:'asc'},select:{body:true,type:true,attachmentUrl:true,attachmentName:true,attachmentMime:true,attachmentSize:true}}); const created=[]; for(const m of source)created.push(await prisma.message.create({data:{conversationId:p.data.conversationId,senderId:id,body:m.body,type:m.type,attachmentUrl:m.attachmentUrl,attachmentName:m.attachmentName,attachmentMime:m.attachmentMime,attachmentSize:m.attachmentSize}})); return {ok:true,messages:created}; });
+
+  /* ----------------------------- polls / schedule ------------------------- */
+  app.post('/api/polls', a, async (request, reply) => { const p=z.object({conversationId:z.string(),question:z.string().trim().min(1).max(500),options:z.array(z.string().trim().min(1).max(200)).min(2).max(20),multiple:z.boolean().default(false),expiresAt:z.string().datetime().nullable().optional()}).safeParse(request.body??{}); if(!p.success)return reply.badRequest('Invalid poll'); const id=uid(request); const member=await prisma.conversationMember.findUnique({where:{conversationId_userId:{conversationId:p.data.conversationId,userId:id}}}); if(!member)return reply.forbidden('Not a conversation member'); const msg=await prisma.message.create({data:{conversationId:p.data.conversationId,senderId:id,body:p.data.question,type:'poll',poll:{create:{question:p.data.question,multiple:p.data.multiple,expiresAt:p.data.expiresAt?new Date(p.data.expiresAt):null,options:{create:p.data.options.map((text,position)=>({text,position}))}}}},include:{poll:{include:{options:true}}}}); return msg; });
+  app.post('/api/polls/:id/vote', a, async (request, reply) => { const pollId=String((request.params as any).id); const p=z.object({optionIds:z.array(z.string()).min(1).max(20)}).safeParse(request.body??{}); if(!p.success)return reply.badRequest('optionIds required'); const id=uid(request); const poll=await prisma.poll.findUnique({where:{id:pollId},include:{options:true,message:true}}); if(!poll)return reply.notFound('Poll not found'); const member=await prisma.conversationMember.findUnique({where:{conversationId_userId:{conversationId:poll.message.conversationId,userId:id}}}); if(!member)return reply.forbidden('Not a conversation member'); if(!poll.multiple&&p.data.optionIds.length>1)return reply.badRequest('This poll accepts one choice'); await prisma.pollVote.deleteMany({where:{userId:id,optionId:{in:poll.options.map(o=>o.id)}}}); for(const optionId of p.data.optionIds){if(!poll.options.some(o=>o.id===optionId))return reply.badRequest('Invalid poll option'); await prisma.pollVote.create({data:{optionId,userId:id}});} return prisma.poll.findUnique({where:{id:pollId},include:{options:{include:{votes:true}}}}); });
+  app.post('/api/messages/schedule', a, async (request, reply) => { const p=z.object({conversationId:z.string(),body:z.string().trim().min(1).max(10000),scheduledAt:z.string().datetime()}).safeParse(request.body??{}); if(!p.success)return reply.badRequest('Invalid scheduled message'); const id=uid(request); const when=new Date(p.data.scheduledAt); if(when.getTime()<=Date.now()+5000)return reply.badRequest('Scheduled time must be in the future'); const member=await prisma.conversationMember.findUnique({where:{conversationId_userId:{conversationId:p.data.conversationId,userId:id}}}); if(!member)return reply.forbidden('Not a conversation member'); return prisma.message.create({data:{conversationId:p.data.conversationId,senderId:id,body:p.data.body,type:'scheduled',scheduledAt:when,scheduleStatus:'PENDING'}}); });
+  app.get('/api/messages/scheduled', a, async request => prisma.message.findMany({where:{senderId:uid(request),type:'scheduled',scheduleStatus:'PENDING'},orderBy:{scheduledAt:'asc'}}));
+  app.delete('/api/messages/scheduled/:id', a, async (request, reply) => { const id=uid(request), messageId=String((request.params as any).id); const result=await prisma.message.updateMany({where:{id:messageId,senderId:id,type:'scheduled',scheduleStatus:'PENDING'},data:{scheduleStatus:'CANCELLED'}}); if(!result.count)return reply.notFound('Scheduled message not found'); return {ok:true}; });
+
+  /* ------------------------------ universal search ------------------------- */
+  app.get('/api/search/universal', a, async request => { const id=uid(request), q=String((request.query as any)?.q??'').trim(); if(q.length<2)return {people:[],chats:[],messages:[],files:[],links:[],groups:[]}; const [people,memberships]=await Promise.all([prisma.user.findMany({where:{OR:[{username:{contains:q,mode:'insensitive'}},{displayName:{contains:q,mode:'insensitive'}}],id:{not:id}},select:{id:true,username:true,displayName:true,avatarUrl:true},take:20}),prisma.conversationMember.findMany({where:{userId:id},select:{conversationId:true}})]); const ids=memberships.map(x=>x.conversationId); const [messages,groups]=await Promise.all([prisma.message.findMany({where:{conversationId:{in:ids},deletedAt:null,body:{contains:q,mode:'insensitive'}},orderBy:{createdAt:'desc'},take:50}),prisma.conversation.findMany({where:{id:{in:ids},isGroup:true,title:{contains:q,mode:'insensitive'}},select:{id:true,title:true,isGroup:true},take:20})]); const files=messages.filter(m=>m.attachmentUrl); const links=messages.filter(m=>/https?:\/\//i.test(m.body)); return {people,chats:[],messages,files,links,groups}; });
+}
