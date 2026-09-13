@@ -24,7 +24,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-global_messenger}?schema=public
+      # Set DATABASE_URL to the Neon connection string in .env for production.
+      # If DATABASE_URL is empty, Docker falls back to the local postgres service.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-global_messenger}?schema=public}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
       PASSWORD_RESET_WEB_ORIGIN: ${PASSWORD_RESET_WEB_ORIGIN:-http://localhost:8080}
@@ -76,9 +78,6 @@ services:
       retries: 12
     networks: [messenger]
 
-  # Public HTTPS edge for a Docker host/VPS. Enable with:
-  # docker compose --profile public up -d
-  # Set PUBLIC_HOST to a DNS name pointing to this Docker host.
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
