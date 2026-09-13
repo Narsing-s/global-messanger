@@ -23,6 +23,13 @@ export default {
       return new Response(null, { status: 204, headers: cors });
     }
 
+    if (!env.UPSTREAM_API) {
+      return new Response(JSON.stringify({ ok: false, error: "API backend is not configured" }), {
+        status: 503,
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
     const incomingUrl = new URL(request.url);
     const upstreamBase = env.UPSTREAM_API.replace(/\/$/, "");
     const upstreamUrl = `${upstreamBase}${incomingUrl.pathname}${incomingUrl.search}`;
@@ -31,7 +38,6 @@ export default {
     headers.delete("host");
     headers.delete("content-length");
 
-    // Keep Socket.IO/WebSocket upgrades working while the API is migrated.
     const isUpgrade = request.headers.get("Upgrade")?.toLowerCase() === "websocket";
 
     const upstreamResponse = await fetch(upstreamUrl, {
@@ -44,7 +50,6 @@ export default {
     const responseHeaders = new Headers(upstreamResponse.headers);
     Object.entries(cors).forEach(([key, value]) => responseHeaders.set(key, value));
 
-    // WebSocket responses must retain the 101 response and its WebSocket body.
     if (isUpgrade && upstreamResponse.status === 101) {
       return new Response(upstreamResponse.body, {
         status: 101,
