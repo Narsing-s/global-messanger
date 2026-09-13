@@ -2,6 +2,12 @@ name: Android Build
 
 on:
   workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'Public HTTPS Docker frontend/API URL used by the APK (for example https://messenger.example.com)'
+        required: false
+        default: ''
+        type: string
   push:
     branches: [main]
     tags:
@@ -37,6 +43,8 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
       - name: Build web app
+        env:
+          VITE_API_URL: ${{ inputs.api_url || vars.API_URL || '' }}
         run: npm run build -w apps/web
       - name: Add Android platform
         working-directory: apps/web
