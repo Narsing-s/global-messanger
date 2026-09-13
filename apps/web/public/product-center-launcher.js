@@ -1,6 +1,11 @@
 (() => {
-  const mount = () => {
+  const loadAdvanced = () => new Promise(resolve => {
+    if (window.__gmAdvancedCompletion) return resolve();
+    const s=document.createElement('script'); s.src='/advanced-completion-center.js'; s.async=true; s.onload=resolve; s.onerror=resolve; document.head.appendChild(s);
+  });
+  const mount = async () => {
     if (document.querySelector('[data-gm-product-center]')) return;
+    await loadAdvanced();
     const wrap = document.createElement('div');
     wrap.style.cssText='position:fixed;right:18px;bottom:18px;z-index:25000;display:flex;gap:8px;align-items:center';
     const b = document.createElement('button'); b.dataset.gmProductCenter='true'; b.textContent='⌘ Command Center'; b.title='Open Global Messenger Command Center';
