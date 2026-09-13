@@ -1,67 +1,36 @@
 (() => {
   const originalFetch = window.fetch.bind(window);
-  const RENDER_API = 'https://global-messanger-backend.onrender.com';
+  const API = () => (window.__GM_CONFIG__?.API_URL || localStorage.getItem('gm_api_url') || 'https://global-messenger-api.narsingbeesetti006.workers.dev').replace(/\/$/, '');
 
   const rewriteApiUrl = (input) => {
     try {
       const rawUrl = typeof input === 'string' ? input : input?.url || '';
-      if (!rawUrl.includes('global-messenger-api.narsingbeesetti006.workers.dev')) return input;
-      const url = rawUrl.replace('https://global-messenger-api.narsingbeesetti006.workers.dev', RENDER_API);
-      if (typeof input === 'string') return url;
-      return new Request(url, input);
-    } catch {
+      if (!rawUrl) return input;
+      const configured = API();
+      const url = new URL(rawUrl, location.href);
+      const sameOriginApiPath = /^\/api\//.test(url.pathname);
+      if (sameOriginApiPath && url.origin === location.origin) {
+        const rewritten = `${configured}${url.pathname}${url.search}`;
+        if (typeof input === 'string') return rewritten;
+        return new Request(rewritten, input);
+      }
       return input;
-    }
+    } catch { return input; }
   };
 
   function showSuccess(email) {
     if (document.getElementById('gm-registration-success')) return;
-
     const overlay = document.createElement('div');
     overlay.id = 'gm-registration-success';
     overlay.setAttribute('role', 'alertdialog');
-    overlay.style.cssText = [
-      'position:fixed', 'inset:0', 'z-index:99999', 'display:flex',
-      'align-items:center', 'justify-content:center', 'padding:20px',
-      'background:rgba(5,10,25,.58)', 'backdrop-filter:blur(5px)'
-    ].join(';');
-
+    overlay.style.cssText = ['position:fixed','inset:0','z-index:99999','display:flex','align-items:center','justify-content:center','padding:20px','background:rgba(5,10,25,.58)','backdrop-filter:blur(5px)'].join(';');
     const card = document.createElement('div');
-    card.style.cssText = [
-      'width:min(440px,100%)', 'box-sizing:border-box', 'padding:28px',
-      'border-radius:20px', 'background:#10182b', 'color:#fff',
-      'border:1px solid rgba(255,255,255,.14)', 'box-shadow:0 24px 70px rgba(0,0,0,.4)',
-      'font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
-      'text-align:center'
-    ].join(';');
-
-    const icon = document.createElement('div');
-    icon.textContent = '✓';
-    icon.style.cssText = 'width:58px;height:58px;margin:0 auto 16px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#16a34a;color:white;font-size:32px;font-weight:800;';
-
-    const title = document.createElement('h2');
-    title.textContent = 'Account created successfully!';
-    title.style.cssText = 'margin:0 0 10px;font-size:24px;';
-
-    const message = document.createElement('p');
-    message.textContent = email
-      ? `Welcome to Global Messenger. A greetings email has been sent to ${email}.`
-      : 'Welcome to Global Messenger. A greetings email has been sent to your registered email address.';
-    message.style.cssText = 'margin:0 0 22px;line-height:1.55;color:#cbd5e1;font-size:15px;word-break:break-word;';
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = 'Go to Login';
-    button.style.cssText = 'border:0;border-radius:10px;padding:12px 18px;background:#2563eb;color:#fff;font-size:15px;font-weight:700;cursor:pointer;';
-    button.onclick = () => {
-      localStorage.removeItem('gm_token');
-      localStorage.removeItem('gm_user');
-      window.location.href = '/?login=1';
-    };
-
-    card.append(icon, title, message, button);
-    overlay.appendChild(card);
-    document.body.appendChild(overlay);
+    card.style.cssText = ['width:min(440px,100%)','box-sizing:border-box','padding:28px','border-radius:20px','background:#10182b','color:#fff','border:1px solid rgba(255,255,255,.14)','box-shadow:0 24px 70px rgba(0,0,0,.4)','font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif','text-align:center'].join(';');
+    const icon = document.createElement('div'); icon.textContent = '✓'; icon.style.cssText = 'width:58px;height:58px;margin:0 auto 16px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#16a34a;color:white;font-size:32px;font-weight:800;';
+    const title = document.createElement('h2'); title.textContent = 'Account created successfully!'; title.style.cssText = 'margin:0 0 10px;font-size:24px;';
+    const message = document.createElement('p'); message.textContent = email ? `Welcome to Global Messenger. A greetings email has been sent to ${email}.` : 'Welcome to Global Messenger. A greetings email has been sent to your registered email address.'; message.style.cssText = 'margin:0 0 22px;line-height:1.55;color:#cbd5e1;font-size:15px;word-break:break-word;';
+    const button = document.createElement('button'); button.type='button'; button.textContent='Go to Login'; button.style.cssText='border:0;border-radius:10px;padding:12px 18px;background:#2563eb;color:#fff;font-size:15px;font-weight:700;cursor:pointer;'; button.onclick=()=>{localStorage.removeItem('gm_token');localStorage.removeItem('gm_user');window.location.href='/?login=1';};
+    card.append(icon,title,message,button); overlay.appendChild(card); document.body.appendChild(overlay);
   }
 
   window.fetch = async (...args) => {
@@ -74,14 +43,10 @@
       if (requestUrl.includes('/api/auth/register-email') && response.ok) {
         let email = '';
         const init = args[1];
-        if (init?.body && typeof init.body === 'string') {
-          try { email = JSON.parse(init.body)?.email || ''; } catch {}
-        }
+        if (init?.body && typeof init.body === 'string') { try { email = JSON.parse(init.body)?.email || ''; } catch {} }
         showSuccess(email);
       }
-    } catch (error) {
-      console.warn('[Global Messenger] registration success notification failed', error);
-    }
+    } catch (error) { console.warn('[Global Messenger] registration success notification failed', error); }
     return response;
   };
 })();
