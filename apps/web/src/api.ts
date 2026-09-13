@@ -2,9 +2,14 @@ declare global {
   interface Window { __GM_CONFIG__?: { API_URL?: string }; }
 }
 
-const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
+const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL || localStorage.getItem('gm_api_url') || '';
 const isLoopbackApi = (value?: string) => Boolean(value && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(value));
-const API = configuredApi && (!isLoopbackApi(configuredApi) || import.meta.env.DEV) ? configuredApi.replace(/\/$/, '') : window.location.origin;
+const isNative = ['capacitor:', 'ionic:', 'file:', 'null'].includes(window.location.protocol);
+// A native WebView's localhost is the phone, not the Docker server. Prefer an explicitly
+// configured API URL and persist the URL selected during mobile authentication.
+const API = configuredApi && (!isLoopbackApi(configuredApi) || import.meta.env.DEV)
+  ? configuredApi.replace(/\/$/, '')
+  : (isNative ? (localStorage.getItem('gm_api_url') || 'https://global-messanger-backend.onrender.com') : window.location.origin);
 
 type ConversationResponse = { id: string; isGroup: boolean; title: string | null; members: Array<{ user: any }>; messages: any[]; [key: string]: any };
 function normalizeConversation(value: any): ConversationResponse { const conversation = value && typeof value === 'object' ? value : {}; return { ...conversation, id: String(conversation.id ?? ''), isGroup: Boolean(conversation.isGroup), title: conversation.title ?? null, members: Array.isArray(conversation.members) ? conversation.members.filter((member: any) => member?.user?.id) : [], messages: Array.isArray(conversation.messages) ? conversation.messages.filter(Boolean) : [] }; }
@@ -20,7 +25,7 @@ async function request(path: string, options: RequestInit = {}) {
     if (text && contentType.includes('application/json')) { try { data = JSON.parse(text); } catch { data = { message: text }; } } else if (text) data = { message: text };
     if (!res.ok) { if (res.status === 401) { localStorage.removeItem('gm_token'); localStorage.removeItem('gm_user'); window.dispatchEvent(new CustomEvent('gm:auth-expired')); throw new Error('Your session has expired. Please sign in again.'); } throw new Error(data?.message || `Request failed (${res.status})`); }
     return data;
-  } catch (error: any) { if (error?.name === 'AbortError') throw new Error('Request timed out. Please check your connection.'); throw error; } finally { window.clearTimeout(timeout); }
+  } catch (error: any) { if (error?.name === 'AbortError') throw new Error('Request timed out. Please check your connection.'); if (error instanceof TypeError) throw new Error(`Cannot reach Global Messenger server at ${API}. Check the server URL and network connection.`); throw error; } finally { window.clearTimeout(timeout); }
 }
 
 export function uploadWithProgress(file: File, onProgress?: (percent: number) => void, signal?: AbortSignal): Promise<any> {
@@ -31,7 +36,7 @@ export function uploadWithProgress(file: File, onProgress?: (percent: number) =>
     xhr.responseType = 'json';
     xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress?.(Math.round(event.loaded / event.total * 100)); };
     xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) { const result = xhr.response || {}; resolve({ ...result, url: result?.url && /^https?:\/\//i.test(result.url) ? result.url : `${API}${result?.url || ''}` }); } else reject(new Error(xhr.response?.message || `Upload failed (${xhr.status})`)); };
-    xhr.onerror = () => reject(new Error('Upload failed. Check your connection.'));
+    xhr.onerror = () => reject(new Error(`Upload failed. Cannot reach ${API}.`));
     xhr.onabort = () => reject(new DOMException('Upload cancelled', 'AbortError'));
     if (signal) { if (signal.aborted) return xhr.abort(); signal.addEventListener('abort', () => xhr.abort(), { once: true }); }
     const form = new FormData(); form.append('file', file); xhr.send(form);
