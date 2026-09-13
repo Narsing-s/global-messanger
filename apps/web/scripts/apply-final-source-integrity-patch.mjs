@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 
+const require = createRequire(import.meta.url);
 const file = path.resolve(process.cwd(), 'src/main.tsx');
 let source = fs.readFileSync(file, 'utf8');
 let changes = 0;
@@ -65,35 +67,40 @@ const decryptImport = "import { decryptMessageCompat } from './e2ee-compat';";
 }
 
 /*
- * Build safety net: some historical product patches were written against older
- * main.tsx shapes. If their combined output is syntactically invalid, recover the
- * committed main.tsx rather than allowing the build to fail with a parser error.
- * The committed source is the canonical product implementation; feature modules
- * remain untouched and are loaded normally by the app.
+ * Build safety net: historical product patches can emit malformed TSX when they
+ * encounter a source shape they were not written for. Validate the final source
+ * before writing it and restore the committed canonical source if needed.
  */
-function hasTypeScriptSyntaxErrors(text) {
+function syntaxDiagnostics(text) {
   try {
-    const tsPath = require.resolve('typescript');
-    const ts = require(tsPath);
+    const ts = require('typescript');
     const result = ts.transpileModule(text, {
       fileName: 'main.tsx',
       reportDiagnostics: true,
-      compilerOptions: { jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
+      compilerOptions: {
+        jsx: ts.JsxEmit.ReactJSX,
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext
+      }
     });
-    return (result.diagnostics || []).some(d => d.category === ts.DiagnosticCategory.Error);
+    return (result.diagnostics || []).filter(d => d.category === ts.DiagnosticCategory.Error);
   } catch (error) {
     console.warn('[integrity] TypeScript syntax validation unavailable:', error?.message || error);
-    return false;
+    return [];
   }
 }
 
-if (hasTypeScriptSyntaxErrors(source)) {
+const diagnostics = syntaxDiagnostics(source);
+if (diagnostics.length) {
   try {
     const canonical = execFileSync('git', ['show', 'HEAD:apps/web/src/main.tsx'], { encoding: 'utf8' });
-    if (!hasTypeScriptSyntaxErrors(canonical)) {
+    const canonicalDiagnostics = syntaxDiagnostics(canonical);
+    if (!canonicalDiagnostics.length) {
       source = canonical;
       changes++;
-      console.warn('[integrity] malformed patched main.tsx detected; restored committed canonical source');
+      console.warn(`[integrity] malformed patched main.tsx detected (${diagnostics.length} syntax error(s)); restored committed canonical source`);
+    } else {
+      console.warn(`[integrity] patched and canonical main.tsx both report syntax errors; preserving patched source`);
     }
   } catch (error) {
     console.warn('[integrity] canonical source recovery failed:', error?.message || error);
