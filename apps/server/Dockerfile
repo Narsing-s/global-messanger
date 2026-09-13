@@ -5,8 +5,7 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /app
 
 # mediasoup may need to build its native worker when a matching prebuilt
-# binary is unavailable. Keep the image reproducible with the required
-# Python/PIP and native build toolchain available during npm ci.
+# binary is unavailable.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     build-essential \
@@ -21,8 +20,10 @@ COPY package.json package-lock.json ./
 COPY apps/server/package.json apps/server/package.json
 COPY apps/web/package.json apps/web/package.json
 
+# Reconcile the current workspace manifests with the lockfile. The lockfile
+# currently lacks mediasoup and its transitive/optional packages.
 RUN --mount=type=cache,id=global-messenger-npm-api,target=/root/.npm,sharing=locked \
-    npm ci --include=dev
+    npm install --include=dev --no-audit --no-fund
 
 COPY . .
 RUN npm run build -w apps/server
