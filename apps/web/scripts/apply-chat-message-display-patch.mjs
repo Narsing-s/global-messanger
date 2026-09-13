@@ -5,10 +5,13 @@ const file = fileURLToPath(new URL('../src/main.tsx', import.meta.url));
 let source = fs.readFileSync(file, 'utf8');
 
 if (!source.includes('chat-message-display-v3')) {
-  source = source.replace(
-    "import{installEnhancements}from'./enhancements';",
-    "import{installEnhancements}from'./enhancements';import{decryptMessageCompat}from'./e2ee-compat';"
-  );
+  /* Add the decrypt helper import using either the compact or spaced import form. */
+  if (!source.includes("from './e2ee-compat'")) {
+    const enhancementsImport = source.match(/import\s*\{\s*installEnhancements\s*\}\s*from\s*['\"]\.\/enhancements['\"];?/);
+    if (enhancementsImport) {
+      source = source.replace(enhancementsImport[0], `${enhancementsImport[0]}\nimport { decryptMessageCompat } from './e2ee-compat';`);
+    }
+  }
 
   const helpers = `
 // chat-message-display-v3: clean chat messages and add WhatsApp-like quick reactions.
@@ -68,14 +71,19 @@ function installMessageQuickActions(){
   },true);
 }
 `;
-  source = source.replace('class GlobalMessengerErrorBoundary', helpers + '\nclass GlobalMessengerErrorBoundary');
+
+  /* The old patch anchored helpers to a class that no longer exists. Anchor to App instead. */
+  const appAnchor = source.indexOf('function App(');
+  if (appAnchor >= 0 && !source.includes('function installMessageQuickActions')) {
+    source = source.slice(0, appAnchor) + helpers + '\n' + source.slice(appAnchor);
+  }
 
   source = source.replace(
     "s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>p.some(x=>x.id===m.id)?p:[...p,m]);setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[])]}:c))});",
     "s.on('message:new',async(m:Message)=>{const clean=await cleanIncomingMessage(m);if(!clean)return;if(clean.senderId!==me.id)messagePing();setMessages(p=>p.some(x=>x.id===clean.id)?p:[...p,clean]);setChats(p=>p.map(c=>c.id===clean.conversationId?{...c,messages:[clean,...(c.messages||[]).filter((x:any)=>x.id!==clean.id)]}:c))});"
   );
   source = source.replace(
-    "api.conversations().then(data=>{setChats(Array.isArray(data)?data:[]);const next:Record<string,boolean>={}",
+    "api.conversations().then(data=>{setChats(Array.isArray(data)?data:[]);const next:Record<string,boolean>={",
     "api.conversations().then(async data=>{const cleaned=await Promise.all((Array.isArray(data)?data:[]).map(cleanConversation));setChats(cleaned);const next:Record<string,boolean>={"
   );
   source = source.replace(
