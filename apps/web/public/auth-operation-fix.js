@@ -5,7 +5,24 @@
   const apiBase = () => (window.__GM_CONFIG__?.API_URL || window.location.origin).replace(/\/$/, '');
   const val = (form, selector) => form.querySelector(selector)?.value?.trim() || '';
   const readJson = async response => { try { return await response.json(); } catch { return {}; } };
+  function ensurePhoneField(form) {
+    if (!form.textContent.toLowerCase().includes('create your account') && !form.textContent.toLowerCase().includes('create account')) return;
+    if (form.querySelector('#gm-phone-number')) return;
+    const label = document.createElement('label');
+    label.textContent = 'Phone number';
+    const input = document.createElement('input');
+    input.id = 'gm-phone-number';
+    input.type = 'tel';
+    input.inputMode = 'tel';
+    input.autocomplete = 'tel';
+    input.placeholder = '+91 9876543210';
+    label.appendChild(input);
+    const passwords = [...form.querySelectorAll('input[type="password"]')];
+    const passwordLabel = passwords[0]?.closest('label');
+    if (passwordLabel) form.insertBefore(label, passwordLabel); else form.appendChild(label);
+  }
   async function run(form) {
+    ensurePhoneField(form);
     const text = (form.textContent || '').toLowerCase();
     const registering = text.includes('create your account') || text.includes('create account');
     const identifier = val(form, 'input[autocomplete="username"]');
@@ -35,15 +52,20 @@
     }
     window.location.replace('/');
   }
+  document.addEventListener('DOMContentLoaded', () => {
+    const forms = document.querySelectorAll('.auth-page form');
+    forms.forEach(form => ensurePhoneField(form));
+  });
   document.addEventListener('submit', event => {
     const form = event.target instanceof HTMLFormElement ? event.target : null;
     if (!form?.closest('.auth-page')) return;
     event.preventDefault(); event.stopImmediatePropagation();
-    const button = form.querySelector('button.primary');
+    ensurePhoneField(form);
+    const button = form.querySelector('button.auth-submit,button.primary');
     if (button instanceof HTMLButtonElement) button.disabled = true;
     run(form).catch(error => {
-      const box = form.querySelector('.error') || document.createElement('div');
-      box.className='error'; box.textContent=error?.message || String(error);
+      const box = form.querySelector('.auth-error') || document.createElement('div');
+      box.className='auth-error'; box.textContent=error?.message || String(error);
       if (!box.parentNode) form.insertBefore(box, button || null);
       if (button instanceof HTMLButtonElement) button.disabled=false;
     });
