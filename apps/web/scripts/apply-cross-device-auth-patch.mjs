@@ -11,7 +11,8 @@ const auth = `function Auth({register,setRegister,username,setUsername,password,
   const [email,setEmail]=useState(''),[phoneNumber,setPhoneNumber]=useState(''),[confirm,setConfirm]=useState(''),[loading,setLoading]=useState(false);
   const BACKUP_API='https://global-messanger-backend.onrender.com';
   async function requestAuth(base:string,path:string,body:any){
-    const response=await fetch(base.replace(/\\/$/,'')+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const cleanBase=base.endsWith('/')?base.slice(0,-1):base;
+    const response=await fetch(cleanBase+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const text=await response.text();let data:any={};
     try{data=text?JSON.parse(text):{}}catch{data={message:text}};
     return {response,data};
@@ -20,25 +21,33 @@ const auth = `function Auth({register,setRegister,username,setUsername,password,
     e.preventDefault();setError('');setLoading(true);
     try{
       if(register&&password!==confirm)throw Error('Passwords do not match');
-      const loginBody={identifier:username.trim(),password};
-      const registerBody={username:username.trim(),displayName:(displayName||username).trim(),email:email.trim(),phoneNumber:phoneNumber.trim(),password};
-      const bases=[API,BACKUP_API].filter((v,i,a)=>v&&a.indexOf(v)===i);
+      const bases=[API,BACKUP_API].filter((v,i,a)=>Boolean(v)&&a.indexOf(v)===i);
       const paths=register?['/api/auth/register-email','/api/auth/register']:['/api/auth/login-email','/api/auth/login'];
-      let lastMessage='Authentication server is unavailable. Please try again.';let result:any=null;
-      outer:for(const base of bases){
+      let lastMessage='Authentication server is unavailable. Please try again.';
+      let result:any=null;
+      for(const base of bases){
         for(const path of paths){
-          const body=register?(path.endsWith('/register')?{username:registerBody.username,displayName:registerBody.displayName,password:registerBody.password}:registerBody):path.endsWith('/login')?{username:loginBody.identifier,password}:loginBody;
+          let body:any;
+          if(register){
+            body=path.endsWith('/register-email')
+              ?{username:username.trim(),displayName:(displayName||username).trim(),email:email.trim(),phoneNumber:phoneNumber.trim(),password}
+              :{username:username.trim(),displayName:(displayName||username).trim(),password};
+          }else{
+            body=path.endsWith('/login-email')?{identifier:username.trim(),password}:{username:username.trim(),password};
+          }
           try{
-            const out=await requestAuth(base,path,body);result=out.data;
-            if(out.response.ok&&result?.token)break outer;
+            const out=await requestAuth(base,path,body);
+            result=out.data;
+            if(out.response.ok&&result?.token)break;
             if(result?.message)lastMessage=String(result.message);
-            if(result?.requiresTwoFactor)break outer;
+            if(result?.requiresTwoFactor)break;
           }catch(err:any){lastMessage=err?.message||lastMessage;}
         }
+        if(result?.token||result?.requiresTwoFactor)break;
       }
       if(!result?.token){
         if(result?.requiresTwoFactor)throw Error('Two-step verification is enabled. Complete 2FA before continuing.');
-        throw Error(lastMessage==='Authentication server is unavailable. Please try again.'?lastMessage:'Login server did not return a login token. The backup server was also checked. Please retry.');
+        throw Error(lastMessage==='Authentication server is unavailable. Please try again.'?lastMessage:'Login server did not return a login token. Both authentication servers were checked. Please retry.');
       }
       localStorage.setItem('gm_token',String(result.token));
       localStorage.setItem('gm_user',JSON.stringify(result.user||{}));
