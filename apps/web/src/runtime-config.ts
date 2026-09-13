@@ -5,10 +5,11 @@ declare global {
 }
 
 /**
- * One API origin for browser, PWA and Capacitor.
- * Production native builds must never fall back to localhost or a retired API.
+ * Single production API origin for Cloudflare Pages, PWA and Capacitor.
+ * The API is the Cloudflare Worker endpoint and uses Neon PostgreSQL.
+ * Never fall back to Render, Vercel or localhost in production/native builds.
  */
-const DEFAULT_PRODUCTION_API = 'https://global-messenger-api-new.onrender.com';
+const DEFAULT_PRODUCTION_API = 'https://global-messenger-api.narsingbeesetti006.workers.dev';
 
 const configured =
   window.__GM_CONFIG__?.API_URL ||
