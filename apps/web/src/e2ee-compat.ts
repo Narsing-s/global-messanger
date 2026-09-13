@@ -2,7 +2,7 @@ import { decryptMessage } from './e2ee';
 
 const PREFIX = 'gm:e2ee:v1:';
 const LEGACY_PREFIX = 'gme2ee:v1:';
-const API = ((window as any).__GM_CONFIG__?.API_URL || (import.meta as any).env?.VITE_API_URL || localStorage.getItem('gm_api_url') || (import.meta as any).env?.DEV && window.location.origin || 'https://global-messenger-api.narsingbeesetti006.workers.dev')).replace(/\/$/, '');
+const API = String((window as any).__GM_CONFIG__?.API_URL || localStorage.getItem('gm_api_url') || 'https://global-messenger-api.narsingbeesetti006.workers.dev').replace(/\/$/, '');
 const cache = new Map<string, Promise<string>>();
 const keyCache = new Map<string, Promise<CryptoKey>>();
 const enc = new TextEncoder();
