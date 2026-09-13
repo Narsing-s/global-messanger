@@ -1,8 +1,5 @@
 import { Socket } from 'socket.io-client';
-
-const CLOUDFLARE_API = 'https://global-messenger-api.narsingbeesetti006.workers.dev';
-const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
-const API = configuredApi || (import.meta.env.DEV ? window.location.origin : CLOUDFLARE_API);
+import { API } from './runtime-config';
 
 const originalConnect = Socket.prototype.connect;
 
@@ -13,7 +10,8 @@ Socket.prototype.connect = function (...args: any[]) {
       const token = localStorage.getItem('gm_token');
       if (!token) return;
       const response = await fetch(`${API}/api/conversations`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store'
       });
       if (!response.ok) return;
       const conversations = await response.json();
