@@ -19,6 +19,7 @@
     "e2e:remainder": "npm run e2e:remainder -w apps/web",
     "verify:local": "node scripts/local-verify.mjs",
     "smoke": "node scripts/local-smoke.mjs",
+    "e2e:local": "node scripts/local-e2e.mjs",
     "db:generate": "npm run db:generate -w apps/server",
     "db:migrate": "npm run db:migrate -w apps/server",
     "db:deploy": "prisma migrate deploy --schema apps/server/prisma/schema.prisma",
