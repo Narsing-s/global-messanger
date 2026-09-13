@@ -25,7 +25,6 @@ jobs:
       NODE_VERSION: '22'
       CLOUDFLARE_API_URL: ${{ secrets.CLOUDFLARE_API_URL }}
       CLOUDFLARE_WEB_ORIGIN: ${{ secrets.CLOUDFLARE_WEB_ORIGIN }}
-      BACKEND_API_URL: ${{ secrets.BACKEND_API_URL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
     steps:
@@ -46,18 +45,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          # These are public endpoints, but keeping them configurable allows
-          # the same workflow to be reused for a different production backend.
-          : "${BACKEND_API_URL:=https://global-messanger-backend.onrender.com}"
+          # The production Render service is fixed and public. Do not allow a
+          # stale GitHub secret to redirect the Cloudflare Worker to an invalid
+          # or HTTP upstream.
+          BACKEND_API_URL='https://global-messanger-backend.onrender.com'
           : "${CLOUDFLARE_API_URL:=https://global-messenger-api.narsingbeesetti006.workers.dev}"
           : "${CLOUDFLARE_WEB_ORIGIN:=https://global-messenger-web.narsingbeesetti006.workers.dev}"
 
-          # Normalize the backend URL defensively. GitHub Actions secrets can
-          # retain an old http:// value; the public Render service is HTTPS-only.
-          BACKEND_API_URL="$(printf '%s' "$BACKEND_API_URL" | sed -E 's#^http://#https://#')"
-          BACKEND_API_URL="$(printf '%s' "$BACKEND_API_URL" | xargs)"
-
-          # Remove trailing slashes to prevent // in proxy paths and CORS origin.
           BACKEND_API_URL="${BACKEND_API_URL%/}"
           CLOUDFLARE_API_URL="${CLOUDFLARE_API_URL%/}"
           CLOUDFLARE_WEB_ORIGIN="${CLOUDFLARE_WEB_ORIGIN%/}"
@@ -145,5 +139,5 @@ jobs:
             exit 1
           fi
 
-      # Force a fresh production deployment whenever this workflow itself is repaired.
-      # This marker intentionally lives in the workflow so the push trigger runs it.
+      # Production endpoint is intentionally canonicalized above; this workflow
+      # must remain the single source of truth for the Cloudflare deployment.
