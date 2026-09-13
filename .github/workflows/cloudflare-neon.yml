@@ -1,0 +1,104 @@
+name: Cloudflare + Neon Production
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'apps/api-worker/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/cloudflare-neon.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-production
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      NODE_VERSION: '22'
+      CLOUDFLARE_API_URL: ${{ secrets.CLOUDFLARE_API_URL }}
+      CLOUDFLARE_WEB_ORIGIN: ${{ secrets.CLOUDFLARE_WEB_ORIGIN }}
+      BACKEND_API_URL: ${{ secrets.BACKEND_API_URL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_PAGES_PROJECT: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --include=dev --no-audit --no-fund
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_URL CLOUDFLARE_WEB_ORIGIN BACKEND_API_URL CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_PAGES_PROJECT; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required GitHub secret: $name"
+              exit 1
+            fi
+          done
+          case "$CLOUDFLARE_API_URL" in https://*) ;; *) echo 'CLOUDFLARE_API_URL must use HTTPS'; exit 1;; esac
+          case "$CLOUDFLARE_WEB_ORIGIN" in https://*) ;; *) echo 'CLOUDFLARE_WEB_ORIGIN must use HTTPS'; exit 1;; esac
+          case "$BACKEND_API_URL" in https://*) ;; *) echo 'BACKEND_API_URL must use HTTPS'; exit 1;; esac
+          case "$BACKEND_API_URL" in *onrender.com*|*vercel.app*) echo 'Render/Vercel backends are forbidden'; exit 1;; esac
+
+      - name: Build web for Cloudflare Pages
+        run: npm run build -w apps/web
+        env:
+          VITE_API_URL: ${{ secrets.CLOUDFLARE_API_URL }}
+
+      - name: Install Wrangler
+        run: npm install --global wrangler@latest
+
+      - name: Deploy API Worker
+        working-directory: apps/api-worker
+        run: |
+          wrangler deploy \
+            --name global-messenger-api \
+            --var "UPSTREAM_API:${BACKEND_API_URL}" \
+            --var "ALLOWED_ORIGIN:${CLOUDFLARE_WEB_ORIGIN}" \
+            --account-id "${CLOUDFLARE_ACCOUNT_ID}"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Deploy Cloudflare Pages
+        run: |
+          wrangler pages deploy apps/web/dist \
+            --project-name "${CLOUDFLARE_PAGES_PROJECT}" \
+            --branch main \
+            --commit-dirty=true \
+            --account-id "${CLOUDFLARE_ACCOUNT_ID}"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Smoke test API Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=$(curl -sS -o /tmp/health.json -w '%{http_code}' "${CLOUDFLARE_API_URL}/health")
+          cat /tmp/health.json
+          test "$status" = "200"
+
+      - name: Verify no retired hosting URLs in built web
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RniE 'onrender\.com|vercel\.app' apps/web/dist; then
+            echo 'Retired Render/Vercel URL found in production web artifact.'
+            exit 1
+          fi
