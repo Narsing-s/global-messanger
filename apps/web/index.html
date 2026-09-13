@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#635bff" />
     <meta name="description" content="Global Messenger — fast, secure messaging across web, desktop and mobile." />
-    <meta name="gm-build" content="release-20260913-v11" />
-    <link rel="manifest" href="/manifest.webmanifest?v=release-20260913-v11" />
+    <meta name="gm-build" content="release-20260913-v12" />
+    <link rel="manifest" href="/manifest.webmanifest?v=release-20260913-v12" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23635bff'/%3E%3Cpath d='M14 18h36v24H29l-9 8v-8h-6z' fill='white'/%3E%3Ccircle cx='25' cy='30' r='3' fill='%23635bff'/%3E%3Ccircle cx='32' cy='30' r='3' fill='%23635bff'/%3E%3Ccircle cx='39' cy='30' r='3' fill='%23635bff'/%3E%3C/svg%3E" />
     <title>Global Messenger</title>
   </head>
   <body>
     <div id="root"></div>
-    <script src="/config.js?v=release-20260913-v11" onerror="this.remove()"></script>
+    <script src="/config.js?v=release-20260913-v12" onerror="this.remove()"></script>
     <script>
       window.__GM_CONFIG__=window.__GM_CONFIG__||{};
       (function(){
@@ -21,30 +21,30 @@
         var local=location.hostname==='localhost'||location.hostname==='127.0.0.1';
         var native=p==='capacitor:'||p==='ionic:'||p==='file:'||p==='null';
         var stored=localStorage.getItem('gm_api_url')||'';
-        var active='https://global-messenger-api-new.onrender.com';
+        var active='https://global-messenger-api.narsingbeesetti006.workers.dev';
         var configured=window.__GM_CONFIG__.API_URL||stored;
         if(local && !native){ window.__GM_CONFIG__.API_URL=configured||location.origin; }
         else if(configured && !/^https?:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?\\/?$/i.test(configured)){ window.__GM_CONFIG__.API_URL=configured.replace(/\\/$/,''); }
         else { window.__GM_CONFIG__.API_URL=active; }
       })();
     </script>
-    <script src="/eco-mode.js?v=release-20260913-v11"></script>
-    <script src="/mobile-auth-input-fix.js?v=release-20260913-v11"></script>
-    <script src="/auth-operation-fix.js?v=release-20260913-v11"></script>
-    <script src="/advanced-feature-center-v2.js?v=release-20260913-v11"></script>
-    <script src="/release-control-center.js?v=release-20260913-v11"></script>
-    <script src="/react-event-bridge.js?v=release-20260913-v11"></script>
-    <script src="/message-operations-v2.js?v=release-20260913-v11"></script>
-    <script src="/message-menu-stability.js?v=release-20260913-v11"></script>
-    <script src="/p0-completion-ui-v2.js?v=release-20260913-v11"></script>
-    <script src="/call-signal-hider.js?v=release-20260913-v11"></script>
-    <script src="/global-product-center.js?v=release-20260913-v11"></script>
-    <script type="module" src="/src/e2ee-bootstrap.ts?v=release-20260913-v11"></script>
-    <script type="module" src="/src/features.ts?v=release-20260913-v11"></script>
-    <script type="module" src="/src/accessibility-i18n.ts?v=release-20260913-v11"></script>
-    <script type="module" src="/src/call-media.ts?v=release-20260913-v11"></script>
-    <script type="module" src="/src/sfu-client.ts?v=release-20260913-v11"></script>
-    <script type="module" src="/src/main.tsx?v=release-20260913-v11"></script>
-    <script>if('serviceWorker'in navigator){navigator.serviceWorker.register('/sw.js?v=release-20260913-v11',{scope:'/'}).catch(()=>{});}</script>
+    <script src="/eco-mode.js?v=release-20260913-v12"></script>
+    <script src="/mobile-auth-input-fix.js?v=release-20260913-v12"></script>
+    <script src="/auth-operation-fix.js?v=release-20260913-v12"></script>
+    <script src="/advanced-feature-center-v2.js?v=release-20260913-v12"></script>
+    <script src="/release-control-center.js?v=release-20260913-v12"></script>
+    <script src="/react-event-bridge.js?v=release-20260913-v12"></script>
+    <script src="/message-operations-v2.js?v=release-20260913-v12"></script>
+    <script src="/message-menu-stability.js?v=release-20260913-v12"></script>
+    <script src="/p0-completion-ui-v2.js?v=release-20260913-v12"></script>
+    <script src="/call-signal-hider.js?v=release-20260913-v12"></script>
+    <script src="/global-product-center.js?v=release-20260913-v12"></script>
+    <script type="module" src="/src/e2ee-bootstrap.ts?v=release-20260913-v12"></script>
+    <script type="module" src="/src/features.ts?v=release-20260913-v12"></script>
+    <script type="module" src="/src/accessibility-i18n.ts?v=release-20260913-v12"></script>
+    <script type="module" src="/src/call-media.ts?v=release-20260913-v12"></script>
+    <script type="module" src="/src/sfu-client.ts?v=release-20260913-v12"></script>
+    <script type="module" src="/src/main.tsx?v=release-20260913-v12"></script>
+    <script>if('serviceWorker'in navigator){navigator.serviceWorker.register('/sw.js?v=release-20260913-v12',{scope:'/'}).catch(()=>{});}</script>
   </body>
 </html>
