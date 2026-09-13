@@ -9,8 +9,9 @@ if (fs.existsSync(capability)) {
   let s = fs.readFileSync(capability, 'utf8');
   s = s.replace("import { promisify } from 'node:util';\n", '');
   s = s.replace("\nconst execFile = promisify(spawn);\n", '\n');
-  s = s.replace("const filename=path.join(dir(),`${crypto.randomUUID()}-${path.basename(file.filename)}`);", "const filename=path.join(dir,`${crypto.randomUUID()}-${path.basename(file.filename)}`);");
   s = s.replace(/const filename=path\.join\(dir\(\),/g, 'const filename=path.join(dir,');
+  const fileRoute = "  app.post('/api/ai/file-understanding', a, async (request, reply) => { const user=userOf(request); const file=await (request as any).file(); if(!file)return reply.badRequest('File is required'); const dir=path.join(os.tmpdir(),'gm-understanding'); await fs.mkdir(dir,{recursive:true}); const filename=path.join(dir,`${crypto.randomUUID()}-${path.basename(file.filename)}`); await fs.writeFile(filename,await file.toBuffer()); try { const result=await understandFile(filename,file.mimetype); await entity(prisma,user.id,'ai',{type:'file-understanding',mimeType:file.mimetype,filename:path.basename(file.filename),supported:!result.unsupported},'file understanding'); return result; } finally { await fs.rm(filename,{force:true}); } });";
+  s = s.replace(/  app\.post\('\/api\/ai\/file-understanding'[\s\S]*?\n  app\.post\('\/api\/ai\/search'/, fileRoute + "\n  app.post('/api/ai/search'");
   fs.writeFileSync(capability, s);
 }
 
