@@ -1,469 +1,362 @@
 # 🌍 Global Messenger — Global-Market Blueprint
 
-This document defines what Global Messenger must achieve to compete with the strongest global messengers. The target is not simply having more buttons. The target is **fast, reliable, private, intuitive and scalable communication**.
+This is the product blueprint for making Global Messenger fast, reliable, private, accessible and globally scalable. It is a target specification; entries marked roadmap are not claims that the feature is already production-complete.
 
-## 1. Product benchmark
+## Benchmark principles
 
-Global Messenger should combine the strongest ideas from three categories:
+Use proven product patterns without copying proprietary UI or implementation:
 
-- **WhatsApp-class reliability:** simple messaging, dependable calls, communities and everyday communication. WhatsApp documents end-to-end encrypted personal calls and group calling across devices. citeturn0search3
-- **Signal-class privacy:** privacy by default, strong end-to-end encryption, safety verification and phone-number privacy/usernames. citeturn0search6turn0search1
-- **Telegram-class extensibility:** bots, mini apps, polls, streaming interactions and developer integrations. citeturn0search2
+- WhatsApp-class everyday reliability, calling, communities and simple communication.
+- Signal-class privacy, end-to-end encryption, device verification and phone-number privacy.
+- Telegram-class extensibility through bots, mini apps and developer integrations.
 
-We should not copy their UI or proprietary implementation. We should combine the useful product patterns into our own simpler experience.
+## P0 — Core speed and reliability
 
-## 2. Non-negotiable speed target
-
-The app should feel instant even when the network is not.
-
-### UX latency goals
+### Perceived performance targets
 
 | Operation | Target |
 |---|---:|
-| Open existing chat from cache | <100 ms perceived |
-| Open recent conversation list | <200 ms perceived |
-| Local message bubble after Send | <50 ms perceived |
-| Server acknowledgement on a healthy connection | <300 ms target |
+| Open cached chat | <100 ms perceived |
+| Open recent conversations | <200 ms perceived |
+| Local message bubble | <50 ms perceived |
+| Healthy server acknowledgement | <300 ms target |
 | Realtime recipient delivery | <500 ms target |
 | Search suggestions | <150 ms perceived |
-| Send while temporarily offline | Immediate local queue |
-| Reconnect after network recovery | Automatic |
+| Offline send | Immediate local queue |
+| Network recovery | Automatic |
 
-These are product SLO targets, not guarantees. Production telemetry must measure p50/p95/p99 instead of relying on assumptions.
-
-## 3. Performance architecture
+Measure p50/p95/p99 in production; these are targets, not guarantees.
 
 ### Client
 
 - Local conversation/message cache
 - Optimistic message rendering
-- Offline outbox
+- Durable offline outbox
 - Idempotent client message IDs
-- Cursor-based pagination
+- Cursor pagination
 - Virtualized message lists
 - Debounced search
-- Lazy loading for media and non-critical UI
-- Thumbnail-first media rendering
+- Lazy media loading
+- Thumbnail-first rendering
 - Upload/download resume
 - Socket listener deduplication
 - Background synchronization
 - Batched read receipts
-- Avoid unnecessary global React renders
+- Minimal React rerenders
 
-### API
+### API/database/realtime
 
-- Fastify route handlers kept small and non-blocking
-- Strict request validation
-- Cursor pagination for messages/search/media
+- Small non-blocking Fastify handlers
+- Strict validation
 - Minimal response payloads
-- Response compression where appropriate
-- Cache immutable/static resources
-- Rate limiting and abuse protection
-- Idempotency for message creation and retry
-- Request correlation IDs
-- Timeouts for external services
-
-### Database
-
-- PostgreSQL with Prisma
-- Composite indexes matching actual query patterns
-- Never load an entire conversation when opening a chat
-- Select only required columns
-- Avoid N+1 queries
-- Paginate every potentially large collection
-- Profile slow queries in production
-- Archive/partition strategies for very large datasets when justified
-
-### Realtime
-
-- One Socket.IO connection per active client session
-- Connection state indicator
-- Automatic reconnect with backoff
-- Server acknowledgement for important writes
+- Cursor pagination for large collections
+- Rate limiting
+- Idempotent writes
+- Request/event IDs
+- Database indexes matching real queries
+- No N+1 queries
+- Query profiling
+- Socket.IO reconnect with backoff
+- Ordered event reconciliation
 - Duplicate-event suppression
-- Ordered message reconciliation
-- Horizontal scaling through a shared Socket.IO adapter when multiple backend instances are deployed
+- Shared Socket.IO adapter when horizontally scaled
 
-## 4. Offline-first messaging
+## P1 — Complete messenger fundamentals
 
-A message should never disappear because the network temporarily failed.
+### Profile Center
 
-```text
-Compose
-  ↓
-Create clientId
-  ↓
-Render optimistic message immediately
-  ↓
-Write to local outbox
-  ↓
-Attempt Socket/API delivery
-  ├── success → reconcile server message
-  └── failure → retain queued state
-                    ↓
-              reconnect/retry
-                    ↓
-              idempotent delivery
-```
+- Profile photo
+- Display name
+- Username
+- Bio/About
+- Online status
+- Last seen
+- Profile preview
+- QR/profile sharing
+- Username copy/share
+- Account ID
 
-Required states:
+### Chat Info
 
-- Sending
-- Sent
-- Delivered
-- Read
-- Failed
-- Queued/offline
-- Retrying
-
-## 5. Global privacy model
-
-Privacy should be understandable, not hidden behind technical language.
-
-### Required controls
-
-- End-to-end encrypted private messages and calls
-- Safety/device verification
-- Phone-number visibility controls
-- Username-based discovery
-- Last-seen controls
-- Profile-photo controls
-- Read-receipt controls
-- Typing-indicator controls
+- Contact profile
+- Media/files/links
+- Starred and pinned content
+- Search in chat
+- Notification controls
+- Disappearing messages
 - Block/report
-- Active-device management
-- Remote session revocation
-- 2FA
-- Passkeys
-- App PIN/biometric lock
-- Secure encrypted backup/recovery strategy
+- Clear/delete chat
+- Group description/photo
+- Admin controls
+- Member permissions
+- Invite links
+- Leave group
 
-Signal demonstrates that username-based contact can reduce the need to expose a phone number. citeturn0search1
+### Message operations
 
-## 6. Communication ecosystem
+- Reply/quote
+- Forward
+- Copy
+- Star/save
+- Pin/unpin
+- Message info
+- Delivery/read timestamps
+- Edit
+- Delete for self/everyone
+- Undo where safe
+- Multi-select
+- Bulk delete
+- Bulk forward
+- Retry failed messages
+- Link previews
+- Reply previews
 
-### Messaging
+### Organization
 
-- 1:1 chat
-- Groups
-- Communities
-- Broadcast channels
+- Favorites
+- Pinned chats
+- Archive
+- Unread filter
+- Groups/personal filters
+- Custom folders
+- Mute indicators
 - Saved Messages
-- Stories/status
-- Threads/topics for large groups
-- Polls and quizzes
+- Sorting
+- Recently active
+
+### Security
+
+- Active devices
+- Remote session revocation
+- Login history
+- Password change/reset
+- 2FA
+- Passkeys/WebAuthn
+- App PIN/biometric lock
+- Privacy controls
+- Blocked users
+- Security verification
+- Device/key management
+- Secure recovery
+
+## P1 — Offline and failure recovery
+
+Required message states:
+
+`queued → sending → sent → delivered → read`
+
+Failure states:
+
+`failed → retrying → sent`
+
+Rules:
+
+1. Generate a client ID before sending.
+2. Render the message optimistically.
+3. Persist the outbox before network delivery.
+4. Retry automatically after reconnect.
+5. Server acknowledgement removes the outbox item.
+6. Repeated retries must never create duplicate messages.
+7. Reconnect must reconcile missed events.
+8. A temporary backend/network failure must not silently delete a composed message.
+
+## P2 — Full communication ecosystem
+
+### Stories/Status
+
+- Photo/video/text stories
+- Custom audiences
+- Replies/reactions
+- 24-hour expiry
+- Story archive
+- Privacy controls
+
+### Communities/Channels
+
+- Communities
+- Announcement channels
+- Topic groups
+- Threads
+- Admin announcements
+- Member permissions
+- Moderation
+- Invite links
+- Community search
+
+### Advanced messaging
+
+- Polls/quizzes
 - Scheduled messages
 - Reminders
-- Events
+- Events/calendar
 - Live location
 - Contact sharing
-- Rich link previews
 - Stickers/GIFs
-- Voice notes with waveform and transcription
-
-WhatsApp Communities already demonstrate topic-based group organization, announcements, polls and events as a useful community pattern. citeturn0search9
+- Voice notes
+- Voice transcription
+- Advanced media/document players
 
 ### Calls
 
 - 1:1 voice/video
-- Group calls
+- Group calling
 - Call links
 - Screen sharing
-- Background/foreground recovery
-- Adaptive bitrate
-- Network-quality indicator
-- Noise suppression/echo cancellation
 - TURN fallback
+- Adaptive bitrate
+- Network quality
+- Noise suppression/echo cancellation
+- Permission recovery
+- Background/foreground recovery
+- Call history
+- Missed calls
 - Call-quality telemetry
-- Optional recording only with explicit consent and legal safeguards
 
-### Stories
-
-- Photo/video/text stories
-- Audience controls
-- Private/custom audiences
-- Replies/reactions
-- 24-hour expiry
-- Story archive for the owner
-
-Signal's current Stories design is a useful privacy reference because it supports custom audiences and encrypted stories. citeturn0search0
-
-## 7. Telegram-style extensibility — but privacy-first
-
-Build an ecosystem only after core messaging is extremely reliable.
+## P3 — Platform and business
 
 ### Developer platform
 
 - Bot accounts
-- Bot permissions/scopes
+- Permission scopes
 - Webhooks
-- Slash commands
+- Commands
 - Inline actions
 - Mini Apps
-- App-to-chat deep links
-- Secure OAuth-style authorization
+- Deep links
 - Developer dashboard
-- API keys with rotation
+- API keys
+- Key rotation
 - Usage limits
 - Audit logs
 
-Telegram's Bot API demonstrates how inline interactions, mini apps, polls, subscriptions and integrations can turn a messenger into a platform. citeturn0search2
-
-## 8. Business communication
-
-A global messenger should eventually support:
+### Business
 
 - Verified business profiles
 - Business hours
-- Product/catalog messages
-- Automated support bots
-- Shared team inboxes
+- Catalog messages
+- Support bots
+- Shared inbox
 - Agent assignment
-- Conversation labels
+- Labels
 - Customer notes
 - SLA timers
 - Templates
-- Appointment/event messages
-- Business analytics
-- Consent and opt-out controls
+- Analytics
+- Consent/opt-out controls
 
-## 9. AI Workspace
-
-AI must be optional and privacy-aware.
-
-### User-facing AI
+## P3 — AI Workspace
 
 - Rewrite
-- Translate
-- Summarize long conversations
-- Summarize unread messages
+- Translation
 - Smart replies
-- Voice transcription
-- Message search in natural language
+- Conversation summaries
+- Unread summaries
+- Natural-language message search
 - File/document understanding
-- Meeting/call summary
+- Voice transcription
+- Meeting/call summaries
 - Notification digest
 
-### Privacy rule
+**Privacy boundary:** private E2EE content must not be silently sent to an external AI provider. Clearly show when content leaves the trusted device/E2EE boundary.
 
-Do not silently send private E2EE message content to an external AI provider. Clearly identify when content leaves the device or E2EE trust boundary.
+## P2 — Trust, safety and accessibility
 
-## 10. Trust, safety and abuse prevention
-
-A global app needs safety infrastructure from the beginning.
+### Trust and safety
 
 - Spam detection
-- Rate limits
-- Message-request controls
+- Rate limiting
+- Message requests
 - Block/report
-- Abuse categories
-- Moderation queue
-- Group admin controls
-- Invite-link controls
+- Moderation queues
+- Admin controls
+- Invite-link protection
 - Anti-bot protections
-- Account recovery safeguards
-- Device/session anomaly detection
+- Account takeover detection
+- Appeals
+- Safe MIME validation
+- Malware scanning architecture
 - Security audit logs
-- User appeal workflow
-- Safe file/MIME validation
-- Malware scanning architecture for uploaded files
 
-## 11. Accessibility and global localization
+### Accessibility/globalization
 
-- WCAG-oriented keyboard navigation
-- Screen-reader labels
+- Keyboard navigation
 - Focus management
-- Large text support
+- Screen-reader labels
+- Large text
 - Reduced motion
 - High contrast
 - Captions/transcripts
 - RTL readiness
-- Unicode-safe message handling
-- Language packs
-- Local date/time/number formatting
-- Regional privacy/legal configuration
+- Unicode-safe messages
+- English/Telugu/Hindi language packs
+- Global localization
+- Regional date/time/number formatting
 
-Initial language targets can include English, Telugu and Hindi, followed by major global languages based on adoption telemetry.
+## P4 — Production scale and resilience
 
-## 12. Reliability and disaster recovery
-
-Production must survive failures.
-
+- Persistent media/object storage
 - Database backups
+- Point-in-time recovery
 - Tested restore procedure
-- Point-in-time recovery strategy
-- Persistent media storage
-- Health/readiness endpoints
 - Graceful shutdown
 - Connection draining
 - Queue recovery
-- External-service timeouts
-- Retry with exponential backoff
 - Dead-letter handling where queues are introduced
-- Monitoring and alerting
-- Error budgets
+- Health/readiness endpoints
 - Incident runbooks
+- Error budgets
+- CDN/media acceleration
+- Horizontal Socket.IO scaling
+- Regional application deployment when justified
+- Multi-region disaster recovery
+- Regional privacy/compliance controls
 
-## 13. Observability
+## Observability SLOs
 
-Track user-perceived performance, not just server CPU.
-
-### Core metrics
+Track:
 
 - Login success rate
 - Message send success rate
-- Message p50/p95/p99 delivery latency
-- Realtime connection success rate
+- Message p50/p95/p99 latency
+- Realtime connection success
 - Reconnect rate
 - Failed-message rate
 - Search latency
-- Media upload latency
-- Call setup success rate
+- Media upload/download latency
+- Call setup success
 - Call drop rate
-- API p50/p95/p99 latency
-- Database query latency
+- API p50/p95/p99
+- Database latency
 - Web Vitals
 - Crash/error rate
 
-### Correlation
+Never log message contents, passwords, tokens or cryptographic secrets merely to obtain these metrics.
 
-Every important request/event should be traceable with a request/event ID without logging message contents or cryptographic secrets.
+## Release gate
 
-## 14. Security engineering
+A release is **NO-GO** if any of these fail:
 
-- Threat model the complete system
-- Regular dependency updates
-- SAST/dependency scanning
-- Secret scanning
-- Security headers/CSP
-- Strict production CORS
-- CSRF strategy where cookie authentication is used
-- JWT/session rotation
-- Refresh-token/session revocation strategy
-- Brute-force protection
-- Account takeover detection
-- Secure password reset
-- Passkeys/WebAuthn
-- Encryption key lifecycle
-- Device verification
-- Security incident response
+- Two-user realtime send/receive
+- Offline queue and automatic retry
+- Duplicate suppression
+- Reconnect and missed-event reconciliation
+- Message ordering
+- Media upload/download
+- Authentication/session revocation
+- Block/report enforcement
+- E2EE key/device recovery path
+- Mobile browser operation
+- Android operation
+- Production health/readiness
+- Critical security checks
 
-## 15. Scale plan
-
-### Stage A — Single production stack
-
-Docker/Nginx → Fastify/Socket.IO → PostgreSQL → persistent object storage.
-
-### Stage B — Horizontal application scale
-
-Load balancer → multiple Fastify/Socket.IO instances → shared Socket.IO adapter/pub-sub → PostgreSQL → object storage → background workers.
-
-### Stage C — Global scale
-
-Regional application edges, CDN, geographically appropriate database strategy, queue infrastructure, regional media delivery and disaster recovery across regions.
-
-Do not introduce distributed infrastructure before telemetry proves it is necessary.
-
-## 16. Product quality rule
-
-**Do not add 100 new features while core messaging is slow.**
-
-Priority order:
-
-1. Message reliability
-2. Message speed
-3. Offline/reconnect behavior
-4. Authentication/security
-5. Calls
-6. Media
-7. Profile/chat organization
-8. Groups/communities
-9. Search
-10. Stories/channels
-11. Business platform
-12. Bots/mini apps
-13. AI
-
-## 17. Definition of “best messenger”
-
-Global Messenger is ready to call itself a serious global product only when users can say:
-
-- Messages appear instantly.
-- Messages never disappear because of a temporary network problem.
-- Calls connect reliably.
-- The app remains fast with thousands of conversations/messages.
-- Privacy settings are understandable.
-- My phone number does not need to be public.
-- I can use the same account across devices.
-- Search actually finds what I need.
-- Media works reliably on mobile networks.
-- The app recovers automatically after network/server interruptions.
-- The UI is accessible and localized.
-- Security does not require sacrificing usability.
-
-## 18. Implementation priority for Global Messenger
-
-### P0 — Make the core exceptionally fast
-
-- Local cache
-- Optimistic send
-- Offline outbox
-- Idempotent message IDs
-- Cursor pagination
-- Virtualized chat list
-- Socket reconnect/reconciliation
-- Request/response profiling
-- Database query profiling
-- Media thumbnail pipeline
-
-### P1 — Complete messenger fundamentals
-
-- Profile Center
-- Chat Info
-- Forward/share
-- Message info
-- Multi-select/bulk operations
-- Complete session/security center
-- Reliable E2EE multi-device recovery
-- Group permissions
-
-### P2 — Become a communication platform
-
-- Stories/status
-- Communities
-- Channels
-- Topics
-- Events
-- Polls
-- Scheduled messages
-- Advanced calls
-
-### P3 — Become an ecosystem
-
-- Business accounts
-- Bots
-- Mini Apps
-- Developer API
-- AI Workspace
-- Integrations
-
-### P4 — Global scale
-
-- Multi-region architecture
-- CDN/media acceleration
-- Advanced observability
-- Disaster recovery exercises
-- Regional compliance/privacy controls
-
-## Final principle
+## Product rule
 
 **Fast + reliable + private + simple beats feature overload.**
 
-Every new feature must pass four questions:
+Every feature must answer yes to:
 
-1. Does it make communication better?
-2. Does it preserve privacy and security?
+1. Does it improve communication?
+2. Does it preserve privacy/security?
 3. Does it keep the application fast?
-4. Can it recover safely when the network or backend fails?
-
-If the answer is no, the feature should not ship yet.
+4. Does it recover safely from network/backend failure?
