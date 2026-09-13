@@ -1,10 +1,10 @@
 {
   "name": "global-messenger-web",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "scripts": {
-    "apply:product-patches": "node scripts/apply-advanced-center-launcher.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-chat-stability-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && node scripts/apply-premium-ui-patch.mjs && node scripts/apply-reliability-patch.mjs && node scripts/apply-screen-share-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-webrtc-relay-patch.mjs",
+    "apply:product-patches": "node scripts/apply-advanced-center-launcher.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-chat-stability-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && node scripts/apply-premium-ui-patch.mjs && node scripts/apply-reliability-patch.mjs && node scripts/apply-screen-share-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-webrtc-relay-patch.mjs && node scripts/apply-p0-offline-outbox.mjs",
     "dev": "npm run apply:product-patches && vite",
     "build": "npm run apply:product-patches && tsc -b && vite build",
     "validate:operations": "node scripts/validate-operations.mjs",
@@ -37,7 +37,7 @@
     "vite": "^6.4.3"
   },
   "optionalDependencies": {
-    "@rollup/rollup-linux-x64-gnu": "4.63.1",
-    "@rollup/rollup-linux-x64-musl": "4.63.1"
+    "@rollup/rollup-linux-x64-gnu": "4.63.0",
+    "@rollup/rollup-linux-x64-musl": "4.63.0"
   }
 }
