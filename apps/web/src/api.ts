@@ -1,14 +1,6 @@
-declare global {
-  interface Window { __GM_CONFIG__?: { API_URL?: string }; }
-}
+import { API } from './runtime-config';
 
-const CLOUDFLARE_API = 'https://global-messenger-api.narsingbeesetti006.workers.dev';
-const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL || localStorage.getItem('gm_api_url') || '';
-const isLoopbackApi = (value?: string) => Boolean(value && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(value));
-const isNative = ['capacitor:', 'ionic:', 'file:', 'null'].includes(window.location.protocol);
-const API = configuredApi && (!isLoopbackApi(configuredApi) || import.meta.env.DEV)
-  ? configuredApi.replace(/\/$/, '')
-  : (isNative ? (localStorage.getItem('gm_api_url') || CLOUDFLARE_API) : (import.meta.env.DEV ? window.location.origin : CLOUDFLARE_API));
+export { API };
 
 type ConversationResponse = { id: string; isGroup: boolean; title: string | null; members: Array<{ user: any }>; messages: any[]; [key: string]: any };
 function normalizeConversation(value: any): ConversationResponse { const conversation = value && typeof value === 'object' ? value : {}; return { ...conversation, id: String(conversation.id ?? ''), isGroup: Boolean(conversation.isGroup), title: conversation.title ?? null, members: Array.isArray(conversation.members) ? conversation.members.filter((member: any) => member?.user?.id) : [], messages: Array.isArray(conversation.messages) ? conversation.messages.filter(Boolean) : [] }; }
@@ -64,4 +56,4 @@ export const api = {
   react: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }), unreact: (id: string, emoji: string) => request(`/api/messages/${encodeURIComponent(id)}/reactions`, { method: 'DELETE', body: JSON.stringify({ emoji }) }), bookmark: (id: string) => request(`/api/messages/${encodeURIComponent(id)}/bookmark`, { method: 'POST' }), unbookmark: (id: string) => request(`/api/messages/${encodeURIComponent(id)}/bookmark`, { method: 'DELETE' }),
   registerDevice: (token: string, platform: string) => request('/api/devices', { method: 'POST', body: JSON.stringify({ token, platform })), aiAssist: (prompt: string, context?: string) => request('/api/ai/assist', { method: 'POST', body: JSON.stringify({ prompt, context }))
 };
-export { API, request };
+export { request };
