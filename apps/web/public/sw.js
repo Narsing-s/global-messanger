@@ -1,4 +1,4 @@
-const CACHE_NAME = 'global-messenger-shell-v11';
+const CACHE_NAME = 'global-messenger-shell-v13';
 
 self.addEventListener('install', event => {
   event.waitUntil(self.skipWaiting());
@@ -7,7 +7,11 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(key => key.startsWith('global-messenger-shell-') && key !== CACHE_NAME).map(key => caches.delete(key))))
+      .then(keys => Promise.all(
+        keys
+          .filter(key => key.startsWith('global-messenger-shell-') && key !== CACHE_NAME)
+          .map(key => caches.delete(key))
+      ))
       .then(() => self.clients.claim())
   );
 });
@@ -15,33 +19,41 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
+
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Authentication, API and realtime traffic must always go directly to the network.
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
 
-  // The manifest must never be cached by this service worker. This prevents a stale
-  // or deployment-protection redirect from becoming a cached PWA installation failure.
-  if (url.pathname === '/manifest.webmanifest') {
-    event.respondWith(fetch(request, { cache: 'no-store' }));
-    return;
-  }
+  // Deployment metadata and the app shell must always come from the latest deployment.
+  // This prevents an older UI from surviving across Vercel/Cloudflare deployments.
+  const alwaysFresh = [
+    '/',
+    '/index.html',
+    '/sw.js',
+    '/manifest.webmanifest',
+    '/config.js'
+  ];
 
-  // Never serve the application HTML from the service-worker cache.
-  if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/sw.js') {
+  if (alwaysFresh.includes(url.pathname)) {
     event.respondWith(
-      fetch(request, { cache: 'no-store' }).catch(() => new Response('Global Messenger is temporarily offline.', {
-        status: 503,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-      }))
+      fetch(request, { cache: 'no-store' }).catch(() => {
+        if (url.pathname === '/' || url.pathname === '/index.html') {
+          return new Response('Global Messenger is temporarily offline.', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+          });
+        }
+        return new Response('', { status: 504 });
+      })
     );
     return;
   }
 
-  // Network-first for same-origin static resources; cached fallback is only for offline use.
+  // Hashed Vite assets are safe to cache, but always prefer the network so a new
+  // deployment becomes visible immediately when the asset URL changes.
   event.respondWith(
-    fetch(request).then(response => {
+    fetch(request, { cache: 'no-store' }).then(response => {
       if (response.ok && response.type === 'basic') {
         const copy = response.clone();
         caches.open(CACHE_NAME).then(cache => cache.put(request, copy)).catch(() => {});
