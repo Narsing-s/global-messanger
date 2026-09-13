@@ -1,7 +1,6 @@
 import { io } from 'socket.io-client';
+import { API } from './runtime-config';
 
-const CLOUDFLARE_API = 'https://global-messenger-api.narsingbeesetti006.workers.dev';
-const API = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? window.location.origin : CLOUDFLARE_API);
 const token = localStorage.getItem('gm_token');
 
 function prefs() {
