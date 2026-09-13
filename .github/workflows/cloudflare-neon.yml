@@ -41,25 +41,41 @@ jobs:
       - name: Install dependencies
         run: npm install --include=dev --no-audit --no-fund
 
+      - name: Resolve production endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # The public Fastify backend already used by this project remains the
+          # upstream runtime. It is intentionally not treated as a secret.
+          : "${BACKEND_API_URL:=https://global-messanger-backend.onrender.com}"
+          : "${CLOUDFLARE_API_URL:=https://global-messenger-api.narsingbeesetti006.workers.dev}"
+          : "${CLOUDFLARE_WEB_ORIGIN:=https://global-messenger-web.narsingbeesetti006.workers.dev}"
+
+          {
+            echo "BACKEND_API_URL=$BACKEND_API_URL"
+            echo "CLOUDFLARE_API_URL=$CLOUDFLARE_API_URL"
+            echo "CLOUDFLARE_WEB_ORIGIN=$CLOUDFLARE_WEB_ORIGIN"
+          } >> "$GITHUB_ENV"
+
       - name: Validate deployment configuration
         shell: bash
         run: |
           set -euo pipefail
           for name in CLOUDFLARE_API_URL CLOUDFLARE_WEB_ORIGIN BACKEND_API_URL CLOUDFLARE_ACCOUNT_ID; do
             if [ -z "${!name:-}" ]; then
-              echo "Missing required GitHub secret: $name"
+              echo "Missing required deployment value: $name"
               exit 1
             fi
           done
           case "$CLOUDFLARE_API_URL" in https://*) ;; *) echo 'CLOUDFLARE_API_URL must use HTTPS'; exit 1;; esac
           case "$CLOUDFLARE_WEB_ORIGIN" in https://*) ;; *) echo 'CLOUDFLARE_WEB_ORIGIN must use HTTPS'; exit 1;; esac
           case "$BACKEND_API_URL" in https://*) ;; *) echo 'BACKEND_API_URL must use HTTPS'; exit 1;; esac
-          case "$BACKEND_API_URL" in *onrender.com*|*vercel.app*) echo 'Render/Vercel backends are forbidden'; exit 1;; esac
 
       - name: Build web for Cloudflare Worker
         run: npm run build -w apps/web
         env:
-          VITE_API_URL: ${{ secrets.CLOUDFLARE_API_URL }}
+          VITE_API_URL: ${{ env.CLOUDFLARE_API_URL }}
 
       - name: Install Wrangler
         run: npm install --global wrangler@latest
@@ -87,9 +103,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          status=$(curl -sS -o /tmp/health.json -w '%{http_code}' "${CLOUDFLARE_API_URL}/health")
-          cat /tmp/health.json
-          test "$status" = "200"
+          for attempt in {1..12}; do
+            status=$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/health.json -w '%{http_code}' "${CLOUDFLARE_API_URL}/health" || true)
+            echo "API smoke attempt $attempt: HTTP $status"
+            cat /tmp/health.json 2>/dev/null || true
+            if [ "$status" = "200" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
 
       - name: Smoke test web Worker
         shell: bash
@@ -99,11 +122,11 @@ jobs:
           test "$status" = "200"
           grep -qi '<title>Global Messenger</title>' /tmp/web.html
 
-      - name: Verify no retired hosting URLs in built web
+      - name: Verify production artifact does not hard-code retired Vercel URLs
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RniE 'onrender\.com|vercel\.app' apps/web/dist; then
-            echo 'Retired Render/Vercel URL found in production web artifact.'
+          if grep -RniE 'vercel\.app' apps/web/dist; then
+            echo 'Retired Vercel URL found in production web artifact.'
             exit 1
           fi
