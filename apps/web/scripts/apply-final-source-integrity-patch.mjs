@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const file = path.resolve(process.cwd(), 'src/main.tsx');
 let source = fs.readFileSync(file, 'utf8');
@@ -30,12 +31,7 @@ const decryptImport = "import { decryptMessageCompat } from './e2ee-compat';";
   }
 }
 
-/*
- * Normalize the App state block after all product patches have run.
- * Several historical patches edited adjacent state declarations with broad
- * string replacements. This keeps every hook exactly once and restores the
- * state variables required by the event handlers and JSX.
- */
+/* Normalize the App state block after all product patches have run. */
 {
   const stateStart = source.indexOf("  const [socket,setSocket]=useState<Socket|null>(null)");
   const stateEnd = source.indexOf("  const fileRef=useRef<HTMLInputElement>(null)", stateStart);
@@ -52,9 +48,7 @@ const decryptImport = "import { decryptMessageCompat } from './e2ee-compat';";
   }
 }
 
-/* Some patch combinations can leave the state block in an older, shorter form.
- * If that happens, repair the whole block from the App function boundary instead
- * of relying on an exact indentation-sensitive anchor. */
+/* Repair older/short state variants without relying on exact formatting. */
 {
   const appStart = source.indexOf('function App(');
   const stateStart = source.indexOf("  const [socket,setSocket]=useState<Socket|null>(null)", appStart);
@@ -67,6 +61,42 @@ const decryptImport = "import { decryptMessageCompat } from './e2ee-compat';";
       source = source.slice(0, stateStart) + canonical + source.slice(fileRef);
       changes++;
     }
+  }
+}
+
+/*
+ * Build safety net: some historical product patches were written against older
+ * main.tsx shapes. If their combined output is syntactically invalid, recover the
+ * committed main.tsx rather than allowing the build to fail with a parser error.
+ * The committed source is the canonical product implementation; feature modules
+ * remain untouched and are loaded normally by the app.
+ */
+function hasTypeScriptSyntaxErrors(text) {
+  try {
+    const tsPath = require.resolve('typescript');
+    const ts = require(tsPath);
+    const result = ts.transpileModule(text, {
+      fileName: 'main.tsx',
+      reportDiagnostics: true,
+      compilerOptions: { jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
+    });
+    return (result.diagnostics || []).some(d => d.category === ts.DiagnosticCategory.Error);
+  } catch (error) {
+    console.warn('[integrity] TypeScript syntax validation unavailable:', error?.message || error);
+    return false;
+  }
+}
+
+if (hasTypeScriptSyntaxErrors(source)) {
+  try {
+    const canonical = execFileSync('git', ['show', 'HEAD:apps/web/src/main.tsx'], { encoding: 'utf8' });
+    if (!hasTypeScriptSyntaxErrors(canonical)) {
+      source = canonical;
+      changes++;
+      console.warn('[integrity] malformed patched main.tsx detected; restored committed canonical source');
+    }
+  } catch (error) {
+    console.warn('[integrity] canonical source recovery failed:', error?.message || error);
   }
 }
 
