@@ -13,6 +13,7 @@
     "dev:web:direct": "npm --prefix apps/web run dev -- --host 127.0.0.1 --strictPort",
     "build": "npm run build -w apps/web && npm run build -w apps/server",
     "build:web": "npm run build -w apps/web",
+    "verify:operations": "npm run validate:operations -w apps/web",
     "verify:local": "node scripts/local-verify.mjs",
     "smoke": "node scripts/local-smoke.mjs",
     "db:generate": "npm run db:generate -w apps/server",
