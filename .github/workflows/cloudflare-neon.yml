@@ -52,9 +52,10 @@ jobs:
           : "${CLOUDFLARE_API_URL:=https://global-messenger-api.narsingbeesetti006.workers.dev}"
           : "${CLOUDFLARE_WEB_ORIGIN:=https://global-messenger-web.narsingbeesetti006.workers.dev}"
 
-          # Render's public service is HTTPS-only. Normalize an accidentally
-          # stored http:// secret so a stale GitHub secret cannot block deploy.
-          BACKEND_API_URL="${BACKEND_API_URL/http:\/\//https:\/\/}"
+          # Normalize the backend URL defensively. GitHub Actions secrets can
+          # retain an old http:// value; the public Render service is HTTPS-only.
+          BACKEND_API_URL="$(printf '%s' "$BACKEND_API_URL" | sed -E 's#^http://#https://#')"
+          BACKEND_API_URL="$(printf '%s' "$BACKEND_API_URL" | xargs)"
 
           # Remove trailing slashes to prevent // in proxy paths and CORS origin.
           BACKEND_API_URL="${BACKEND_API_URL%/}"
