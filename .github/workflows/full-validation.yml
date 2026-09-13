@@ -99,6 +99,12 @@ jobs:
           E2E_LATENCY_BUDGET_MS: 3000
         run: npm run e2e:release -w apps/web
 
+      - name: Run remaining feature backend E2E
+        env:
+          E2E_BASE_URL: http://127.0.0.1:4000
+          E2E_TIMEOUT_MS: 15000
+        run: npm run e2e:remainder -w apps/web
+
       - name: Install Chromium for browser smoke test
         run: |
           npm install --no-save --ignore-scripts playwright@1.55.0
