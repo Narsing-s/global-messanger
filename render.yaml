@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm ci --include=dev && npm run db:generate -w apps/server && npm run db:deploy -w apps/server && npm run build -w apps/server
+    buildCommand: npm install --include=dev --no-audit --no-fund && npm run db:generate -w apps/server && npm run db:deploy -w apps/server && npm run build -w apps/server
     startCommand: npm run start -w apps/server
     healthCheckPath: /ready
     envVars:
@@ -42,7 +42,7 @@ services:
     runtime: static
     plan: free
     region: singapore
-    buildCommand: npm ci && npm run build -w apps/web
+    buildCommand: npm install --no-audit --no-fund && npm run build -w apps/web
     staticPublishPath: apps/web/dist
     envVars:
       - key: VITE_API_URL
