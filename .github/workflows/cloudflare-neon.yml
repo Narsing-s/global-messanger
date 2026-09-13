@@ -91,21 +91,23 @@ jobs:
       - name: Deploy API Worker
         working-directory: apps/api-worker
         run: |
+          set -euo pipefail
           wrangler deploy \
             --name global-messenger-api \
             --var "UPSTREAM_API:${BACKEND_API_URL}" \
-            --var "ALLOWED_ORIGIN:${CLOUDFLARE_WEB_ORIGIN}" \
-            --account-id "${CLOUDFLARE_ACCOUNT_ID}"
+            --var "ALLOWED_ORIGIN:${CLOUDFLARE_WEB_ORIGIN}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy web Worker
         run: |
+          set -euo pipefail
           wrangler deploy \
-            --config apps/web/wrangler.toml \
-            --account-id "${CLOUDFLARE_ACCOUNT_ID}"
+            --config apps/web/wrangler.toml
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Smoke test API Worker
         shell: bash
