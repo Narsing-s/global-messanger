@@ -1,9 +1,8 @@
 import { Socket } from 'socket.io-client';
 
+const CLOUDFLARE_API = 'https://global-messenger-api.narsingbeesetti006.workers.dev';
 const configuredApi = window.__GM_CONFIG__?.API_URL || import.meta.env.VITE_API_URL;
-const API = configuredApi || (import.meta.env.DEV
-  ? window.location.origin
-  : 'https://global-messanger-backend.onrender.com');
+const API = configuredApi || (import.meta.env.DEV ? window.location.origin : CLOUDFLARE_API);
 
 const originalConnect = Socket.prototype.connect;
 
