@@ -15,6 +15,7 @@
     "build:web": "npm run build -w apps/web",
     "verify:operations": "npm run validate:operations -w apps/web",
     "e2e:release": "npm run e2e:release -w apps/web",
+    "e2e:remainder": "npm run e2e:remainder -w apps/web",
     "verify:local": "node scripts/local-verify.mjs",
     "smoke": "node scripts/local-smoke.mjs",
     "db:generate": "npm run db:generate -w apps/server",
