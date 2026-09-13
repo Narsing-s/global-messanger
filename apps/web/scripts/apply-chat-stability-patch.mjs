@@ -4,12 +4,11 @@ import path from 'node:path';
 const file = path.resolve(process.cwd(), 'src/main.tsx');
 let source = fs.readFileSync(file, 'utf8');
 
-if (!source.includes('blockedSent')) {
+if (!source.includes('[blockedSent,setBlockedSent]=useState')) {
   source = source.replace(
     "[socketError,setSocketError]=useState(''),[presence,setPresence]=useState<Record<string,boolean>>({}),[conversationLoading,setConversationLoading]=useState(false),[aiLoading,setAiLoading]=useState(false);",
     "[socketError,setSocketError]=useState(''),[presence,setPresence]=useState<Record<string,boolean>>({}),[conversationLoading,setConversationLoading]=useState(false),[aiLoading,setAiLoading]=useState(false),[blockedSent,setBlockedSent]=useState<Record<string,boolean>>({});"
   );
-  // Keep the original delivery listener intact so later reliability patches can safely extend it.
   source = source.replace(
     "s.on('message:delivered',()=>setSocketError(''));",
     "s.on('message:blocked',(d:any)=>{if(d?.messageId)setBlockedSent(p=>({...p,[String(d.messageId)]:true}))});s.on('message:delivered',()=>setSocketError(''));"
