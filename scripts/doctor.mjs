@@ -64,14 +64,13 @@ if (failures.length) {
   console.error('\nGlobal Messenger local doctor: FAILED');
   for (const failure of failures) console.error(`  ✖ ${failure}`);
   process.exitCode = 1;
-  return;
+} else {
+  console.log('\nGlobal Messenger local doctor: OK');
+  console.log(`  ✓ Node ${nodeVersion}`);
+  console.log(`  ✓ npm ${npm}`);
+  console.log('  ✓ workspace, Prisma schema and web entrypoint found');
+  if (dockerVersion) console.log(`  ✓ ${dockerVersion}`);
+  if (gitVersion) console.log(`  ✓ ${gitVersion}`);
+  for (const warning of warnings) console.warn(`  ! ${warning}`);
+  console.log('');
 }
-
-console.log('\nGlobal Messenger local doctor: OK');
-console.log(`  ✓ Node ${nodeVersion}`);
-console.log(`  ✓ npm ${npm}`);
-console.log('  ✓ workspace, Prisma schema and web entrypoint found');
-if (dockerVersion) console.log(`  ✓ ${dockerVersion}`);
-if (gitVersion) console.log(`  ✓ ${gitVersion}`);
-for (const warning of warnings) console.warn(`  ! ${warning}`);
-console.log('');
