@@ -23,5 +23,10 @@ if (fs.existsSync(remainder)) {
   text = text.replace(/\n  app\.patch\('\/api\/privacy\/settings'[\s\S]*?\n  app\.get\('\/api\/blocked'/, "\n  app.get('/api/blocked'");
   text = text.replace(/\n  app\.post\('\/api\/messages\/bulk-delete'[\s\S]*?\n  app\.post\('\/api\/messages\/bulk-forward'/, "\n  app.post('/api/messages/bulk-forward'");
   text = text.replace(/\n  \/\* ----------------------------- polls \/ schedule ------------------------- \*\/[\s\S]*?\n  \/\* ------------------------------ universal search ------------------------- \*\//, "\n  /* ------------------------------ universal search ------------------------- */");
+
+  // Universal search is already registered by the advanced route set.
+  // Remove the remainder copy so Fastify cannot register GET /api/search/universal twice.
+  text = text.replace(/\n  \/\* ------------------------------ universal search ------------------------- \*\/[\s\S]*?\n}\s*$/, '\n}');
+
   fs.writeFileSync(remainder, text);
 }
