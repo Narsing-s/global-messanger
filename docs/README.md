@@ -2,72 +2,114 @@
 
 Welcome to the **Global Messenger** documentation hub.
 
-Global Messenger is a secure, real-time messaging platform for Web and Android with private chats, groups, media, calls, privacy controls, multi-device sessions, and an expanding set of advanced messenger features.
+Global Messenger is a full-stack, real-time messaging platform for Web and Android. The documentation is organized around the actual product architecture, feature centers, security model, deployment model and end-to-end release process.
+
+> **Documentation rule:** a feature described as a *foundation* or *roadmap* item is not a claim that every UI state, platform-specific edge case or production integration is complete.
 
 ## 🧭 Start Here
 
-- **[🌍 Project Wiki](./WIKI.md)** — complete product, architecture, security, deployment, troubleshooting and roadmap reference.
-- **[🏠 Project README](../README.md)** — public project overview, setup instructions, Android testing and product roadmap.
-- **[📱 Android APK Testing Guide](./ANDROID-TESTING.md)** — exact APK installation, backend health, CORS, registration/login, messaging, calls, E2EE and logcat troubleshooting procedure.
+- **[🏠 Project README](../README.md)** — public overview, architecture, setup, Docker deployment, Android testing and roadmap.
+- **[🌍 Project Wiki](./WIKI.md)** — detailed product behavior, architecture, security, retention and operational guidance.
+- **[✨ Feature Matrix](./03-features.md)** — current product centers, feature scope, foundation status and roadmap.
+- **[🧪 Testing & QA](./04-testing.md)** — browser, Android, two-user realtime, media, groups, calls, E2EE and release-gate testing.
+
+## 📖 Documentation Map
+
+| Document | Purpose |
+|---|---|
+| `01-getting-started.md` | Local setup and first run |
+| `02-architecture.md` | Application architecture and service boundaries |
+| `03-features.md` | Product feature matrix and roadmap |
+| `04-testing.md` | End-to-end QA and release testing |
+| `05-production-deployment.md` | Production deployment guidance |
+| `06-android-play-store.md` | Android release / Play Store preparation |
+| `07-release-checklist.md` | Release checklist |
+| `08-contributing.md` | Contribution workflow and engineering rules |
+| `09-cross-platform-release.md` | Cross-platform release process |
+| `09-production-launch.md` | Production launch checklist |
+| `10-cross-platform-push-notifications.md` | Push notification architecture/setup |
+| `10-render-deploy.md` | Render deployment reference |
+| `11-market-readiness.md` | Product and launch readiness |
+| `12-production-operations.md` | Production operations and support |
+| `13-external-production-setup.md` | External production service setup |
+| `WIKI.md` | Detailed product/architecture reference |
 
 ## 🧩 Product Centers
 
-The application is organized around these major product areas:
-
-1. **Profile Center** — profile photo, display name, username, bio, status, privacy and profile sharing.
+1. **Profile Center** — profile photo, display name, username, bio, status/privacy and profile sharing.
 2. **Chat Info** — contact/group information, media, files, links, starred/pinned items and chat controls.
 3. **Message Tools** — reply, forward, copy, star/save, pin, message info, retry and multi-select/bulk operations.
 4. **Conversation Organization** — favorites, pinned chats, archive, filters, folders and Saved Messages.
-5. **Media Center** — images, video, audio, voice messages, documents, galleries and upload/download progress.
-6. **Notification Center** — message, mention, group and call notifications with per-chat controls.
-7. **Security Center** — active devices, session management, privacy, 2FA/passkeys/biometric roadmap and key management.
-8. **Universal Search** — people, chats, messages, files, links and groups.
-9. **Command Center** — unread items, calls, groups, saved content, files, security and quick actions.
-10. **Settings Center** — account, privacy, security, notifications, appearance, chat, storage, language and about.
-11. **Advanced Messaging** — polls, scheduled messages, reminders, location, contacts and events roadmap.
-12. **Advanced Calls** — calling, history, group calling, screen sharing and TURN reliability roadmap.
-13. **AI Workspace** — rewriting, translation, summaries, smart search, transcription and assistant roadmap.
-
-The feature-center definitions are maintained in `apps/server/src/product-center.ts`.
+5. **Media Center** — images, video, audio, voice messages, documents and transfer progress.
+6. **Groups** — membership, administration, invite links and group messaging.
+7. **Notification Center** — message, mention, group and call notification controls.
+8. **Security Center** — authentication, sessions, revocation, privacy and security roadmap.
+9. **Universal Search** — people, chats, messages, files, links and groups.
+10. **Command Center** — fast access to unread items, calls, groups, saved content and security.
+11. **Settings Center** — account, privacy, security, notifications, appearance, chat and storage.
+12. **Advanced Messaging** — polls, scheduling, reminders, location, contacts and events roadmap.
+13. **Advanced Calls** — voice/video foundation, history, signalling and reliability roadmap.
+14. **AI Workspace** — rewriting, translation, summaries, smart search, transcription and assistant roadmap.
 
 ## 🧪 Release Testing
 
-Use the Android testing guide before accepting an APK as working. A successful Gradle build only proves that the package can be produced; it does not prove backend connectivity, authentication, realtime messaging, media, calls or E2EE work on a real device.
-
-Recommended order:
+Do not use a successful Gradle/Vite build as the release gate. Test the real user journey:
 
 ```text
-APK install → app startup → /health → registration → login →
-user search → direct chat → realtime message → message operations →
-media → groups → calls → sessions/privacy → E2EE
+APK/browser startup
+  ↓
+Backend health
+  ↓
+Registration/login
+  ↓
+User search
+  ↓
+Direct chat
+  ↓
+Realtime send/receive
+  ↓
+Message operations
+  ↓
+Media
+  ↓
+Groups
+  ↓
+Calls
+  ↓
+Profile/privacy/sessions
+  ↓
+E2EE behavior
 ```
 
-The guide also covers the native Capacitor origin `capacitor://localhost`, Android `INTERNET` permission, production API configuration and `adb logcat` diagnostics.
+See **[Testing & QA](./04-testing.md)** for the complete checklist.
 
-## 🚀 Deployment Documentation
+## 🚀 Deployment
 
-- **Docker frontend:** recommended production frontend/source of truth.
-- **Render:** deployment blueprint in `../render.yaml`.
-- **Environment:** production secrets must be supplied through the deployment environment.
-- **Database:** PostgreSQL with Prisma migrations.
-- **Android:** Capacitor-based Android application with native Gradle build support.
+- **Docker/Nginx:** recommended production frontend/source of truth.
+- **Fastify + Socket.IO:** backend API and realtime layer.
+- **PostgreSQL + Prisma:** persistent application data.
+- **Render:** supported deployment blueprint/reference.
+- **Capacitor + Android:** native Android application.
 
-## 🛡️ Important Product Rules
+Production secrets must be supplied through secure environment configuration and must never be committed to the repository.
 
+## 🔐 Product & Security Rules
+
+- Authentication and authorization are server-side responsibilities.
 - Normal messages must not be silently deleted because they are old.
-- Disappearing Messages must remain an explicit user-controlled option.
-- Internal encryption/call-signalling payloads must never be rendered as normal chat messages.
-- Authentication and authorization must be preserved when changing features.
-- Production secrets must never be committed to GitHub.
-- Major architecture or product-behavior changes should update the README and wiki.
+- Disappearing Messages are explicitly user-controlled.
+- Internal encryption envelopes and call-signalling payloads must never render as normal chat messages.
+- Encrypted historical messages may require device key material that is unavailable after a device change; cryptographic identity recovery is separate from password recovery.
+- Uploaded files require persistent storage in production deployments where container-local storage is ephemeral.
+- Never commit passwords, JWT secrets, Firebase private keys, API tokens, database credentials or Android signing keys.
 
-## 🔗 Repository Areas
+## 🔗 Important Repository Areas
 
 - [Web application](../apps/web/)
 - [Server application](../apps/server/)
-- [Database schema](../apps/server/prisma/schema.prisma)
+- [Prisma schema](../apps/server/prisma/schema.prisma)
 - [Product-center definitions](../apps/server/src/product-center.ts)
 - [Render deployment](../render.yaml)
 - [CI/CD workflows](../.github/workflows/)
 
-> Keep the documentation synchronized with actual product behavior, security rules, deployment architecture and supported features.
+> Keep the README, documentation, tests and product behavior synchronized whenever a feature or architecture changes.
