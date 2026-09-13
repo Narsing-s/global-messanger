@@ -25,12 +25,8 @@ async function request(path, { token, method = 'GET', body, expected = [200] } =
     let data = {};
     try { data = text ? JSON.parse(text) : {}; } catch { data = { message: text }; }
     const ms = Math.round(performance.now() - started);
-    if (!expected.includes(response.status)) {
-      throw new Error(`${method} ${path} -> ${response.status}: ${text.slice(0, 500)}`);
-    }
-    if (ms > latencyBudgetMs && !path.includes('/health') && !path.includes('/ready')) {
-      console.warn(`SLOW ${method} ${path}: ${ms}ms (budget ${latencyBudgetMs}ms)`);
-    }
+    if (!expected.includes(response.status)) throw new Error(`${method} ${path} -> ${response.status}: ${text.slice(0, 500)}`);
+    if (ms > latencyBudgetMs && !path.includes('/health') && !path.includes('/ready')) console.warn(`SLOW ${method} ${path}: ${ms}ms (budget ${latencyBudgetMs}ms)`);
     return { data, ms };
   } finally {
     clearTimeout(timer);
@@ -59,6 +55,32 @@ function connect(token) {
   });
 }
 
+function waitForMessage(socket, predicate, label) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} was not received within timeout`)), timeoutMs);
+    const handler = message => {
+      if (!predicate(message)) return;
+      clearTimeout(timer);
+      socket.off('message:new', handler);
+      resolve(message);
+    };
+    socket.on('message:new', handler);
+  });
+}
+
+function waitForAck(socket, clientId) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`message:ack for ${clientId} was not received`)), timeoutMs);
+    const handler = data => {
+      if (data?.clientId !== clientId) return;
+      clearTimeout(timer);
+      socket.off('message:ack', handler);
+      resolve(data);
+    };
+    socket.on('message:ack', handler);
+  });
+}
+
 const failures = [];
 let socketA;
 let socketB;
@@ -74,6 +96,9 @@ try {
   const loginB = await request('/api/auth/login', { method: 'POST', body: { username: userB.user.username, password: 'GlobalMessenger!123' } });
   const tokenA = loginA.data.token;
   const tokenB = loginB.data.token;
+
+  const badLogin = await request('/api/auth/login', { method: 'POST', body: { username: userA.user.username, password: 'wrong-password' }, expected: [401] });
+  if (badLogin.data?.token) throw new Error('Invalid login unexpectedly returned a token');
 
   const search = await request(`/api/users/search?q=${encodeURIComponent(userB.user.username)}`, { token: tokenA });
   if (!Array.isArray(search.data) || !search.data.some(item => item.id === userB.user.id)) throw new Error('User search did not find the second test user');
@@ -95,21 +120,26 @@ try {
 
   const body = `E2E message ${Date.now()}`;
   const clientId = crypto.randomUUID();
-  const received = new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Receiver did not receive message:new within timeout')), timeoutMs);
-    socketB.once('message:new', message => {
-      if (message?.clientId === clientId || message?.body === body) {
-        clearTimeout(timer);
-        resolve(message);
-      }
-    });
-  });
+  const received = waitForMessage(socketB, message => message?.clientId === clientId || message?.body === body, 'Initial realtime message');
+  const ack = waitForAck(socketA, clientId);
   const sentAt = performance.now();
   socketA.emit('message:send', { conversationId, body, type: 'text', clientId });
-  const message = await received;
+  const [message] = await Promise.all([received, ack]);
   const realtimeMs = Math.round(performance.now() - sentAt);
   if (realtimeMs > latencyBudgetMs) throw new Error(`Realtime delivery took ${realtimeMs}ms, above ${latencyBudgetMs}ms budget`);
   if (!message?.id) throw new Error('Realtime message had no server id');
+
+  socketB.disconnect();
+  await sleep(100);
+  socketB = await connect(tokenB);
+  socketB.emit('conversation:join', conversationId);
+  await sleep(100);
+  const reconnectBody = `Reconnect message ${Date.now()}`;
+  const reconnectClientId = crypto.randomUUID();
+  const reconnectReceived = waitForMessage(socketB, item => item?.clientId === reconnectClientId || item?.body === reconnectBody, 'Post-reconnect message');
+  const reconnectAck = waitForAck(socketA, reconnectClientId);
+  socketA.emit('message:send', { conversationId, body: reconnectBody, type: 'text', clientId: reconnectClientId });
+  await Promise.all([reconnectReceived, reconnectAck]);
 
   const messageId = message.id;
   await request(`/api/messages/${messageId}`, { token: tokenA, method: 'PATCH', body: { body: `${body} edited` }, expected: [200] });
@@ -125,7 +155,7 @@ try {
   if (!group.data?.id) throw new Error('Group creation failed');
   await request(`/api/conversations/${group.data.id}/messages?limit=20`, { token: tokenB });
 
-  console.log(`PASS: release E2E core flow; realtime delivery ${realtimeMs}ms; HTTP smoke budget ${latencyBudgetMs}ms.`);
+  console.log(`PASS: release E2E core flow; invalid-login rejection; reconnect; message ack; realtime delivery ${realtimeMs}ms; HTTP smoke budget ${latencyBudgetMs}ms.`);
 } catch (error) {
   failures.push(error instanceof Error ? error.message : String(error));
 } finally {
