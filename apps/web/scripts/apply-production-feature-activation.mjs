@@ -18,5 +18,14 @@ if (!source.includes('__gmConversations')) {
   );
 }
 
+source = source.replace(
+  '<button title="Contacts"><UserPlus/><span>Contacts</span></button>',
+  '<button title="Contacts" onClick={()=>window.dispatchEvent(new CustomEvent(\'gm:options\'))}><UserPlus/><span>Contacts</span></button>'
+);
+source = source.replace(
+  '<button title="Notifications"><Bell/></button>',
+  '<button title="Notifications" onClick={()=>window.dispatchEvent(new CustomEvent(\'gm:notifications\'))}><Bell/></button>'
+);
+
 fs.writeFileSync(file, source);
 console.log('[Production] messenger capabilities activated');
