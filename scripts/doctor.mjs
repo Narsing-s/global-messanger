@@ -19,8 +19,6 @@ function command(name, args) {
 }
 
 function npmVersion() {
-  // npm itself invokes this script on Windows. Prefer the known npm executable
-  // from npm_execpath, then fall back to npm.cmd/npm. This also works from Git Bash.
   const candidates = [];
   if (process.env.npm_execpath) {
     candidates.push([process.execPath, [process.env.npm_execpath, '--version']]);
@@ -41,8 +39,12 @@ function versionMajor(value) {
 }
 
 const nodeVersion = process.version;
-if (versionMajor(nodeVersion) < 22) {
+const nodeMajor = versionMajor(nodeVersion);
+if (nodeMajor < 22) {
   failures.push(`Node.js 22+ is required (found ${nodeVersion}).`);
+}
+if (process.platform === 'win32' && nodeMajor >= 24) {
+  warnings.push('Node.js 24+ is installed on Windows. Use Node.js 22 LTS for the local build/verification gate because Node 24 can hit a libuv UV_HANDLE_CLOSING shutdown assertion after Vite builds complete.');
 }
 
 const npm = npmVersion();
@@ -61,7 +63,8 @@ if (!gitVersion) warnings.push('Git is not available on PATH.');
 if (failures.length) {
   console.error('\nGlobal Messenger local doctor: FAILED');
   for (const failure of failures) console.error(`  ✖ ${failure}`);
-  process.exit(1);
+  process.exitCode = 1;
+  return;
 }
 
 console.log('\nGlobal Messenger local doctor: OK');
