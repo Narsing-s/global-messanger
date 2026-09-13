@@ -12,9 +12,6 @@ let source = fs.readFileSync(mainFile, 'utf8');
 // the user enter the public HTTPS Docker URL and persists it as gm_api_url.
 if (!source.includes('gm-mobile-auth-v2')) {
   const start = source.indexOf('function Auth(');
-  // Bubble is declared before Auth in the current source. The old patch searched for
-  // Bubble after Auth, so it failed every build even though Auth was present. Replace
-  // Auth through the render statement instead; this is independent of function order.
   const end = source.indexOf('\n\ncreateRoot', start);
   if (start < 0 || end < 0) throw new Error('Mobile auth hardening: Auth/render anchors not found');
 
@@ -29,18 +26,18 @@ if (!source.includes('gm-mobile-auth-v2')) {
     e.preventDefault();setError('');setLoading(true);
     try{
       const base=normalized(showServer?serverUrl:configured);
-      if(!base) throw Error('Enter your public HTTPS server URL first. Example: https://your-messenger-domain');
-      if(native && !/^https:\\/\\//i.test(base)) throw Error('Mobile app requires a public HTTPS server URL. Do not use localhost or 127.0.0.1.');
-      if(/https?:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?$/i.test(base)) throw Error('This server address points to the phone itself. Enter the public HTTPS Docker URL.');
+      if(!base) throw Error('Enter your public HTTPS server URL first.');
+      if(native && !/^https:\\/\\//i.test(base)) throw Error('Mobile app requires a public HTTPS server URL.');
+      if(/https?:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?$/i.test(base)) throw Error('Do not use localhost or 127.0.0.1 from a mobile device.');
       if(showServer){localStorage.setItem('gm_api_url',base);setServerUrl(base)}
       const health=await fetch(base+'/health',{method:'GET',cache:'no-store'});
-      if(!health.ok) throw Error('Server is reachable but health check failed ('+health.status+'). Check the Docker API/proxy configuration.');
+      if(!health.ok) throw Error('Server health check failed ('+health.status+').');
       const url=base+(register?'/api/auth/register-email':'/api/auth/login-email');
       const body=register?{username,displayName:displayName||username,email,password}:{identifier:username,password};
       const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body),cache:'no-store'});
       let d:any={};try{d=await r.json()}catch{}
       if(!r.ok) throw Error(d?.message||d?.error||'Authentication failed ('+r.status+')');
-      if(!d?.token||!d?.user) throw Error('Authentication succeeded but the server returned an invalid session response.');
+      if(!d?.token||!d?.user) throw Error('Authentication succeeded but returned an invalid session.');
       localStorage.setItem('gm_token',d.token);localStorage.setItem('gm_user',JSON.stringify(d.user));localStorage.setItem('gm_api_url',base);location.href='/';
     }catch(e:any){setError(e?.message||'Unable to sign in. Check your server URL and network connection.')}finally{setLoading(false)}
   }
@@ -53,7 +50,7 @@ if (!source.includes('gm-mobile-auth-v2')) {
       <label>{register?'Username or phone':'Email, username or phone'}<input value={username} onChange={e=>setUsername(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="username" placeholder={register?'Choose a username':'Enter your login'} required/></label>
       <label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete={register?'new-password':'current-password'} placeholder="Your password" required/></label>
       {register&&<label>Confirm password<input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} autoComplete="new-password" placeholder="Repeat your password" required/></label>}
-      {native&&<div className="server-config"><button type="button" className="server-toggle" onClick={()=>setShowServer(v=>!v)}>{showServer?'Hide server settings':'⚙ Server / Docker URL'}</button>{showServer&&<input value={serverUrl} onChange={e=>onServer(e.target.value)} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="https://your-public-docker-domain"/>}<small>Mobile builds cannot reach a Docker service through phone localhost. Use the public HTTPS address of your messenger.</small></div>}
+      {native&&<div className="server-config"><button type="button" className="server-toggle" onClick={()=>setShowServer(v=>!v)}>{showServer?'Hide server settings':'⚙ Server / Docker URL'}</button>{showServer&&<input value={serverUrl} onChange={e=>onServer(e.target.value)} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="https://your-public-docker-domain"/>}<small>Mobile builds cannot reach a Docker service through phone localhost. Use the public HTTPS address.</small></div>}
       {error&&<div className="auth-error" role="alert">{error}</div>}
       <button className="auth-submit" disabled={loading}>{loading?'Connecting…':register?'Create account':'Sign in'}</button>
     </form>
@@ -66,14 +63,4 @@ if (!source.includes('gm-mobile-auth-v2')) {
   fs.writeFileSync(mainFile,source);
 }
 
-// Ensure every TypeScript module that previously hard-coded the old hosted backend
-// respects the runtime mobile API URL first. This prevents mixed-origin auth/E2EE/socket
-// behavior after moving the product from Render to Docker.
-const srcDir=path.resolve(root,'src');
-const fallbackFiles=['api.ts','e2ee.ts','e2ee-compat.ts','features.ts','socket-room-fix.ts','notification-runtime.ts','advanced-ui.ts','sfu-client.ts'];
-for(const name of fallbackFiles){
-  const file=path.join(srcDir,name); if(!fs.existsSync(file)) continue;
-  let text=fs.readFileSync(file,'utf8');
-  text=text.replace(/'https:\/\/global-messanger-backend\.onrender\.com'/g, "(localStorage.getItem('gm_api_url') || 'https://global-messanger-backend.onrender.com')");
-  fs.writeFileSync(file,text);
-}
+console.log('Mobile auth hardening patch applied');
