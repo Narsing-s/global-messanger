@@ -2,6 +2,18 @@ FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 
+# mediasoup may need to build its native worker when a matching prebuilt
+# binary is unavailable. Keep the image reproducible with the required
+# Python/PIP and native build toolchain available during npm ci.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    python3 \
+    python3-pip \
+    python-is-python3 \
+  && rm -rf /var/lib/apt/lists/*
+
 # Optional build metadata makes it possible to verify exactly which source
 # commit produced a running frontend image.
 ARG APP_VERSION=dev
