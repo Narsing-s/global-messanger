@@ -18,7 +18,6 @@
   const style = document.createElement('style');
   style.id = 'gm-release-center-style';
   style.textContent = `
-  #gm-release-launcher{position:fixed;right:18px;bottom:18px;z-index:99990;border:0;border-radius:999px;padding:12px 16px;background:#635bff;color:#fff;font:700 12px system-ui;box-shadow:0 12px 36px #0003;cursor:pointer}
   #gm-release-center{position:fixed;inset:0;z-index:99991;background:rgba(10,15,30,.72);display:none;place-items:center;padding:18px;font-family:system-ui;color:#182033}
   #gm-release-center.open{display:grid}
   .gm-rc-card{width:min(1080px,96vw);height:min(820px,92vh);background:#fff;border-radius:24px;overflow:hidden;display:grid;grid-template-rows:auto 1fr;box-shadow:0 30px 100px #0005}
@@ -43,12 +42,9 @@
     </div></div>`;
   document.body.appendChild(root);
 
-  const launcher = document.createElement('button');
-  launcher.id = 'gm-release-launcher';
-  launcher.textContent = 'Product Center';
-  launcher.setAttribute('aria-label','Open Global Messenger Product Center');
-  document.body.appendChild(launcher);
-  launcher.onclick = () => { root.classList.add('open'); refresh(); };
+  // This center is intentionally not given its own floating button. Product Center
+  // is the single global launcher so login and chat screens never show duplicates.
+  window.__gmReleaseCenterOpen = () => { root.classList.add('open'); refresh(); };
   root.querySelector('#gm-rc-close').onclick = () => root.classList.remove('open');
   root.addEventListener('mousedown', e => { if (e.target === root) root.classList.remove('open'); });
 
