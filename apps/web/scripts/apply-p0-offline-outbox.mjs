@@ -4,8 +4,10 @@ import path from 'node:path';
 const file = path.resolve('src/main.tsx');
 let source = fs.readFileSync(file, 'utf8');
 if (!source.includes("from './offline-outbox'")) {
-  source = source.replace("import { installEnhancements } from './enhancements';", "import { installEnhancements } from './enhancements';\nimport { installOfflineOutbox, queueOfflineMessage, removeOfflineMessage, pendingOfflineMessages } from './offline-outbox';
-");
+  source = source.replace(
+    "import { installEnhancements } from './enhancements';",
+    "import { installEnhancements } from './enhancements';\nimport { installOfflineOutbox, queueOfflineMessage, removeOfflineMessage, pendingOfflineMessages } from './offline-outbox';\n"
+  );
 }
 if (!source.includes('const flushOfflineMessage =')) {
   const anchor = "  const fileRef=useRef<HTMLInputElement>(null),typingTimer=useRef<number|undefined>(undefined);";
