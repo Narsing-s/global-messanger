@@ -21,6 +21,8 @@ services:
       dockerfile: apps/server/Dockerfile
     restart: unless-stopped
     init: true
+    ports:
+      - "${API_PORT:-4000}:4000"
     environment:
       NODE_ENV: production
       PORT: 4000
