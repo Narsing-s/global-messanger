@@ -29,14 +29,6 @@ export async function registerPhase1Routes(app: FastifyInstance, prisma: PrismaC
     const userId = (request.user as AuthUser).id, limit = Math.min(Math.max(Number((request.query as any)?.limit ?? 100), 1), 200);
     return prisma.messageBookmark.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: limit, include: { message: { include: { sender: { select: { id: true, username: true, displayName: true, avatarUrl: true } }, conversation: { select: { id: true, title: true, isGroup: true } } } } } });
   });
-  app.get<{ Params: IdParams }>('/api/messages/:id/info', secured, async (request, reply) => {
-    const userId = (request.user as AuthUser).id;
-    const message = await prisma.message.findUnique({ where: { id: request.params.id }, include: { sender: { select: { id: true, username: true, displayName: true } }, receipts: { include: { user: { select: { id: true, username: true, displayName: true } } } }, reactions: true, bookmarks: { select: { userId: true, createdAt: true } }, pin: true } });
-    if (!message) return reply.notFound('Message not found');
-    const member = await prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId: message.conversationId, userId } } });
-    if (!member) return reply.forbidden('Not a conversation member');
-    return message;
-  });
   app.post('/api/messages/bulk-delete', secured, async (request, reply) => {
     const userId = (request.user as AuthUser).id;
     const parsed = z.object({ messageIds: z.array(z.string().min(1)).min(1).max(100) }).safeParse(request.body ?? {});
