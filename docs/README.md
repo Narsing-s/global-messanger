@@ -11,7 +11,9 @@ Global Messenger is a full-stack, real-time messaging platform for Web and Andro
 - **[🏠 Project README](../README.md)** — public overview, architecture, setup, Docker deployment, Android testing and roadmap.
 - **[🌍 Project Wiki](./WIKI.md)** — detailed product behavior, architecture, security, retention and operational guidance.
 - **[✨ Feature Matrix](./03-features.md)** — current product centers, feature scope, foundation status and roadmap.
+- **[⚡ Performance Release Gate](./15-performance-release-gate.md)** — P0 speed, offline, retry, realtime and production SLO requirements.
 - **[🧪 Testing & QA](./04-testing.md)** — browser, Android, two-user realtime, media, groups, calls, E2EE and release-gate testing.
+- **[🌍 Global-Market Blueprint](./14-global-market-blueprint.md)** — global product, privacy, scale and ecosystem roadmap.
 
 ## 📖 Documentation Map
 
@@ -32,6 +34,8 @@ Global Messenger is a full-stack, real-time messaging platform for Web and Andro
 | `11-market-readiness.md` | Product and launch readiness |
 | `12-production-operations.md` | Production operations and support |
 | `13-external-production-setup.md` | External production service setup |
+| `14-global-market-blueprint.md` | Global-market product blueprint |
+| `15-performance-release-gate.md` | P0 performance/reliability release gate |
 | `WIKI.md` | Detailed product/architecture reference |
 
 ## 🧩 Product Centers
@@ -50,6 +54,8 @@ Global Messenger is a full-stack, real-time messaging platform for Web and Andro
 12. **Advanced Messaging** — polls, scheduling, reminders, location, contacts and events roadmap.
 13. **Advanced Calls** — voice/video foundation, history, signalling and reliability roadmap.
 14. **AI Workspace** — rewriting, translation, summaries, smart search, transcription and assistant roadmap.
+15. **Performance & Reliability** — optimistic UI, offline outbox, idempotent retries, reconnect/reconciliation, pagination, rendering performance and SLO telemetry.
+16. **Global Ecosystem** — stories, communities, channels, business messaging, bots/mini apps, accessibility and global localization.
 
 ## 🧪 Release Testing
 
@@ -68,6 +74,8 @@ Direct chat
   ↓
 Realtime send/receive
   ↓
+Offline/reconnect/retry
+  ↓
 Message operations
   ↓
 Media
@@ -81,7 +89,7 @@ Profile/privacy/sessions
 E2EE behavior
 ```
 
-See **[Testing & QA](./04-testing.md)** for the complete checklist.
+See **[Performance Release Gate](./15-performance-release-gate.md)** and **[Testing & QA](./04-testing.md)** before production deployment.
 
 ## 🚀 Deployment
 
@@ -102,6 +110,7 @@ Production secrets must be supplied through secure environment configuration and
 - Encrypted historical messages may require device key material that is unavailable after a device change; cryptographic identity recovery is separate from password recovery.
 - Uploaded files require persistent storage in production deployments where container-local storage is ephemeral.
 - Never commit passwords, JWT secrets, Firebase private keys, API tokens, database credentials or Android signing keys.
+- Performance optimizations must not weaken authorization, rate limiting or encryption boundaries.
 
 ## 🔗 Important Repository Areas
 
