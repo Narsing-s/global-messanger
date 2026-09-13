@@ -6,9 +6,9 @@ declare global {
 
 /**
  * One API origin for browser, PWA and Capacitor.
- * Production native builds must never fall back to localhost.
+ * Production native builds must never fall back to localhost or a retired API.
  */
-const DEFAULT_PRODUCTION_API = 'https://global-messanger-backend.onrender.com';
+const DEFAULT_PRODUCTION_API = 'https://global-messenger-api-new.onrender.com';
 
 const configured =
   window.__GM_CONFIG__?.API_URL ||
