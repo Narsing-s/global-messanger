@@ -18,7 +18,21 @@ jobs:
   validate:
     name: Build and validate web + server
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: global_messenger_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d global_messenger_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,10 +56,48 @@ jobs:
         run: test -s apps/web/dist/index.html
 
       - name: Build server application
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/global_messenger_test?schema=public
+          JWT_SECRET: ci-release-test-secret
         run: npm run build -w apps/server
 
       - name: Verify server artifact
         run: test -s apps/server/dist/index.js
+
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/global_messenger_test?schema=public
+        run: npm run db:deploy -w apps/server
+
+      - name: Start API for release E2E
+        env:
+          NODE_ENV: test
+          PORT: 4000
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/global_messenger_test?schema=public
+          JWT_SECRET: ci-release-test-secret
+          WEB_ORIGIN: http://127.0.0.1:4173
+          UPLOAD_DIR: /tmp/global-messenger-uploads
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/global-messenger-uploads
+          node apps/server/dist/index.js > /tmp/global-messenger-api.log 2>&1 &
+          echo $! > /tmp/global-messenger-api.pid
+          ready=0
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4000/ready >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          if [[ "$ready" != "1" ]]; then
+            cat /tmp/global-messenger-api.log || true
+            exit 1
+          fi
+
+      - name: Run backend + realtime release E2E
+        env:
+          E2E_BASE_URL: http://127.0.0.1:4000
+          E2E_TIMEOUT_MS: 15000
+          E2E_LATENCY_BUDGET_MS: 3000
+        run: npm run e2e:release -w apps/web
 
       - name: Install Chromium for browser smoke test
         run: |
@@ -59,7 +111,7 @@ jobs:
           set -euo pipefail
           npm exec --workspace apps/web -- vite preview --host 127.0.0.1 --port 4173 --strictPort > /tmp/global-messenger-web.log 2>&1 &
           SERVER_PID=$!
-          trap 'kill $SERVER_PID || true' EXIT
+          trap 'kill $SERVER_PID || true; if [[ -f /tmp/global-messenger-api.pid ]]; then kill $(cat /tmp/global-messenger-api.pid) || true; fi' EXIT
           ready=0
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:4173/ >/dev/null; then ready=1; break; fi
