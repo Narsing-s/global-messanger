@@ -1,0 +1,78 @@
+name: Android Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Build and smoke-test Capacitor Android app
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web application
+        run: npm run build -w apps/web
+
+      - name: Create/sync Android project
+        working-directory: apps/web
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: Build debug APK
+        working-directory: apps/web/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Run Android emulator smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          script: |
+            adb install -r apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop com.globalmessenger.app
+            adb shell monkey -p com.globalmessenger.app 1
+            adb shell pidof com.globalmessenger.app
+            adb shell dumpsys activity activities | grep -q 'com.globalmessenger.app'
+            adb shell screencap -p /sdcard/global-messenger-smoke.png
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: global-messenger-android-debug
+          path: apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
