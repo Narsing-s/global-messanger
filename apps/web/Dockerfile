@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
@@ -14,8 +15,6 @@ RUN apt-get update \
     python-is-python3 \
   && rm -rf /var/lib/apt/lists/*
 
-# Optional build metadata makes it possible to verify exactly which source
-# commit produced a running frontend image.
 ARG APP_VERSION=dev
 ARG GIT_COMMIT=unknown
 ENV VITE_APP_VERSION=$APP_VERSION
@@ -25,11 +24,13 @@ COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/server/package.json apps/server/package.json
 
-RUN npm ci --include=dev
+# Persist npm's download/cache directory between Docker builds. This avoids
+# re-downloading the large workspace dependency graph after source/Dockerfile
+# cache invalidation while keeping the final image reproducible.
+RUN --mount=type=cache,id=global-messenger-npm,target=/root/.npm,sharing=locked \
+    npm ci --include=dev
 
-# Always copy the complete current source tree before the frontend build.
 COPY . .
-
 RUN npm run build -w apps/web
 
 FROM nginx:1.29-alpine AS runtime
