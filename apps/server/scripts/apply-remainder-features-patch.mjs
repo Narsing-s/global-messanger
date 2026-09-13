@@ -11,7 +11,8 @@ if (!text.includes(importLine)) {
 if (!text.includes('await registerRemainderFeatures(app, prisma);')) {
   text = text.replace('await registerActivityCenter(app, prisma);', 'await registerActivityCenter(app, prisma);\n  await registerRemainderFeatures(app, prisma);');
 }
-// Privacy settings are already registered by product-center.ts. Keep the remainder
-// module focused on the additional security/profile/block/organization APIs.
+// These routes already exist in product-center / phase1-completeness / advanced-platform.
 text = text.replace(/\n  app\.patch\('\/api\/privacy\/settings'[\s\S]*?\n  app\.get\('\/api\/blocked'/, "\n  app.get('/api/blocked'");
+text = text.replace(/\n  app\.post\('\/api\/messages\/bulk-delete'[\s\S]*?\n  app\.post\('\/api\/messages\/bulk-forward'/, "\n  app.post('/api/messages/bulk-forward'");
+text = text.replace(/\n  \/\* ----------------------------- polls \/ schedule ------------------------- \*\/[\s\S]*?\n  \/\* ------------------------------ universal search ------------------------- \*\//, "\n  /* ------------------------------ universal search ------------------------- */");
 fs.writeFileSync(advanced, text);
