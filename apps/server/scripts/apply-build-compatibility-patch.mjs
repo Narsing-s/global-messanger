@@ -36,6 +36,7 @@ if (fs.existsSync(marketPath)) {
   let s = fs.readFileSync(marketPath, 'utf8');
   s = s.replace(/request\.body\?\.url/g, '(request.body as any)?.url');
   s = s.replace(/request\.body\?\.events/g, '((request.body as any)?.events)');
+  s = s.replace(/request\.body\.events\.map\(String\)/g, '((request.body as any)?.events ?? []).map(String)');
   fs.writeFileSync(marketPath, s);
 }
 
