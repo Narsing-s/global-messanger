@@ -11,6 +11,7 @@ on:
       - 'render.yaml'
       - 'apps/server/**'
       - 'apps/web/**'
+      - 'apps/api-worker/**'
       - 'scripts/**'
 
 permissions:
@@ -25,9 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      WEB_URL: https://global-messanger.onrender.com
-      API_URL: https://global-messanger-backend.onrender.com
+      WEB_URL: https://global-messenger-web.narsingbeesetti006.workers.dev
+      API_URL: https://global-messenger-api.narsingbeesetti006.workers.dev
       HELP_URL: https://global-messenger-help-centre.onrender.com
+      WEB_ORIGIN: https://global-messenger-web.narsingbeesetti006.workers.dev
     steps:
       - name: Wait for public endpoints after deployment
         shell: bash
@@ -39,7 +41,7 @@ jobs:
               && curl -fsS --location --max-time 20 "$API_URL/ready" -o /tmp/ready.json \
               && curl -fsS --location --max-time 20 "$WEB_URL/" -o /tmp/web.html \
               && curl -fsS --location --max-time 20 "$HELP_URL/" -o /tmp/help.html; then
-              if node -e "const x=require('/tmp/health.json'); const r=require('/tmp/ready.json'); if(!x.ok || !r.ok || !r.ready) process.exit(1)"; then
+              if node -e "const x=require('/tmp/health.json'); const r=require('/tmp/ready.json'); if(!x.ok || x.service!=='global-messenger' || !r.ok || !r.ready) process.exit(1)"; then
                 grep -qi 'Global Messenger' /tmp/web.html
                 grep -qiE 'Help|Support|Global Messenger' /tmp/help.html
                 echo 'Public endpoints are ready.'
@@ -72,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -sS --dump-header /tmp/options-headers.txt --output /tmp/options-body.txt -X OPTIONS \
-            -H 'Origin: https://global-messenger-help-centre.onrender.com' \
+            -H "Origin: $WEB_ORIGIN" \
             -H 'Access-Control-Request-Method: POST' \
             -H 'Access-Control-Request-Headers: content-type' \
             "$API_URL/api/support/requests" \
@@ -80,6 +82,7 @@ jobs:
           status=$(cat /tmp/options-status.txt)
           test "$status" = '204' || test "$status" = '200'
           grep -qi '^access-control-allow-origin:' /tmp/options-headers.txt
+          grep -qi "$WEB_ORIGIN" /tmp/options-headers.txt
           echo "support preflight HTTP $status"
 
       - name: Verify unauthenticated API protection
@@ -89,3 +92,17 @@ jobs:
           status=$(curl -sS -o /tmp/protected.txt -w '%{http_code}' "$API_URL/api/conversations")
           test "$status" = '401' || test "$status" = '403'
           echo "protected endpoint HTTP $status"
+
+      - name: Verify Socket.IO endpoint is not the web shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=$(curl -sS --connect-timeout 10 --max-time 30 \
+            -o /tmp/socket.txt -w '%{http_code}' \
+            "$API_URL/socket.io/?EIO=4&transport=polling" || true)
+          echo "Socket.IO handshake HTTP $status"
+          if grep -qi '<!doctype html' /tmp/socket.txt; then
+            echo 'Socket.IO endpoint returned the web application HTML.'
+            exit 1
+          fi
+          test -s /tmp/socket.txt
