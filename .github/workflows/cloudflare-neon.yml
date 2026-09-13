@@ -46,11 +46,20 @@ jobs:
         run: |
           set -euo pipefail
 
-          # The public Fastify backend already used by this project remains the
-          # upstream runtime. It is intentionally not treated as a secret.
+          # These are public endpoints, but keeping them configurable allows
+          # the same workflow to be reused for a different production backend.
           : "${BACKEND_API_URL:=https://global-messanger-backend.onrender.com}"
           : "${CLOUDFLARE_API_URL:=https://global-messenger-api.narsingbeesetti006.workers.dev}"
           : "${CLOUDFLARE_WEB_ORIGIN:=https://global-messenger-web.narsingbeesetti006.workers.dev}"
+
+          # Render's public service is HTTPS-only. Normalize an accidentally
+          # stored http:// secret so a stale GitHub secret cannot block deploy.
+          BACKEND_API_URL="${BACKEND_API_URL/http:\/\//https:\/\/}"
+
+          # Remove trailing slashes to prevent // in proxy paths and CORS origin.
+          BACKEND_API_URL="${BACKEND_API_URL%/}"
+          CLOUDFLARE_API_URL="${CLOUDFLARE_API_URL%/}"
+          CLOUDFLARE_WEB_ORIGIN="${CLOUDFLARE_WEB_ORIGIN%/}"
 
           {
             echo "BACKEND_API_URL=$BACKEND_API_URL"
@@ -71,6 +80,10 @@ jobs:
           case "$CLOUDFLARE_API_URL" in https://*) ;; *) echo 'CLOUDFLARE_API_URL must use HTTPS'; exit 1;; esac
           case "$CLOUDFLARE_WEB_ORIGIN" in https://*) ;; *) echo 'CLOUDFLARE_WEB_ORIGIN must use HTTPS'; exit 1;; esac
           case "$BACKEND_API_URL" in https://*) ;; *) echo 'BACKEND_API_URL must use HTTPS'; exit 1;; esac
+          if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo 'Missing required deployment secret: CLOUDFLARE_API_TOKEN'
+            exit 1
+          fi
 
       - name: Build web for Cloudflare Worker
         run: npm run build -w apps/web
