@@ -10,21 +10,28 @@ if (start < 0 || end <= start) throw new Error('Auth component boundary not foun
 const auth = `function Auth({register,setRegister,username,setUsername,password,setPassword,displayName,setDisplayName,error,setError}:{register:boolean;setRegister:(v:boolean)=>void;username:string;setUsername:(v:string)=>void;password:string;setPassword:(v:string)=>void;displayName:string;setDisplayName:(v:string)=>void;error:string;setError:(v:string)=>void}){
   const [email,setEmail]=useState(''),[phoneNumber,setPhoneNumber]=useState(''),[confirm,setConfirm]=useState(''),[loading,setLoading]=useState(false);
   const BACKUP_API='https://global-messanger-backend.onrender.com';
+  const native=['capacitor:','ionic:','file:','null'].includes(window.location.protocol);
   async function requestAuth(base:string,path:string,body:any){
     const cleanBase=base.endsWith('/')?base.slice(0,-1):base;
-    const response=await fetch(cleanBase+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const text=await response.text();let data:any={};
-    try{data=text?JSON.parse(text):{}}catch{data={message:text}};
-    return {response,data};
+    const controller=new AbortController();
+    const timer=window.setTimeout(()=>controller.abort(),12000);
+    try{
+      const response=await fetch(cleanBase+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),credentials:'include',signal:controller.signal});
+      const text=await response.text();let data:any={};
+      try{data=text?JSON.parse(text):{}}catch{data={message:text}};
+      return {response,data};
+    }finally{window.clearTimeout(timer)}
   }
   async function submit(e:React.FormEvent){
     e.preventDefault();setError('');setLoading(true);
     try{
       if(register&&password!==confirm)throw Error('Passwords do not match');
-      const bases=[API,BACKUP_API].filter((v,i,a)=>Boolean(v)&&a.indexOf(v)===i);
+      const sameOrigin=!native?window.location.origin:'';
+      const bases=[API,sameOrigin,BACKUP_API].filter((v,i,a)=>Boolean(v)&&a.indexOf(v)===i);
       const paths=register?['/api/auth/register-email','/api/auth/register']:['/api/auth/login-email','/api/auth/login'];
       let lastMessage='Authentication server is unavailable. Please try again.';
       let result:any=null;
+      let workingBase='';
       for(const base of bases){
         for(const path of paths){
           let body:any;
@@ -38,19 +45,20 @@ const auth = `function Auth({register,setRegister,username,setUsername,password,
           try{
             const out=await requestAuth(base,path,body);
             result=out.data;
-            if(out.response.ok&&result?.token)break;
+            if(out.response.ok&&result?.token){workingBase=base.replace(/\\/$/,'');break}
             if(result?.message)lastMessage=String(result.message);
             if(result?.requiresTwoFactor)break;
-          }catch(err:any){lastMessage=err?.message||lastMessage;}
+          }catch(err:any){lastMessage=err?.name==='AbortError'?'Authentication server timed out.':(err?.message||lastMessage);}
         }
         if(result?.token||result?.requiresTwoFactor)break;
       }
       if(!result?.token){
         if(result?.requiresTwoFactor)throw Error('Two-step verification is enabled. Complete 2FA before continuing.');
-        throw Error(lastMessage==='Authentication server is unavailable. Please try again.'?lastMessage:'Login server did not return a login token. Both authentication servers were checked. Please retry.');
+        throw Error(lastMessage==='Authentication server is unavailable. Please try again.'?lastMessage:'Login server did not return a login token. All configured authentication servers were checked.');
       }
       localStorage.setItem('gm_token',String(result.token));
       localStorage.setItem('gm_user',JSON.stringify(result.user||{}));
+      if(workingBase)localStorage.setItem('gm_api_url',workingBase);
       window.history.replaceState({},'',window.location.pathname);
       location.reload();
     }catch(err:any){setError(err?.message||'Authentication failed')}finally{setLoading(false)}
@@ -60,4 +68,4 @@ const auth = `function Auth({register,setRegister,username,setUsername,password,
 `;
 source=source.slice(0,start)+auth+source.slice(end);
 fs.writeFileSync(file,source);
-console.log('[Production] cross-device authentication fallback activated');
+console.log('[Production] cross-device authentication fallback hardened');
