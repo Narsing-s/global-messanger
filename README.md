@@ -10,123 +10,96 @@
 
 ## 🚀 What is Global Messenger?
 
-Global Messenger is a full-stack messaging platform designed for private communication, real-time delivery, groups, media sharing, calls, multi-device sessions, privacy controls, and self-hosted production deployments.
+Global Messenger is a full-stack messaging platform for private conversations, groups, realtime communication, media sharing, calls, sessions, privacy controls and multi-device use.
 
-The product direction is intentionally broader than a conventional messenger: the application is being organized around a **Profile Center, Chat Info, advanced message operations, conversation organization, media center, notification center, security center, universal search, command center, settings center, AI workspace, and advanced calling**.
+The product is intentionally being developed as a **communication workspace**, not only a chat screen. Its major product centers include Profile, Chat Info, Message Tools, Conversation Organization, Media, Groups, Notifications, Security, Universal Search, Command Center, Settings, Advanced Messaging, Advanced Calls and an AI Workspace roadmap.
+
+> **Feature-status rule:** a feature described as a *foundation* or *roadmap* item does not mean every UI state, edge case, platform-specific behavior or production integration is complete. The [Feature Matrix](docs/03-features.md) is the source of truth for feature scope.
 
 ## ✨ Product Highlights
 
 ### 💬 Messaging
 
-- One-to-one conversations
-- Group conversations
-- Real-time Socket.IO messaging
-- Online/offline presence
-- Typing indicators
-- Delivery and read states
-- Message replies and quoted replies
-- Message editing and deletion
+- One-to-one and group conversations
+- Realtime Socket.IO messaging
+- Presence and typing indicators
+- Delivery/read states where supported
+- Replies and quoted replies
+- Editing and deletion with server-side authorization
 - Reactions
-- Forwarding
-- Copy and share
-- Star / save messages
-- Pin messages
-- Message information and timestamps
-- Multi-select and bulk message actions
+- Forwarding, copy, star/save and pin foundations
+- Message information
+- Multi-select and bulk-action foundation
 - Message search
 - Retry failed messages
-- Link previews
+- Image, audio/video and document attachments
 
 ### 👤 Profile Center
 
 - Profile photo
 - Display name
 - Username
-- About / bio
-- Online-status controls
-- Last-seen controls
+- About/bio
+- Online-status and last-seen privacy controls
 - Profile preview
-- QR/profile sharing
-- Copy username
+- QR/profile sharing foundation
 - Account identity information
 
 ### 🗂️ Chat & Conversation Management
 
-- Complete chat information
-- Contact profile
-- Media, files and links views
-- Starred messages
-- Pinned messages
+- Chat Info for direct chats and groups
+- Shared media, files and links
+- Starred and pinned messages
 - Search inside conversations
-- Per-chat notification controls
+- Per-chat notifications
 - Disappearing-message controls
-- Block and report controls
-- Clear chat / delete chat actions
-- Favorites and pinned chats
-- Archive
-- Unread / group / personal filters
-- Custom conversation organization
+- Block/report controls
+- Favorites, pinned chats and archive
+- Unread/group/personal filters
 - Saved Messages
 
-### 📎 Media Experience
+### 📎 Media & Groups
 
-- Image viewer and gallery
-- Video playback
-- Audio playback
-- Voice messages
+- Image/gallery experience
+- Video and audio playback
+- Voice-message foundation
 - Document previews
-- Media grid
-- Files and links tabs
 - Upload/download progress
-- Sharing and downloads
-- Common image, audio, video and document uploads
-
-### 👥 Groups
-
-- Group creation
-- Group profile and description
-- Member management
-- Admin controls
+- Group creation and management
+- Member/admin controls
 - Invite links
-- Group messaging
-- Group pins
-- Group search
-- Leave group
+- Group messaging, pins and search foundation
 
 ### 🔐 Privacy & Security
 
 - JWT authentication
 - Password hashing
 - Authenticated API routes
-- Security headers
-- Rate/request protection
+- Security headers and request protection
 - Production CORS controls
-- Input validation
-- Session management and revocation
-- Device/session visibility
+- Input/MIME validation
+- Session visibility and revocation
 - Privacy controls
-- Optional end-to-end encrypted message envelopes
-- Security/key-management roadmap
-- Passkey and biometric security roadmap
+- Optional encrypted message envelopes
+- Passkey, 2FA, PIN/biometric and advanced E2EE key-management roadmap
 
 ### 📞 Calls & Notifications
 
-- Voice-call support/hooks
-- Video-call support/hooks
-- Socket.IO signalling
-- Incoming/outgoing call UI
-- Call history and missed calls
+- Voice/video call UI foundation
+- Socket.IO signalling foundation
+- Incoming/outgoing call states
 - Mute, speaker and camera controls
-- Push-notification integration
-- Per-chat and global notification controls
+- Call history/missed calls
+- Notification controls and push-notification integration hooks
+- Production TURN and group-calling roadmap
 
 ### 🔎 Power Features
 
 - Universal search across people, chats, messages, files, links and groups
-- Command Center for fast access to unread chats, calls, groups, saved items and security status
+- Command Center for fast access to unread chats, calls, groups, saved content and security
 - Settings Center
 - Multi-device sessions
-- Mobile-responsive web application
+- Responsive web application
 - Android application through Capacitor
 - AI Workspace roadmap for rewriting, translation, summaries, smart search and assistance
 
@@ -162,11 +135,11 @@ The product direction is intentionally broader than a conventional messenger: th
                     └────────────────────────────┘
 ```
 
-The Docker web service is the recommended production frontend because it serves the built application through Nginx and proxies API, Socket.IO, and upload routes to the backend. This avoids stale or mismatched frontend deployments.
+The Docker web service is the recommended production frontend/source of truth because it serves the current Vite build and proxies API, Socket.IO and upload routes to the backend.
 
-## 🔒 Message Security Model
+## 🔒 Message Security & Rendering
 
-The application is designed so the chat UI renders **human-readable messages**, not internal transport records.
+The normal chat UI must display a human-readable message when the recipient device has the required cryptographic identity/key material.
 
 ```text
 Compose message
@@ -186,9 +159,9 @@ Client decrypts supported E2EE content
 Normal message bubble
 ```
 
-Encrypted content may appear as an unavailable message on a device that does not possess the required device identity key. Key recovery is therefore a separate security concern from ordinary account/password recovery.
+If a device shows `🔒 Encrypted message (not available on this device)`, investigate device identity/key exchange rather than displaying ciphertext or internal transport records as the normal message. Account password recovery and cryptographic identity recovery are separate security concerns.
 
-## 🐳 Production Docker Frontend
+## 🐳 Docker Production Frontend
 
 From the repository root:
 
@@ -220,29 +193,55 @@ curl -I http://localhost:8080/
 curl -I http://localhost:8080/index.html
 ```
 
-## 🧪 How to Test the Application
+## 🧪 End-to-End Testing
 
-Do not treat **"Gradle build succeeded"** as proof that the Android application works. Test the complete user path.
+Do not treat a successful Vite/Gradle build as proof that the application works. Test the real user journey.
 
-### 1. Test the production backend first
+```text
+APK/browser startup
+  ↓
+Backend health
+  ↓
+Registration/login
+  ↓
+User search
+  ↓
+Direct chat
+  ↓
+Realtime send/receive
+  ↓
+Message operations
+  ↓
+Media
+  ↓
+Groups
+  ↓
+Calls
+  ↓
+Profile/privacy/sessions
+  ↓
+E2EE behavior
+```
 
-The production API exposes an unauthenticated health endpoint:
+### Production backend smoke test
+
+The configured production backend exposes a health endpoint:
 
 ```text
 https://global-messanger-backend.onrender.com/health
 ```
 
-Run from a PC:
+Run:
 
 ```bash
 curl -i https://global-messanger-backend.onrender.com/health
 ```
 
-Expected: HTTP `200` with `ok: true`.
+Expected: HTTP `200` with an `ok: true` health response.
 
-### 2. Test Capacitor CORS
+### Android / Capacitor CORS
 
-Native Android requests use `capacitor://localhost`.
+Native Android requests use the Capacitor origin `capacitor://localhost`. Verify production CORS before debugging application features:
 
 ```bash
 curl -i -X OPTIONS "https://global-messanger-backend.onrender.com/api/auth/login-email" \
@@ -251,75 +250,9 @@ curl -i -X OPTIONS "https://global-messanger-backend.onrender.com/api/auth/login
   -H "Access-Control-Request-Headers: content-type,authorization"
 ```
 
-Expected:
+### Android diagnostics
 
-```text
-HTTP/1.1 204 No Content
-Access-Control-Allow-Origin: capacitor://localhost
-Access-Control-Allow-Credentials: true
-```
-
-### 3. Test Android in this order
-
-```text
-Install APK
-   ↓
-Open application
-   ↓
-Backend health
-   ↓
-Create account
-   ↓
-Login
-   ↓
-Search user
-   ↓
-Direct chat
-   ↓
-Send/receive realtime message
-   ↓
-Reply/edit/delete/react
-   ↓
-Forward/star/pin/message info
-   ↓
-Send media/document
-   ↓
-Create/test group
-   ↓
-Voice/video call
-   ↓
-Profile/privacy/session tests
-   ↓
-E2EE test
-```
-
-### 4. Current Android release
-
-The latest verified Android workflow on **September 12, 2026** is **Android Build #556**, commit `05d38bc2a8199434ebf48caa2cd6140866bee87f`.
-
-The workflow successfully:
-
-- built the production web bundle
-- added/synced Capacitor Android
-- configured Android network/call/notification permissions
-- built the release APK and AAB
-- verified the APK package and signature
-- published `Global-Messenger.apk`
-
-Always install the newest successful build rather than an older APK from an earlier workflow run.
-
-### 5. If the APK says "Failed to fetch"
-
-Check:
-
-1. Phone internet connection.
-2. `/health` endpoint.
-3. Production API URL.
-4. `capacitor://localhost` CORS.
-5. Android `INTERNET` permission.
-6. Android WebView/logcat errors.
-
-With ADB:
+If the APK reports **Failed to fetch**, check internet access, `/health`, the production API URL, CORS, Android `INTERNET` permission and WebView/logcat output.
 
 ```bash
 adb devices
@@ -327,7 +260,7 @@ adb logcat -c
 adb logcat | grep -i -E "GlobalMessenger|Capacitor|chromium|Console|Exception|Error|FATAL"
 ```
 
-For Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
 adb devices
@@ -335,88 +268,11 @@ adb logcat -c
 adb logcat | Select-String "GlobalMessenger|Capacitor|chromium|Console|Exception|Error|FATAL"
 ```
 
-### 6. If Create Account appears to fail
+### Registration behavior
 
-The email-registration endpoint creates the account and then attempts to send the welcome email. Previously, a welcome-email failure returned HTTP `503` after the database user had already been created, making the mobile app appear broken.
+Welcome-email delivery is an optional integration and must not make account creation appear to fail after the database account has been created. Registration should return authentication/user data even when the optional welcome email cannot be delivered.
 
-The current server fix makes welcome-email delivery **non-blocking**. Account creation now returns the authentication token and user even when the welcome email cannot be delivered, with `welcomeEmailSent: false`.
-
-This is especially important for APK testing because registration should not depend on the SMTP service being available.
-
-### 7. If messages show encrypted/unavailable content
-
-The chat UI must display the actual decrypted human-readable message whenever the recipient device has the required E2EE identity/key material.
-
-If a device displays:
-
-```text
-🔒 Encrypted message (not available on this device)
-```
-
-collect the Android logcat output and test the E2EE identity/key exchange. Do not expose encrypted ciphertext as the user's normal chat message.
-
-For the full Android test matrix and troubleshooting procedure, see **[Android APK Testing Guide](docs/ANDROID-TESTING.md)**.
-
-## 💻 Local Development
-
-Requirements:
-
-- Node.js
-- npm
-- PostgreSQL for the server
-- Android Studio + Android SDK for native Android builds
-- Docker for containerized deployment/testing
-
-Install dependencies:
-
-```bash
-npm ci
-```
-
-Run the development environment:
-
-```bash
-npm run dev
-```
-
-Run server only:
-
-```bash
-npm run dev:server:direct
-```
-
-Run web only:
-
-```bash
-npm run dev:web:direct
-```
-
-Build everything:
-
-```bash
-npm run build
-```
-
-Verify locally:
-
-```bash
-npm run verify:local
-npm run smoke
-```
-
-## 🗄️ Database
-
-The server uses PostgreSQL through Prisma.
-
-Useful commands:
-
-```bash
-npm run db:generate
-npm run db:migrate
-npm run db:deploy
-```
-
-Never commit production database credentials.
+For the complete QA matrix, see **[docs/04-testing.md](docs/04-testing.md)**.
 
 ## 📱 Android
 
@@ -439,6 +295,60 @@ npm run android:run
 
 Release signing credentials must remain in GitHub Actions Secrets or another secure secret manager.
 
+## 💻 Local Development
+
+Requirements:
+
+- Node.js
+- npm
+- PostgreSQL for the server
+- Android Studio + Android SDK for native Android builds
+- Docker for containerized deployment/testing
+
+Install dependencies:
+
+```bash
+npm ci
+```
+
+Run development:
+
+```bash
+npm run dev
+```
+
+Run server only:
+
+```bash
+npm run dev:server:direct
+```
+
+Run web only:
+
+```bash
+npm run dev:web:direct
+```
+
+Build and verify:
+
+```bash
+npm run build
+npm run verify:local
+npm run smoke
+```
+
+## 🗄️ Database
+
+The server uses PostgreSQL through Prisma.
+
+```bash
+npm run db:generate
+npm run db:migrate
+npm run db:deploy
+```
+
+Never commit production database credentials.
+
 ## ⚙️ Environment Variables
 
 Typical server configuration includes:
@@ -452,39 +362,37 @@ UPLOAD_DIR
 CRON_SECRET
 ```
 
-Optional integrations can use environment-provided credentials for email and push notifications.
+Optional email/push integrations use environment-provided credentials.
 
-**Never commit passwords, JWT secrets, Firebase private keys, API tokens, production database URLs, or Android signing keys.**
+**Never commit passwords, JWT secrets, Firebase private keys, API tokens, production database URLs or Android signing keys.**
 
 ## 🗺️ Product Roadmap
 
-The roadmap is intentionally split into product centers rather than isolated UI buttons.
-
 ### Phase 1 — Core product completeness
 
+- [x] Product-center foundation
 - [x] Profile Center foundation
 - [x] Chat Info foundation
-- [x] Advanced message-operation foundation
-- [x] Conversation organization foundation
-- [x] Media experience foundation
-- [x] Notification Center foundation
+- [x] Message Tools foundation
+- [x] Conversation Organization foundation
+- [x] Media foundation
 - [x] Universal Search foundation
 - [x] Command Center foundation
 - [x] Settings Center foundation
 - [ ] Complete every UI state and edge case for multi-select/bulk actions
 - [ ] Complete message-info details across all message types
-- [ ] Complete forward/share flows across groups and direct chats
+- [ ] Complete forward/share flows across all conversation types
+- [ ] Harden media transfer/retry/offline behavior
 
 ### Phase 2 — Security Center
 
-- [x] Active sessions foundation
-- [x] Session revocation
+- [x] Session visibility/revocation foundation
 - [x] Privacy controls
 - [ ] Two-factor authentication
 - [ ] Passkey management
 - [ ] App PIN / biometric lock
-- [ ] Security verification and device-key management
-- [ ] Robust E2EE key recovery strategy
+- [ ] Device/key verification
+- [ ] Robust E2EE key recovery
 
 ### Phase 3 — Advanced Messaging
 
@@ -518,25 +426,29 @@ The roadmap is intentionally split into product centers rather than isolated UI 
 
 ## 📚 Documentation
 
-- **[Project Wiki](docs/WIKI.md)** — architecture, product behavior, security, deployment, Android, troubleshooting and roadmap
-- **[Android APK Testing Guide](docs/ANDROID-TESTING.md)** — installation, backend/CORS checks, registration/login tests, messaging, calls, E2EE and logcat troubleshooting
-- **[Documentation index](docs/README.md)** — documentation map
-- **[Render configuration](render.yaml)** — deployment blueprint
-- **[Database schema](apps/server/prisma/schema.prisma)** — Prisma data model
-- **[CI/CD workflows](.github/workflows/)** — automation and Android builds
+- **[Documentation index](docs/README.md)** — documentation map and product-center overview.
+- **[Project Wiki](docs/WIKI.md)** — detailed product behavior, architecture, security, retention and operations.
+- **[Feature Matrix](docs/03-features.md)** — current/foundation/roadmap feature status.
+- **[Testing & QA](docs/04-testing.md)** — complete browser, Android, messaging, media, groups, calls and security test matrix.
+- **[Getting Started](docs/01-getting-started.md)** — local setup.
+- **[Architecture](docs/02-architecture.md)** — service boundaries and data flow.
+- **[Production Deployment](docs/05-production-deployment.md)** — deployment guidance.
+- **[Android / Play Store](docs/06-android-play-store.md)** — Android release preparation.
+- **[Release Checklist](docs/07-release-checklist.md)** — release gate.
+- **[Contributing](docs/08-contributing.md)** — contribution rules.
+- **[Production Operations](docs/12-production-operations.md)** — operational guidance.
 
 ## 🤝 Contribution Principles
-
-When changing the messenger:
 
 1. Preserve authentication and authorization.
 2. Preserve realtime delivery and reconnect behavior.
 3. Do not silently delete normal message history.
 4. Keep disappearing messages explicitly user-controlled.
 5. Never render internal encryption/call-signalling payloads as chat messages.
-6. Do not introduce third-party dependencies where an existing first-party implementation already works without a clear reason.
-7. Run build, verification and smoke checks before release.
-8. Update the documentation when product behavior or architecture changes.
+6. Preserve server-side authorization for destructive operations.
+7. Run build, verification and end-to-end smoke checks before release.
+8. Update documentation whenever product behavior, security rules or architecture changes.
+9. Never commit secrets or production credentials.
 
 ## 📄 License
 
@@ -544,7 +456,7 @@ See the repository license and project files for the current licensing terms.
 
 ## 🔗 Repository
 
-urlNarsing-s/global-messanger on GitHubhttps://github.com/Narsing-s/global-messanger
+[**Narsing-s/global-messanger on GitHub**](https://github.com/Narsing-s/global-messanger)
 
 ---
 
