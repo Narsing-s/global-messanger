@@ -37,6 +37,10 @@ export default {
     const headers = new Headers(request.headers);
     headers.delete("host");
     headers.delete("content-length");
+    // CORS is terminated at this Worker. Do not make the upstream API reject
+    // browser requests because its own WEB_ORIGIN list is stale or different.
+    headers.delete("origin");
+    headers.delete("referer");
 
     const isUpgrade = request.headers.get("Upgrade")?.toLowerCase() === "websocket";
 
