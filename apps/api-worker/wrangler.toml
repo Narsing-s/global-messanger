@@ -2,8 +2,9 @@ name = "global-messenger-api"
 main = "src/index.ts"
 compatibility_date = "2026-08-31"
 
-[vars]
-# Set this to the public HTTPS URL of the Fastify backend runtime.
-# Do not put DATABASE_URL or database credentials here.
-UPSTREAM_API = ""
-ALLOWED_ORIGIN = "https://global-messenger-web.narsingbeesetti006.workers.dev"
+# Production values are injected by GitHub Actions from repository secrets.
+# Required secrets:
+#   CLOUDFLARE_API_URL      Public Worker URL used by the web build.
+#   BACKEND_API_URL         Public HTTPS Fastify runtime URL.
+#   CLOUDFLARE_WEB_ORIGIN   Public Cloudflare Pages/custom-domain origin.
+# Never store DATABASE_URL, JWT_SECRET or other credentials in this file.
