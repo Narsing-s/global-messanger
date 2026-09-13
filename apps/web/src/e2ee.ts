@@ -1,7 +1,7 @@
 const PREFIX = 'gm:e2ee:v1:';
 
-const configuredApi = (window as any).__GM_CONFIG__?.API_URL || (import.meta as any).env?.VITE_API_URL;
-const API = configuredApi || ((import.meta as any).env?.DEV ? window.location.origin : 'https://global-messanger-backend.onrender.com');
+const configuredApi = (window as any).__GM_CONFIG__?.API_URL || (import.meta as any).env?.VITE_API_URL || localStorage.getItem('gm_api_url');
+const API = configuredApi || ((import.meta as any).env?.DEV ? window.location.origin : 'https://global-messenger-api.narsingbeesetti006.workers.dev');
 
 type Identity = { publicKey: JsonWebKey; privateKey: JsonWebKey; version: 1 };
 type KeyBundle = { userId: string; publicKey: JsonWebKey | null };
@@ -28,10 +28,7 @@ function b64ToBytes(value: string) {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
 }
-
-function identityStorageKey(userId: string) {
-  return `${IDENTITY_PREFIX}:${userId}`;
-}
+function identityStorageKey(userId: string) { return `${IDENTITY_PREFIX}:${userId}`; }
 
 async function getIdentity(): Promise<Identity> {
   let me: any = null;
@@ -133,12 +130,7 @@ async function deriveAesKey(privateJwk: JsonWebKey, publicJwk: JsonWebKey, conve
   try { return await pending; } catch (error) { derivedKeyCache.delete(cacheKey); throw error; }
 }
 
-// Normal chat messages are intentionally kept as plaintext at the transport layer.
-// This guarantees that every logged-in device can read messages immediately.
-// The E2EE helpers remain only for backwards compatibility with messages already stored as gm:e2ee:v1 envelopes.
-export async function encryptMessage(_conversationId: string, plaintext: string) {
-  return plaintext;
-}
+export async function encryptMessage(_conversationId: string, plaintext: string) { return plaintext; }
 
 export async function decryptMessage(conversationId: string, body: string) {
   if (!body.startsWith(PREFIX)) return body;
