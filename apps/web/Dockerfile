@@ -3,9 +3,6 @@ FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 
-# mediasoup may need to build its native worker when a matching prebuilt
-# binary is unavailable. Keep the image reproducible with the required
-# Python/PIP and native build toolchain available during npm ci.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     build-essential \
@@ -24,11 +21,10 @@ COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/server/package.json apps/server/package.json
 
-# Persist npm's download/cache directory between Docker builds. This avoids
-# re-downloading the large workspace dependency graph after source/Dockerfile
-# cache invalidation while keeping the final image reproducible.
+# Keep Docker builds resilient while the workspace lockfile is being brought
+# back in sync with mediasoup/Rollup dependencies.
 RUN --mount=type=cache,id=global-messenger-npm,target=/root/.npm,sharing=locked \
-    npm ci --include=dev
+    npm install --include=dev --no-audit --no-fund
 
 COPY . .
 RUN npm run build -w apps/web
@@ -46,5 +42,4 @@ RUN chmod +x /docker-entrypoint.d/40-global-messenger-config.sh \
   && printf '%s\n' '<!doctype html><html><body>ok</body></html>' > /usr/share/nginx/html/healthz
 
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]
