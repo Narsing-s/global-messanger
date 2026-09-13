@@ -17,7 +17,9 @@ if (fs.existsSync(advanced)) {
 const remainder = path.resolve(process.cwd(), 'src/remainder-features.ts');
 if (fs.existsSync(remainder)) {
   let text = fs.readFileSync(remainder, 'utf8');
-  // Already implemented elsewhere; remove duplicates so Fastify never registers a route twice.
+  // Reuse already-tested implementations instead of registering duplicate Fastify routes.
+  text = text.replace(/\n  app\.get\('\/api\/profile\/me'[\s\S]*?\n  app\.get\('\/api\/profile\/:username'[\s\S]*?\n/, '\n');
+  text = text.replace(/\n  app\.post\('\/api\/security\/2fa\/setup'[\s\S]*?\n  app\.post\('\/api\/security\/2fa\/disable'[\s\S]*?\n/, '\n');
   text = text.replace(/\n  app\.patch\('\/api\/privacy\/settings'[\s\S]*?\n  app\.get\('\/api\/blocked'/, "\n  app.get('/api/blocked'");
   text = text.replace(/\n  app\.post\('\/api\/messages\/bulk-delete'[\s\S]*?\n  app\.post\('\/api\/messages\/bulk-forward'/, "\n  app.post('/api/messages/bulk-forward'");
   text = text.replace(/\n  \/\* ----------------------------- polls \/ schedule ------------------------- \*\/[\s\S]*?\n  \/\* ------------------------------ universal search ------------------------- \*\//, "\n  /* ------------------------------ universal search ------------------------- */");
