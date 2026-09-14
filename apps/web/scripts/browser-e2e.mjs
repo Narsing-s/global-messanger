@@ -65,10 +65,20 @@ async function main() {
     const userA = await register();
     const userB = await register();
 
+    // Seed the real conversation before browser sessions load their conversation lists.
+    if (!userA.token || !userB.token) throw new Error('Registration did not return authentication tokens');
+    const direct = await fetch(`${BASE}/api/conversations/direct`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${userA.token}` },
+      body: JSON.stringify({ userId: userB.user.id })
+    });
+    if (![200, 201].includes(direct.status)) throw new Error(`Direct conversation setup -> ${direct.status}: ${await direct.text()}`);
+
     // Real browser authentication, not injected tokens.
     await login(pageA, userA.user.username);
     await login(pageB, userB.user.username);
 
+    // Verify search and opening a direct conversation through the actual UI.
     await openPerson(pageA, userB.user.displayName, userB.user.username);
     const first = `Browser E2E realtime ${Date.now()}`;
     await pageA.getByPlaceholder('Type a message...').fill(first);
@@ -92,16 +102,16 @@ async function main() {
     await pageB.getByText(first, { exact: true }).waitFor({ state: 'visible', timeout: TIMEOUT });
     await pageB.getByText(second, { exact: true }).waitFor({ state: 'visible', timeout: TIMEOUT });
 
-    // Browser-level message operations.
-    const bubble = pageA.getByText(second, { exact: true }).locator('..');
+    // Browser-level message edit operation.
+    const messageText = pageA.getByText(second, { exact: true }).first();
+    const bubble = messageText.locator('..');
     const menuButton = bubble.getByRole('button').first();
-    if (await menuButton.count()) {
-      await menuButton.click();
-      await pageA.getByRole('button', { name: 'Edit', exact: true }).click();
-      await pageA.getByPlaceholder('Type a message...').fill(`${second} edited`);
-      await pageA.getByRole('button', { name: 'Send', exact: true }).click();
-      await pageA.getByText(`${second} edited`, { exact: true }).waitFor({ state: 'visible', timeout: TIMEOUT });
-    }
+    if (!(await menuButton.count())) throw new Error('Message action menu is missing');
+    await menuButton.click();
+    await pageA.getByRole('button', { name: 'Edit', exact: true }).click();
+    await pageA.getByPlaceholder('Type a message...').fill(`${second} edited`);
+    await pageA.getByRole('button', { name: 'Send', exact: true }).click();
+    await pageA.getByText(`${second} edited`, { exact: true }).waitFor({ state: 'visible', timeout: TIMEOUT });
 
     // Operations Center must remain accessible on both desktop and mobile.
     for (const page of [pageA, pageB]) {
@@ -116,7 +126,7 @@ async function main() {
     }
 
     if (errors.length) throw new Error(`Browser runtime errors:\n${errors.join('\n')}`);
-    console.log('PASS: multi-user browser E2E — real login, desktop/mobile sessions, realtime A→B, realtime B→A, persistence after reload, edit flow, Operations Center.');
+    console.log('PASS: multi-user browser E2E — real login, desktop/mobile sessions, UI conversation creation/search, realtime A→B, realtime B→A, persistence after reload, edit flow, Operations Center.');
   } finally {
     await contextA.close();
     await contextB.close();
