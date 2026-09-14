@@ -3,13 +3,15 @@ export interface Env {
   ALLOWED_ORIGIN: string;
 }
 
-function corsHeaders(origin: string | null, allowedOrigin: string): HeadersInit {
-  const allowOrigin = origin === allowedOrigin ? origin : allowedOrigin;
+function corsHeaders(origin: string | null, allowedOrigins: string): HeadersInit {
+  const configured = allowedOrigins.split(',').map(value => value.trim()).filter(Boolean);
+  const allowOrigin = origin && configured.includes(origin) ? origin : (configured[0] || '*');
   return {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Requested-With",
     "Access-Control-Allow-Methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
+    "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
 }
@@ -37,8 +39,6 @@ export default {
     const headers = new Headers(request.headers);
     headers.delete("host");
     headers.delete("content-length");
-    // CORS is terminated at this Worker. Do not make the upstream API reject
-    // browser requests because its own WEB_ORIGIN list is stale or different.
     headers.delete("origin");
     headers.delete("referer");
 
