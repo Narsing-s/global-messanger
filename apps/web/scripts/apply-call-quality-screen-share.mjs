@@ -58,14 +58,11 @@ function installScreenShareButton() {
   footer.insertBefore(button, footer.lastElementChild);
 }
 
-const originalRenderConnected = renderConnected;
-renderConnected = ((title: string, localVideo: boolean) => {
-  originalRenderConnected(title, localVideo);
-  if (localVideo) installScreenShareButton();
-}) as typeof renderConnected;
-
 `;
 if (!source.includes(marker)) throw new Error('Call runtime marker not found');
 source = source.replace(marker, insert + marker);
+const renderMarker = "startTimer(); }";
+if (!source.includes(renderMarker)) throw new Error('Call render marker not found');
+source = source.replace(renderMarker, "startTimer(); if (localVideo) installScreenShareButton(); }");
 source = source.replace("function reset() { stopRingtone();", "function reset() { screenShareStream?.getTracks().forEach(t => t.stop()); screenShareStream = null; cameraVideoTrack = null; stopRingtone();");
 fs.writeFileSync(file, source);
