@@ -31,8 +31,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -R "function document(" apps/web/public apps/web/src; then exit 1; fi
-          if grep -R "vercel.com/sso-api" apps/web/public apps/web/src; then exit 1; fi
+          # Match an actual globally declared `document` function only; avoid false positives
+          # such as `understandDocument()` and other identifiers that merely contain the word.
+          if rg -n --glob '!node_modules/**' '(^|[^[:alnum:]_$])function[[:space:]]+document[[:space:]]*\(' apps/web/public apps/web/src; then exit 1; fi
+          if rg -n --glob '!node_modules/**' 'vercel\.com/sso-api' apps/web/public apps/web/src; then exit 1; fi
           test -f apps/web/public/sw.js
           test -f apps/web/index.html
           grep -q "auth-operation-fix.js" apps/web/index.html
