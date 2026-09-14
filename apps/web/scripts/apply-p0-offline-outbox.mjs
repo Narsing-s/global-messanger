@@ -18,8 +18,10 @@ if (!source.includes('const flushOfflineMessage =')) {
 if (!source.includes('pendingOfflineMessages().forEach')) {
   source = source.replace("s.on('connect',()=>setSocketError(''));", "s.on('connect',()=>{setSocketError('');pendingOfflineMessages().forEach(message=>s.emit('message:send',message));});");
 }
-// Durable delivery: an offline item is removed only after the server acknowledges the clientId.
-if (!source.includes('gm-offline-outbox-ack')) {
+// The reliability patch already installs the canonical message:ack handler.
+// Do not add a second listener: duplicate handlers caused duplicate outbox
+// cleanup work and made delivery behavior harder to reason about.
+if (!source.includes('gm-message-ack') && !source.includes('gm-offline-outbox-ack')) {
   const ack = "s.on('message:ack',(d:any)=>{if(d?.clientId)removeOfflineMessage(String(d.clientId));}); // gm-offline-outbox-ack\n";
   const deliveredAnchor = "s.on('message:delivered',()=>setSocketError(''));";
   if (source.includes(deliveredAnchor)) {
