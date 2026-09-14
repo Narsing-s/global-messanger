@@ -40,10 +40,7 @@ async function getIdentity(): Promise<Identity> {
     const accountKey = identityStorageKey(userId);
     try {
       const saved = localStorage.getItem(accountKey) || (userId !== 'anonymous' ? localStorage.getItem(IDENTITY_PREFIX) : null);
-      if (saved) {
-        if (!localStorage.getItem(accountKey) && userId !== 'anonymous') localStorage.setItem(accountKey, saved);
-        return JSON.parse(saved) as Identity;
-      }
+      if (saved) return JSON.parse(saved) as Identity;
     } catch {}
     const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
     const publicKey = await crypto.subtle.exportKey('jwk', pair.publicKey);
@@ -115,8 +112,9 @@ async function conversationKeys(conversationId: string): Promise<KeyBundle[]> {
   try { return await pending; } catch (error) { conversationKeyCache.delete(conversationId); throw error; }
 }
 
-async function deriveAesKey(privateJwk: JsonWebKey, publicJwk: JsonWebKey, conversationId: string) {
-  const cacheKey = `${conversationId}:${JSON.stringify(privateJwk)}:${JSON.stringify(publicJwk)}`;
+async function deriveAesKey(privateJwk: JsonWebKey, publicJwk: JsonWebKey, conversationId: string, salt?: Uint8Array) {
+  const saltBytes = salt || enc.encode(`global-messenger:${conversationId}`);
+  const cacheKey = `${conversationId}:${JSON.stringify(privateJwk)}:${JSON.stringify(publicJwk)}:${bytesToB64(saltBytes)}`;
   const cached = derivedKeyCache.get(cacheKey);
   if (cached) return cached;
   const pending = (async () => {
@@ -124,13 +122,36 @@ async function deriveAesKey(privateJwk: JsonWebKey, publicJwk: JsonWebKey, conve
     const publicKey = await crypto.subtle.importKey('jwk', publicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
     const shared = await crypto.subtle.deriveBits({ name: 'ECDH', public: publicKey }, privateKey, 256);
     const hkdf = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
-    return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: enc.encode(`global-messenger:${conversationId}`), info: enc.encode('gm-e2ee-v1') }, hkdf, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: saltBytes, info: enc.encode('gm-e2ee-v1') }, hkdf, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
   })();
   derivedKeyCache.set(cacheKey, pending);
   try { return await pending; } catch (error) { derivedKeyCache.delete(cacheKey); throw error; }
 }
 
-export async function encryptMessage(_conversationId: string, plaintext: string) { return plaintext; }
+export async function encryptMessage(conversationId: string, plaintext: string) {
+  if (!localStorage.getItem('gm_token')) return plaintext;
+  try {
+    await registerIdentity();
+    const me = JSON.parse(localStorage.getItem('gm_user') || 'null');
+    const sender = await getIdentity();
+    const keys = await conversationKeys(conversationId);
+    const recipients = keys.filter(k => k.userId && k.publicKey);
+    if (!recipients.length || !me?.id) return plaintext;
+
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const entries: Record<string, { iv: string; ct: string }> = {};
+    for (const recipient of recipients) {
+      const key = await deriveAesKey(sender.privateKey, recipient.publicKey!, conversationId, salt);
+      const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
+      entries[String(recipient.userId)] = { iv: bytesToB64(iv), ct: bytesToB64(ciphertext) };
+    }
+    return PREFIX + JSON.stringify({ v: 1, alg: 'ECDH-P256/HKDF-SHA256/AES-256-GCM', senderKey: sender.publicKey, salt: bytesToB64(salt), entries });
+  } catch (error) {
+    console.warn('[Global Messenger E2EE] encryption deferred', error);
+    return plaintext;
+  }
+}
 
 export async function decryptMessage(conversationId: string, body: string) {
   if (!body.startsWith(PREFIX)) return body;
@@ -139,15 +160,15 @@ export async function decryptMessage(conversationId: string, body: string) {
     const me = JSON.parse(localStorage.getItem('gm_user') || 'null');
     const entry = envelope?.entries?.[me?.id];
     if (envelope?.v !== 1 || !envelope?.senderKey || !entry) return '🔒 Encrypted message (not available on this device)';
-    const current = await getIdentity();
-    const candidates = [current, ...getLocalIdentityCandidates()];
+    const salt = envelope?.salt ? b64ToBytes(envelope.salt) : enc.encode(`global-messenger:${conversationId}`);
+    const candidates = [await getIdentity(), ...getLocalIdentityCandidates()];
     const seen = new Set<string>();
     for (const identity of candidates) {
       const fingerprint = JSON.stringify(identity.publicKey);
       if (seen.has(fingerprint)) continue;
       seen.add(fingerprint);
       try {
-        const key = await deriveAesKey(identity.privateKey, envelope.senderKey, conversationId);
+        const key = await deriveAesKey(identity.privateKey, envelope.senderKey, conversationId, salt);
         const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(entry.iv) }, key, b64ToBytes(entry.ct));
         return dec.decode(plaintext);
       } catch {}
