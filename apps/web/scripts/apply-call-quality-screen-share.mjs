@@ -1,9 +1,8 @@
 import fs from 'node:fs';
-import path from 'node:path';
 
-const root = path.resolve(new URL('..', import.meta.url).pathname, '..');
-const file = path.join(root, 'src', 'features.ts');
-let source = fs.readFileSync(file, 'utf8');
+const path = 'src/features.ts';
+if (!fs.existsSync(path)) throw new Error(`Missing ${path}`);
+let source = fs.readFileSync(path, 'utf8');
 
 if (source.includes('gm:screen-share-runtime')) process.exit(0);
 
@@ -25,8 +24,7 @@ async function toggleScreenShare() {
     if (local && stream) local.srcObject = stream;
     return false;
   }
-  const media = await import('./call-media');
-  screenShareStream = await media.getReliableScreenShare();
+  screenShareStream = await getReliableScreenShare();
   const screenTrack = screenShareStream.getVideoTracks()[0];
   if (!screenTrack) throw new Error('No screen video track was created.');
   const sender = pc.getSenders().find(s => s.track?.kind === 'video');
@@ -51,8 +49,8 @@ function installScreenShareButton() {
       const active = await toggleScreenShare();
       button.textContent = active ? '⏹️' : '🖥️';
       button.title = active ? 'Stop screen sharing' : 'Share screen';
-    } catch (error) {
-      alert(error?.message || 'Unable to share your screen.');
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') alert(error?.message || 'Unable to share your screen.');
     }
   });
   footer.insertBefore(button, footer.lastElementChild);
@@ -65,4 +63,4 @@ const renderMarker = "startTimer(); }";
 if (!source.includes(renderMarker)) throw new Error('Call render marker not found');
 source = source.replace(renderMarker, "startTimer(); if (localVideo) installScreenShareButton(); }");
 source = source.replace("function reset() { stopRingtone();", "function reset() { screenShareStream?.getTracks().forEach(t => t.stop()); screenShareStream = null; cameraVideoTrack = null; stopRingtone();");
-fs.writeFileSync(file, source);
+fs.writeFileSync(path, source);
