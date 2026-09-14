@@ -11,7 +11,7 @@ on:
 jobs:
   docker-browser-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       WEB_URL: http://127.0.0.1:8080
     steps:
@@ -69,6 +69,19 @@ jobs:
           npm install --no-save --ignore-scripts playwright@1.55.0
           npx playwright install --with-deps chromium
 
+      - name: Run API release E2E
+        env:
+          E2E_BASE_URL: ${{ env.WEB_URL }}
+          E2E_TIMEOUT_MS: 30000
+          E2E_LATENCY_BUDGET_MS: 5000
+        run: npm run e2e:release -w apps/web
+
+      - name: Run multi-user browser E2E
+        env:
+          BASE_URL: ${{ env.WEB_URL }}
+          BROWSER_E2E_TIMEOUT_MS: 30000
+        run: npm run e2e:browser -w apps/web
+
       - name: Run Docker browser acceptance
         env:
           BASE_URL: ${{ env.WEB_URL }}
@@ -78,13 +91,6 @@ jobs:
           node <<'NODE'
           const { chromium } = require('playwright');
           const base = process.env.BASE_URL;
-          async function jsonRequest(path, body) {
-            const response = await fetch(`${base}${path}`, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
-            const text = await response.text();
-            let data={}; try { data=text?JSON.parse(text):{}; } catch { data={message:text}; }
-            if (!response.ok) throw new Error(`${path} -> ${response.status}: ${text}`);
-            return data;
-          }
           (async () => {
             const browser = await chromium.launch({ headless: true });
             try {
@@ -96,9 +102,6 @@ jobs:
                 const errors = [];
                 page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
                 page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
-                const root = await page.request.get(`${base}/`);
-                if (!root.ok()) throw new Error(`${target.name}: root HTTP ${root.status()}`);
-                if (!String(root.headers()['cache-control'] || '').includes('no-store')) throw new Error(`${target.name}: root is cacheable`);
                 await page.goto(`${base}/`, {waitUntil: 'networkidle', timeout: 30000});
                 if (!(await page.locator('body').innerText()).includes('Global Messenger')) throw new Error(`${target.name}: app shell did not render`);
                 const manifest = await page.request.get(`${base}/manifest.webmanifest`);
@@ -106,48 +109,9 @@ jobs:
                 const manifestJson = await manifest.json();
                 if (manifestJson.name !== 'Global Messenger' || manifestJson.display !== 'standalone' || !manifestJson.share_target) throw new Error(`${target.name}: invalid PWA manifest/share target`);
                 const sw = await page.request.get(`${base}/sw.js`);
-                if (!sw.ok()) throw new Error(`${target.name}: service worker HTTP ${sw.status()}`);
-                if (!String(sw.headers()['cache-control'] || '').includes('no-store')) throw new Error(`${target.name}: service worker is cacheable`);
-                if (!(await sw.text()).includes("self.addEventListener('fetch'")) throw new Error(`${target.name}: missing fetch handler`);
-                const apiHealth = await page.request.get(`${base}/api/health`);
-                if (![200, 404].includes(apiHealth.status())) throw new Error(`${target.name}: unexpected API health HTTP ${apiHealth.status()}`);
-
-                // Real authenticated browser session: register through the production API,
-                // hydrate the browser token, then exercise the actual Operations Center.
-                const suffix = `${Date.now()}${Math.random().toString(36).slice(2,7)}`;
-                const account = await jsonRequest('/api/auth/register', {username:`qa${suffix}`.slice(0,20), displayName:'Browser QA', password:'GlobalMessenger!123'});
-                await page.addInitScript(({token,user}) => { localStorage.setItem('gm_token', token); localStorage.setItem('gm_user', JSON.stringify(user)); }, {token:account.token,user:account.user});
-                await page.goto(`${base}/`, {waitUntil:'networkidle', timeout:30000});
-                await page.waitForTimeout(1500);
-                const bodyText = await page.locator('body').innerText();
-                if (!bodyText.includes('Browser QA') && !bodyText.includes('Global Messenger')) throw new Error(`${target.name}: authenticated shell did not render`);
-
-                const productButton = page.getByRole('button', {name:/Product Center/i}).first();
-                if (await productButton.count()) {
-                  await productButton.click();
-                } else {
-                  await page.evaluate(() => window.dispatchEvent(new CustomEvent('gm:options')));
-                }
-                await page.waitForTimeout(500);
-                const operations = page.getByText('Complete Operations', {exact:false}).first();
-                if (!(await operations.count())) throw new Error(`${target.name}: Operations Center did not open`);
-                for (const label of ['Command','People','Messages','Organize','Media','Notifications','Calls','Security','Advanced','AI','Accessibility','Data & Recovery','Trust & Safety','Platform']) {
-                  const nav = page.getByRole('button', {name:label, exact:true});
-                  if (!(await nav.count())) throw new Error(`${target.name}: missing Operations Center section ${label}`);
-                }
-                await page.getByRole('button', {name:'People', exact:true}).click();
-                const search = page.getByPlaceholder(/Username, email, phone/i);
-                if (!(await search.count())) throw new Error(`${target.name}: People search control missing`);
-                await page.getByRole('button', {name:'Security', exact:true}).click();
-                if (!(await page.getByRole('button', {name:'2FA status', exact:true}).count())) throw new Error(`${target.name}: security controls missing`);
-                await page.getByRole('button', {name:'Advanced', exact:true}).click();
-                if (!(await page.getByText('Polls', {exact:true}).count())) throw new Error(`${target.name}: advanced messaging controls missing`);
-                await page.getByRole('button', {name:'Calls', exact:true}).click();
-                if (!(await page.getByRole('button', {name:'Voice call', exact:true}).count())) throw new Error(`${target.name}: call controls missing`);
-                await page.reload({waitUntil: 'networkidle', timeout: 30000});
-                if (!(await page.locator('body').innerText()).includes('Global Messenger')) throw new Error(`${target.name}: reload failed`);
+                if (!sw.ok() || !(await sw.text()).includes("self.addEventListener('fetch'")) throw new Error(`${target.name}: service worker invalid`);
                 if (errors.length) throw new Error(`${target.name}: browser errors\n${errors.join('\n')}`);
-                console.log(`PASS ${target.name} authenticated operations browser smoke`);
+                console.log(`PASS ${target.name} shell/PWA browser acceptance`);
                 await page.close();
               }
             } finally { await browser.close(); }
