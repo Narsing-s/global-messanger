@@ -3,9 +3,15 @@ export interface Env {
   ALLOWED_ORIGIN: string;
 }
 
+const TRUSTED_PUBLIC_ORIGINS = [
+  "https://global-messenger-web.narsingbeesetti006.workers.dev",
+  "https://global-messenger-help-centre.onrender.com",
+];
+
 function corsHeaders(origin: string | null, allowedOrigins: string): HeadersInit {
   const configured = allowedOrigins.split(',').map(value => value.trim()).filter(Boolean);
-  const allowOrigin = origin && configured.includes(origin) ? origin : (configured[0] || '*');
+  const trusted = [...new Set([...configured, ...TRUSTED_PUBLIC_ORIGINS])];
+  const allowOrigin = origin && trusted.includes(origin) ? origin : (trusted[0] || '*');
   return {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Credentials": "true",
