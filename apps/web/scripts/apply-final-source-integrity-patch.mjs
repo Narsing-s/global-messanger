@@ -67,6 +67,21 @@ const decryptImport = "import { decryptMessageCompat } from './e2ee-compat';";
 }
 
 /*
+ * Build safety repair: one earlier generated source variant accidentally left
+ * a literal `onKeyDown...` placeholder in the composer. Replace that marker
+ * with the real Enter-to-send handler before TypeScript validation.
+ */
+{
+  const placeholder = 'onKeyDown...';
+  const replacement = "onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}}";
+  if (source.includes(placeholder)) {
+    source = source.split(placeholder).join(replacement);
+    changes++;
+    console.warn('[integrity] repaired composer onKeyDown placeholder');
+  }
+}
+
+/*
  * Build safety net: historical product patches can emit malformed TSX when they
  * encounter a source shape they were not written for. Validate the final source
  * before writing it and restore the committed canonical source if needed.
