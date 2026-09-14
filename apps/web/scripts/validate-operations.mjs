@@ -45,7 +45,8 @@ const requiredAdvanced = [
   ['live location', /\/api\/messages\/live-location/], ['contact sharing', /\/api\/messages\/contact/],
   ['event sharing', /\/api\/messages\/event/], ['2FA', /\/api\/security\/2fa/], ['login history', /\/api\/security\/login-history/],
   ['device security', /\/api\/security\/device-key/], ['E2EE identity', /\/api\/crypto\/identity/], ['AI assistant', /\/api\/ai\//],
-  ['session security', /\/api\/account\/sessions/], ['product center', /\/api\/product\/features/]
+  ['session security', /\/api\/account\/sessions/], ['product center', /\/api\/product\/features/],
+  ['trust safety reports', /\/api\/trust\/reports/], ['trust safety status', /\/api\/trust\/status/]
 ];
 
 const failures = requiredUi.filter(([, pattern]) => !pattern.test(main) && !pattern.test(api) && !pattern.test(webSource));
