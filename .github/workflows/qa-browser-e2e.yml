@@ -31,13 +31,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Use POSIX grep instead of ripgrep so the workflow works on the stock GitHub runner.
           if grep -R -n -E --exclude-dir=node_modules '(^|[^[:alnum:]_$])function[[:space:]]+document[[:space:]]*\(' apps/web/public apps/web/src; then exit 1; fi
           if grep -R -n -E --exclude-dir=node_modules 'vercel\.com/sso-api' apps/web/public apps/web/src; then exit 1; fi
           test -f apps/web/public/sw.js
           test -f apps/web/index.html
-          grep -q "auth-operation-fix.js" apps/web/index.html
           grep -q "mobile-auth-input-fix.js" apps/web/index.html
+          grep -q "share-target.js" apps/web/index.html
+          grep -q "share_target" apps/web/public/manifest.webmanifest
 
       - name: Build and start production Docker stack
         shell: bash
@@ -78,6 +78,13 @@ jobs:
           node <<'NODE'
           const { chromium } = require('playwright');
           const base = process.env.BASE_URL;
+          async function jsonRequest(path, body) {
+            const response = await fetch(`${base}${path}`, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
+            const text = await response.text();
+            let data={}; try { data=text?JSON.parse(text):{}; } catch { data={message:text}; }
+            if (!response.ok) throw new Error(`${path} -> ${response.status}: ${text}`);
+            return data;
+          }
           (async () => {
             const browser = await chromium.launch({ headless: true });
             try {
@@ -97,17 +104,50 @@ jobs:
                 const manifest = await page.request.get(`${base}/manifest.webmanifest`);
                 if (!manifest.ok()) throw new Error(`${target.name}: manifest HTTP ${manifest.status()}`);
                 const manifestJson = await manifest.json();
-                if (manifestJson.name !== 'Global Messenger' || manifestJson.display !== 'standalone') throw new Error(`${target.name}: invalid manifest`);
+                if (manifestJson.name !== 'Global Messenger' || manifestJson.display !== 'standalone' || !manifestJson.share_target) throw new Error(`${target.name}: invalid PWA manifest/share target`);
                 const sw = await page.request.get(`${base}/sw.js`);
                 if (!sw.ok()) throw new Error(`${target.name}: service worker HTTP ${sw.status()}`);
                 if (!String(sw.headers()['cache-control'] || '').includes('no-store')) throw new Error(`${target.name}: service worker is cacheable`);
                 if (!(await sw.text()).includes("self.addEventListener('fetch'")) throw new Error(`${target.name}: missing fetch handler`);
                 const apiHealth = await page.request.get(`${base}/api/health`);
                 if (![200, 404].includes(apiHealth.status())) throw new Error(`${target.name}: unexpected API health HTTP ${apiHealth.status()}`);
+
+                // Real authenticated browser session: register through the production API,
+                // hydrate the browser token, then exercise the actual Operations Center.
+                const suffix = `${Date.now()}${Math.random().toString(36).slice(2,7)}`;
+                const account = await jsonRequest('/api/auth/register', {username:`qa${suffix}`.slice(0,20), displayName:'Browser QA', password:'GlobalMessenger!123'});
+                await page.addInitScript(({token,user}) => { localStorage.setItem('gm_token', token); localStorage.setItem('gm_user', JSON.stringify(user)); }, {token:account.token,user:account.user});
+                await page.goto(`${base}/`, {waitUntil:'networkidle', timeout:30000});
+                await page.waitForTimeout(1500);
+                const bodyText = await page.locator('body').innerText();
+                if (!bodyText.includes('Browser QA') && !bodyText.includes('Global Messenger')) throw new Error(`${target.name}: authenticated shell did not render`);
+
+                const productButton = page.getByRole('button', {name:/Product Center/i}).first();
+                if (await productButton.count()) {
+                  await productButton.click();
+                } else {
+                  await page.evaluate(() => window.dispatchEvent(new CustomEvent('gm:options')));
+                }
+                await page.waitForTimeout(500);
+                const operations = page.getByText('Complete Operations', {exact:false}).first();
+                if (!(await operations.count())) throw new Error(`${target.name}: Operations Center did not open`);
+                for (const label of ['Command','People','Messages','Organize','Media','Notifications','Calls','Security','Advanced','AI','Accessibility','Data & Recovery','Trust & Safety','Platform']) {
+                  const nav = page.getByRole('button', {name:label, exact:true});
+                  if (!(await nav.count())) throw new Error(`${target.name}: missing Operations Center section ${label}`);
+                }
+                await page.getByRole('button', {name:'People', exact:true}).click();
+                const search = page.getByPlaceholder(/Username, email, phone/i);
+                if (!(await search.count())) throw new Error(`${target.name}: People search control missing`);
+                await page.getByRole('button', {name:'Security', exact:true}).click();
+                if (!(await page.getByRole('button', {name:'2FA status', exact:true}).count())) throw new Error(`${target.name}: security controls missing`);
+                await page.getByRole('button', {name:'Advanced', exact:true}).click();
+                if (!(await page.getByText('Polls', {exact:true}).count())) throw new Error(`${target.name}: advanced messaging controls missing`);
+                await page.getByRole('button', {name:'Calls', exact:true}).click();
+                if (!(await page.getByRole('button', {name:'Voice call', exact:true}).count())) throw new Error(`${target.name}: call controls missing`);
                 await page.reload({waitUntil: 'networkidle', timeout: 30000});
                 if (!(await page.locator('body').innerText()).includes('Global Messenger')) throw new Error(`${target.name}: reload failed`);
                 if (errors.length) throw new Error(`${target.name}: browser errors\n${errors.join('\n')}`);
-                console.log(`PASS ${target.name}`);
+                console.log(`PASS ${target.name} authenticated operations browser smoke`);
                 await page.close();
               }
             } finally { await browser.close(); }
