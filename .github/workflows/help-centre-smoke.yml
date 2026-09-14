@@ -8,24 +8,27 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    env:
+      API_URL: https://global-messenger-api.narsingbeesetti006.workers.dev
+      HELP_URL: https://global-messenger-help-centre.onrender.com
     steps:
-      - name: Check API health
+      - name: Check production API edge health
         run: |
           curl --fail --silent --show-error \
-            https://global-messanger-backend.onrender.com/health
+            "$API_URL/health"
 
       - name: Check Help Centre is reachable
         run: |
           curl --fail --silent --show-error -I \
-            https://global-messenger-help-centre.onrender.com/
+            "$HELP_URL/"
 
       - name: Check Help Centre CORS preflight
         run: |
           curl --fail --silent --show-error -D /tmp/headers -o /dev/null \
             -X OPTIONS \
-            -H 'Origin: https://global-messenger-help-centre.onrender.com' \
+            -H "Origin: $HELP_URL" \
             -H 'Access-Control-Request-Method: POST' \
             -H 'Access-Control-Request-Headers: content-type' \
-            https://global-messanger-backend.onrender.com/api/support/requests
-          grep -i '^access-control-allow-origin: https://global-messenger-help-centre.onrender.com' /tmp/headers
+            "$API_URL/api/support/requests"
+          grep -i "^access-control-allow-origin: $HELP_URL" /tmp/headers
           grep -i '^access-control-allow-methods:' /tmp/headers
