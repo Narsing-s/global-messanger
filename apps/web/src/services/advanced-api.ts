@@ -19,6 +19,7 @@ export async function advancedApi<T = any>(path: string, options: ApiOptions = {
 export const securityApi = {
   twoFactorStatus: () => advancedApi('/api/security/2fa/status'),
   setupTwoFactor: () => advancedApi('/api/security/2fa/setup', { method: 'POST' }),
+  verifyTwoFactor: (code: string) => advancedApi('/api/security/2fa/verify', { method: 'POST', json: { code } }),
   enableTwoFactor: (secret: string, code: string) => advancedApi('/api/security/2fa/enable', { method: 'POST', json: { secret, code } }),
   disableTwoFactor: (code: string) => advancedApi('/api/security/2fa/disable', { method: 'POST', json: { code } }),
   devices: () => advancedApi('/api/sessions'),
