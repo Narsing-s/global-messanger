@@ -10,6 +10,7 @@
     "validate:operations": "npm run apply:product-patches && node scripts/validate-operations.mjs",
     "e2e:release": "npm run apply:product-patches && node scripts/release-e2e.mjs",
     "e2e:remainder": "npm run apply:product-patches && node scripts/remainder-e2e.mjs",
+    "e2e:browser": "npm run apply:product-patches && node scripts/browser-e2e.mjs",
     "android:add": "cap add android",
     "android:sync": "cap sync",
     "android:open": "cap open android",
@@ -33,7 +34,6 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.0",
-    "@vitejs/plugin-react": "^4.4.1",
     "typescript": "^5.7.3",
     "vite": "^6.4.3"
   },
