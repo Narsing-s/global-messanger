@@ -22,6 +22,13 @@ const auth = `function Auth({register,setRegister,username,setUsername,password,
       return {response,data};
     }finally{window.clearTimeout(timer)}
   }
+  async function finishTwoFactor(base:string,userId:string){
+    const code=window.prompt('Two-step verification\\nEnter your 6-digit authenticator code or an unused recovery code:')?.trim()||'';
+    if(!code)throw Error('Two-step verification is required.');
+    const out=await requestAuth(base,'/api/auth/2fa/verify',{userId,code});
+    if(!out.response.ok||!out.data?.token)throw Error(out.data?.message||'Invalid two-step verification code.');
+    return out.data;
+  }
   async function submit(e:React.FormEvent){
     e.preventDefault();setError('');setLoading(true);
     try{
@@ -44,18 +51,18 @@ const auth = `function Auth({register,setRegister,username,setUsername,password,
           }
           try{
             const out=await requestAuth(base,path,body);
-            result=out.data;
-            if(out.response.ok&&result?.token){workingBase=base.replace(/\\/$/,'');break}
+            result=out.data;workingBase=base.replace(/\\/$/,'');
+            if(out.response.ok&&result?.token)break;
             if(result?.message)lastMessage=String(result.message);
-            if(result?.requiresTwoFactor)break;
+            if(result?.requiresTwoFactor){
+              result=await finishTwoFactor(workingBase,String(result.userId||result.user?.id||''));
+              break;
+            }
           }catch(err:any){lastMessage=err?.name==='AbortError'?'Authentication server timed out.':(err?.message||lastMessage);}
         }
-        if(result?.token||result?.requiresTwoFactor)break;
+        if(result?.token)break;
       }
-      if(!result?.token){
-        if(result?.requiresTwoFactor)throw Error('Two-step verification is enabled. Complete 2FA before continuing.');
-        throw Error(lastMessage==='Authentication server is unavailable. Please try again.'?lastMessage:'Login server did not return a login token. All configured authentication servers were checked.');
-      }
+      if(!result?.token)throw Error(lastMessage==='Authentication server is unavailable. Please try again.'?lastMessage:'Login server did not return a login token. All configured authentication servers were checked.');
       localStorage.setItem('gm_token',String(result.token));
       localStorage.setItem('gm_user',JSON.stringify(result.user||{}));
       if(workingBase)localStorage.setItem('gm_api_url',workingBase);
@@ -68,4 +75,4 @@ const auth = `function Auth({register,setRegister,username,setUsername,password,
 `;
 source=source.slice(0,start)+auth+source.slice(end);
 fs.writeFileSync(file,source);
-console.log('[Production] cross-device authentication fallback hardened');
+console.log('[Production] cross-device authentication and 2FA flow hardened');
