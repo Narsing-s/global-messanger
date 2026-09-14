@@ -48,6 +48,8 @@ jobs:
         run: npm run build
       - name: Validate operations
         run: npm run verify:operations
+      - name: Validate self-hosted compose
+        run: docker compose --env-file deploy/.env.self-hosted.example -f deploy/docker-compose.global.yml config --quiet
       - name: Validate production capability sources
         run: |
           test -f apps/server/src/production-capabilities.ts
@@ -56,3 +58,10 @@ jobs:
           test -f apps/web/src/call-media.ts
           test -f deploy/docker-compose.global.yml
           test -f deploy/nginx/global.conf
+          test -f deploy/nginx/self-hosted.conf
+          test -f deploy/.env.self-hosted.example
+          test -f docs/SELF_HOSTING.md
+          test -f deploy/scripts/install.sh
+          test -f deploy/scripts/update.sh
+          test -f deploy/scripts/backup.sh
+          test -f deploy/scripts/restore.sh
