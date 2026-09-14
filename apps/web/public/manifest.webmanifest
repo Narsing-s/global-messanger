@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Global Messenger",
   "short_name": "Messenger",
-  "description": "Fast realtime messaging, voice calls and video calls.",
+  "description": "Fast realtime messaging, voice calls, offline-first chat, voice/video calls and secure collaboration.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -10,8 +10,18 @@
   "background_color": "#f7f8fc",
   "theme_color": "#536dfe",
   "orientation": "portrait-primary",
-  "categories": ["social", "communication"],
+  "categories": ["social", "communication", "productivity"],
   "prefer_related_applications": false,
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {"src":"/icons/icon-192.svg?v=2","sizes":"192x192","type":"image/svg+xml","purpose":"any maskable"},
     {"src":"/icons/icon-512.svg?v=2","sizes":"512x512","type":"image/svg+xml","purpose":"any maskable"}
