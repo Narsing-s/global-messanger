@@ -40,3 +40,5 @@ jobs:
 
       - name: Verify web artifact
         run: test -f apps/web/dist/index.html
+
+      # Canonical operations center build verification is intentionally part of the normal web build.
