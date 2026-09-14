@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@capacitor/android": "^7.4.0",
-    "@capacitor/core": "^7.0.0",
+    "@capacitor/core": "^7.4.0",
     "@capacitor/ios": "^7.4.0",
     "@capacitor/push-notifications": "^7.0.4",
     "lucide-react": "^0.511.0",
@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.0",
+    "@vitejs/plugin-react": "^4.4.1",
     "@vitejs/plugin-react": "^4.4.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.18",
