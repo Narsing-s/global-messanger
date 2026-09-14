@@ -1,37 +1,124 @@
+name: global-messenger
+
 services:
-  api:
-    deploy:
-      replicas: 2
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
     environment:
-      REGION_ID: ${REGION_ID:-primary}
-      REGIONS: ${REGIONS:-primary}
-      CDN_ORIGIN: ${CDN_ORIGIN:-}
+      POSTGRES_DB: ${POSTGRES_DB:-global_messenger}
+      POSTGRES_USER: ${POSTGRES_USER:-global_messenger}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - global_messenger_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [gm]
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/server/Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-global_messenger}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-global_messenger}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost}
+      PASSWORD_RESET_WEB_ORIGIN: ${PASSWORD_RESET_WEB_ORIGIN:-http://localhost}
+      UPLOAD_DIR: /data/uploads
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-25}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-Global Messenger <no-reply@localhost>}
       SFU_PROVIDER: mediasoup
       MEDIASOUP_LISTEN_IP: 0.0.0.0
       MEDIASOUP_ANNOUNCED_IP: ${MEDIASOUP_ANNOUNCED_IP:-}
-      MEDIASOUP_RTC_MIN_PORT: 40000
-      MEDIASOUP_RTC_MAX_PORT: 49999
-      TURN_URL: ${TURN_URL:-turn:turn.example.com:3478}
+      MEDIASOUP_RTC_MIN_PORT: ${MEDIASOUP_RTC_MIN_PORT:-40000}
+      MEDIASOUP_RTC_MAX_PORT: ${MEDIASOUP_RTC_MAX_PORT:-49999}
+      TURN_URL: ${TURN_URL:-turn:localhost:3478}
       TURN_USERNAME: ${TURN_USERNAME:-global-messenger}
-      TURN_CREDENTIAL: ${TURN_CREDENTIAL:-change-me}
+      TURN_CREDENTIAL: ${TURN_CREDENTIAL:-}
       TURN_REQUIRED: ${TURN_REQUIRED:-false}
       CLAMDSCAN_PATH: /usr/bin/clamdscan
-    ports:
-      - "${MEDIASOUP_RTC_MIN_PORT:-40000}-${MEDIASOUP_RTC_MAX_PORT:-49999}:40000-49999/udp"
-      - "${MEDIASOUP_RTC_MIN_PORT:-40000}-${MEDIASOUP_RTC_MAX_PORT:-49999}:40000-49999/tcp"
+      REGION_ID: ${REGION_ID:-self-hosted}
+      REGIONS: ${REGIONS:-self-hosted}
+      CDN_ORIGIN: ${CDN_ORIGIN:-}
     depends_on:
-      - clamav
-      - turn
+      postgres:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+    volumes:
+      - global_messenger_uploads:/data/uploads
+    expose:
+      - "4000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    networks: [gm]
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-self-hosted}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    restart: unless-stopped
+    init: true
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_URL: ${API_URL:-}
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [gm]
+
+  nginx:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/self-hosted.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${TLS_DIR:-./tls}:/etc/nginx/tls:ro
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
+    networks: [gm]
 
   turn:
-    image: coturn/coturn:4.18
+    image: coturn/coturn:4.8.1
     restart: unless-stopped
-    command: ["-n", "--log-file=stdout", "--fingerprint", "--lt-cred-mech", "--realm=${TURN_REALM:-global-messenger}", "--user=${TURN_USERNAME:-global-messenger}:${TURN_CREDENTIAL:-change-me}", "--min-port=49160", "--max-port=49200", "--no-multicast-peers", "--no-cli"]
+    command: ["-n", "--log-file=stdout", "--fingerprint", "--lt-cred-mech", "--realm=${TURN_REALM:-global-messenger}", "--user=${TURN_USERNAME:-global-messenger}:${TURN_CREDENTIAL:?Set TURN_CREDENTIAL in .env}", "--min-port=49160", "--max-port=49200", "--no-multicast-peers", "--no-cli"]
     ports:
       - "3478:3478/tcp"
       - "3478:3478/udp"
       - "5349:5349/tcp"
       - "49160-49200:49160-49200/udp"
+    networks: [gm]
 
   clamav:
     image: clamav/clamav:stable
@@ -41,11 +128,12 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks: [gm]
 
-  nginx:
-    image: nginx:1.27-alpine
-    restart: unless-stopped
-    volumes:
-      - ./nginx/global.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - api
+volumes:
+  global_messenger_pg:
+  global_messenger_uploads:
+
+networks:
+  gm:
+    driver: bridge
