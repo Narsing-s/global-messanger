@@ -1,9 +1,9 @@
 (() => {
   if (window.__gmSettingsExtraLoaded) return;
   window.__gmSettingsExtraLoaded = true;
-  const API = () => (window.__GM_CONFIG__?.API_URL || localStorage.getItem('gm_api_url') || (location.hostname === 'localhost' ? location.origin : 'https://global-messenger-api.narsingbeesetti006.workers.dev')).replace(/\/$/, '');
+  const API = () => location.origin.replace(/\/$/, '');
   const token = () => localStorage.getItem('gm_token') || '';
-  const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const escapeHtml = (v) => String(v ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
 
   async function loadBlocked(root) {
     const box = root.querySelector('#gm-blocked-list');
