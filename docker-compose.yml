@@ -26,8 +26,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      # Set DATABASE_URL to the Neon connection string in .env for production.
-      # If DATABASE_URL is empty, Docker falls back to the local postgres service.
+      # Self-hosted default: PostgreSQL runs in this Compose stack.
+      # An external DATABASE_URL is intentionally opt-in rather than required.
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-global_messenger}?schema=public}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
@@ -55,7 +55,7 @@ services:
       start_period: 20s
     networks: [messenger]
 
-  # Canonical production web frontend. Browser traffic uses same-origin
+  # Canonical self-hosted web frontend. Browser traffic uses same-origin
   # /api, /socket.io and /uploads routing through nginx.
   web:
     build:
