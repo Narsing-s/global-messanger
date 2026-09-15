@@ -1,4 +1,4 @@
-const CACHE_NAME = 'global-messenger-shell-v13';
+const CACHE_NAME = 'global-messenger-shell-v14-self-hosted';
 
 self.addEventListener('install', event => {
   event.waitUntil(self.skipWaiting());
@@ -23,10 +23,12 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // API and realtime traffic must never be intercepted or cached by the shell worker.
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
 
-  // Deployment metadata and the app shell must always come from the latest deployment.
-  // This prevents an older UI from surviving across Vercel/Cloudflare deployments.
+  // Deployment metadata and the app shell must always come directly from the
+  // self-hosted web container. This prevents an older hosted UI/configuration
+  // from surviving across releases.
   const alwaysFresh = [
     '/',
     '/index.html',
@@ -50,8 +52,6 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Hashed Vite assets are safe to cache, but always prefer the network so a new
-  // deployment becomes visible immediately when the asset URL changes.
   event.respondWith(
     fetch(request, { cache: 'no-store' }).then(response => {
       if (response.ok && response.type === 'basic') {
