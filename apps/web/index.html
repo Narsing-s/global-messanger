@@ -5,45 +5,70 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#635bff" />
     <meta name="description" content="Global Messenger — fast, secure messaging across web, desktop and mobile." />
-    <meta name="gm-build" content="release-20260915-v23-self-hosted" />
+    <meta name="gm-build" content="release-20260915-v24-self-hosted" />
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, proxy-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <link rel="manifest" href="/manifest.webmanifest?v=release-20260915-v23-self-hosted" />
+    <link rel="manifest" href="/manifest.webmanifest?v=release-20260915-v24-self-hosted" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23635bff'/%3E%3Cpath d='M14 18h36v24H29l-9 8v-8h-6z' fill='white'/%3E%3Ccircle cx='25' cy='30' r='3' fill='%23635bff'/%3E%3Ccircle cx='32' cy='30' r='3' fill='%23635bff'/%3E%3Ccircle cx='39' cy='30' r='3' fill='%23635bff'/%3E%3C/svg%3E" />
     <title>Global Messenger</title>
   </head>
   <body>
     <div id="root"></div>
-    <script src="/config.js?v=release-20260915-v23-self-hosted" onerror="this.remove()"></script>
+    <script src="/config.js?v=release-20260915-v24-self-hosted" onerror="this.remove()"></script>
     <script>
       window.__GM_CONFIG__=window.__GM_CONFIG__||{};
       (function(){
         var p=location.protocol;
         var native=p==='capacitor:'||p==='ionic:'||p==='file:'||p==='null';
         var configured=window.__GM_CONFIG__.API_URL||localStorage.getItem('gm_api_url')||'';
-        if(!native){ window.__GM_CONFIG__.API_URL=location.origin; }
-        else if(configured && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(configured)){ window.__GM_CONFIG__.API_URL=configured.replace(/\/$/,''); }
-        else { window.__GM_CONFIG__.API_URL=''; }
+        if(!native){
+          window.__GM_CONFIG__.API_URL=location.origin;
+          var legacyHosts=['global-messenger-api.narsingbeesetti006.workers.dev','global-messenger-web.narsingbeesetti006.workers.dev','global-messanger-backend.onrender.com','global-messanger.onrender.com','global-messenger-api-new.onrender.com','global-messenger-web-new.onrender.com'];
+          var rewrite=function(input){
+            try{
+              var raw=typeof input==='string'?input:input&&input.url||'';
+              if(!raw)return input;
+              var u=new URL(raw,location.href);
+              if(legacyHosts.indexOf(u.hostname)<0)return input;
+              var rewritten=location.origin+u.pathname+u.search+u.hash;
+              if(typeof input==='string')return rewritten;
+              return new Request(rewritten,input);
+            }catch(e){return input;}
+          };
+          var originalFetch=window.fetch.bind(window);
+          window.fetch=function(input,init){return originalFetch(rewrite(input),init);};
+          var OriginalXHR=window.XMLHttpRequest;
+          if(OriginalXHR){
+            var open=OriginalXHR.prototype.open;
+            OriginalXHR.prototype.open=function(method,url){
+              var next=url;
+              try{var u=new URL(String(url),location.href);if(legacyHosts.indexOf(u.hostname)>=0)next=location.origin+u.pathname+u.search+u.hash;}catch(e){}
+              return open.apply(this,[method,next].concat([].slice.call(arguments,2)));
+            };
+          }
+        } else if(configured && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(configured)){
+          window.__GM_CONFIG__.API_URL=configured.replace(/\/$/,'');
+        } else { window.__GM_CONFIG__.API_URL=''; }
       })();
     </script>
-    <script src="/eco-mode.js?v=release-20260915-v23-self-hosted"></script>
-    <script src="/mobile-auth-input-fix.js?v=release-20260915-v23-self-hosted"></script>
-    <script src="/advanced-feature-center-v2.js?v=release-20260915-v23-self-hosted"></script>
-    <script src="/release-control-center.js?v=release-20260915-v23-self-hosted"></script>
-    <script src="/react-event-bridge.js?v=release-20260915-v23-self-hosted"></script>
-    <script src="/message-operations-v2.js?v=release-20260915-v23-self-hosted"></script>
-    <script src="/message-menu-stability.js?v=release-20260915-v23-self-hosted"></script>
-    <script src="/p0-completion-ui-v2.js?v=release-20260915-v23-self-hosted"></script>
-    <script src="/call-signal-hider.js?v=release-20260915-v23-self-hosted"></script>
-    <script src="/share-target.js?v=release-20260915-v23-self-hosted"></script>
-    <script type="module" src="/src/e2ee-bootstrap.ts?v=release-20260915-v23-self-hosted"></script>
-    <script type="module" src="/src/features.ts?v=release-20260915-v23-self-hosted"></script>
-    <script type="module" src="/src/accessibility-i18n.ts?v=release-20260915-v23-self-hosted"></script>
-    <script type="module" src="/src/call-media.ts?v=release-20260915-v23-self-hosted"></script>
-    <script type="module" src="/src/sfu-client.ts?v=release-20260915-v23-self-hosted"></script>
-    <script type="module" src="/src/main.tsx?v=release-20260915-v23-self-hosted"></script>
-    <script>if('serviceWorker'in navigator){navigator.serviceWorker.register('/sw.js?v=release-20260915-v23-self-hosted',{scope:'/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}</script>
+    <script src="/eco-mode.js?v=release-20260915-v24-self-hosted"></script>
+    <script src="/mobile-auth-input-fix.js?v=release-20260915-v24-self-hosted"></script>
+    <script src="/advanced-feature-center-v2.js?v=release-20260915-v24-self-hosted"></script>
+    <script src="/release-control-center.js?v=release-20260915-v24-self-hosted"></script>
+    <script src="/react-event-bridge.js?v=release-20260915-v24-self-hosted"></script>
+    <script src="/message-operations-v2.js?v=release-20260915-v24-self-hosted"></script>
+    <script src="/message-menu-stability.js?v=release-20260915-v24-self-hosted"></script>
+    <script src="/p0-completion-ui-v2.js?v=release-20260915-v24-self-hosted"></script>
+    <script src="/call-signal-hider.js?v=release-20260915-v24-self-hosted"></script>
+    <script src="/share-target.js?v=release-20260915-v24-self-hosted"></script>
+    <script type="module" src="/src/e2ee-bootstrap.ts?v=release-20260915-v24-self-hosted"></script>
+    <script type="module" src="/src/features.ts?v=release-20260915-v24-self-hosted"></script>
+    <script type="module" src="/src/accessibility-i18n.ts?v=release-20260915-v24-self-hosted"></script>
+    <script type="module" src="/src/call-media.ts?v=release-20260915-v24-self-hosted"></script>
+    <script type="module" src="/src/sfu-client.ts?v=release-20260915-v24-self-hosted"></script>
+    <script type="module" src="/src/main.tsx?v=release-20260915-v24-self-hosted"></script>
+    <script>if('serviceWorker'in navigator){navigator.serviceWorker.register('/sw.js?v=release-20260915-v24-self-hosted',{scope:'/',updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});}</script>
   </body>
 </html>
