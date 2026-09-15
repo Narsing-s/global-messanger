@@ -19,8 +19,10 @@ COPY package.json package-lock.json ./
 COPY apps/server/package.json apps/server/package.json
 COPY apps/web/package.json apps/web/package.json
 
+# The root lockfile is currently behind apps/web/package.json. Use npm install here
+# so Docker remains buildable while the lockfile is synchronized in source control.
 RUN --mount=type=cache,id=global-messenger-npm-api,target=/root/.npm,sharing=locked \
-    npm ci --workspace apps/server --include-workspace-root=false --no-audit --no-fund
+    npm install --workspace apps/server --include-workspace-root=false --no-audit --no-fund
 
 COPY . .
 
