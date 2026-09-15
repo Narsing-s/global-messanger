@@ -2,10 +2,12 @@ package com.globalmessenger.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.text.InputType;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -15,6 +17,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.JavascriptInterface;
+import android.widget.EditText;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.biometric.BiometricManager;
@@ -23,9 +26,9 @@ import androidx.core.content.ContextCompat;
 import java.util.concurrent.Executor;
 
 public class MainActivity extends Activity {
-    private static final String APP_URL = BuildConfig.GM_APP_URL;
     private static final String PREFS = "global_messenger_security";
     private static final String BIOMETRIC_LOCK = "biometric_lock";
+    private static final String SERVER_URL = "server_url";
     private WebView webView;
     private SharedPreferences securityPrefs;
     private boolean authenticatedThisLaunch = false;
@@ -35,6 +38,47 @@ public class MainActivity extends Activity {
         requestWindowFocusForKeyboard();
         securityPrefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         requestRuntimePermissions();
+        String savedUrl = securityPrefs.getString(SERVER_URL, "");
+        if (savedUrl == null || savedUrl.trim().isEmpty()) {
+            showServerUrlSetup();
+        } else {
+            loadMessenger(savedUrl);
+        }
+    }
+
+    private void showServerUrlSetup() {
+        final EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        input.setHint("https://your-server.example");
+        input.setText(BuildConfig.GM_APP_URL.equals("http://10.0.2.2:8080/") ? "" : BuildConfig.GM_APP_URL);
+        input.setSelectAllOnFocus(true);
+        int pad = (int) (24 * getResources().getDisplayMetrics().density);
+        input.setPadding(pad, pad / 2, pad, pad / 2);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Connect to your Global Messenger server")
+                .setMessage("Global Messenger is self-hosted. Enter the HTTPS address of the server you control. For LAN testing, use your PC/server address, for example http://192.168.1.25:8080")
+                .setView(input)
+                .setCancelable(false)
+                .setPositiveButton("Connect", null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String value = input.getText().toString().trim();
+            if (!value.endsWith("/")) value += "/";
+            if (!(value.startsWith("https://") || value.startsWith("http://"))) {
+                input.setError("Use http:// or https://");
+                return;
+            }
+            securityPrefs.edit().putString(SERVER_URL, value).apply();
+            dialog.dismiss();
+            loadMessenger(value);
+        }));
+        dialog.show();
+    }
+
+    private void loadMessenger(String serverUrl) {
+        requestWindowFocusForKeyboard();
         webView = new WebView(this);
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
@@ -62,7 +106,9 @@ public class MainActivity extends Activity {
             }
         });
         webView.addJavascriptInterface(new SecurityBridge(), "GlobalMessengerSecurity");
-        webView.loadUrl(APP_URL);
+        // Cache-busting marker ensures a newly installed APK does not keep an old generated UI shell.
+        String url = serverUrl + (serverUrl.contains("?") ? "&" : "?") + "gm_client=android&gm_ui=market-20260915";
+        webView.loadUrl(url);
         if (securityPrefs.getBoolean(BIOMETRIC_LOCK, false)) {
             webView.setVisibility(View.INVISIBLE);
             webView.postDelayed(this::authenticateForApp, 250);
