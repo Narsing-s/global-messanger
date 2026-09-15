@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
@@ -23,7 +22,7 @@ import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
 import java.util.concurrent.Executor;
 
-public class MainActivity {
+public class MainActivity extends Activity {
     private static final String APP_URL = BuildConfig.GM_APP_URL;
     private static final String PREFS = "global_messenger_security";
     private static final String BIOMETRIC_LOCK = "biometric_lock";
@@ -36,7 +35,6 @@ public class MainActivity {
         requestWindowFocusForKeyboard();
         securityPrefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         requestRuntimePermissions();
-
         webView = new WebView(this);
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
@@ -44,7 +42,6 @@ public class MainActivity {
         webView.setBackgroundColor(Color.TRANSPARENT);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         setContentView(webView);
-
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -58,7 +55,6 @@ public class MainActivity {
         s.setTextZoom(100);
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         s.setLoadsImagesAutomatically(true);
-
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
             @Override public void onPermissionRequest(final PermissionRequest request) {
@@ -67,7 +63,6 @@ public class MainActivity {
         });
         webView.addJavascriptInterface(new SecurityBridge(), "GlobalMessengerSecurity");
         webView.loadUrl(APP_URL);
-
         if (securityPrefs.getBoolean(BIOMETRIC_LOCK, false)) {
             webView.setVisibility(View.INVISIBLE);
             webView.postDelayed(this::authenticateForApp, 250);
