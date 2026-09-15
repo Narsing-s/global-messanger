@@ -1,6 +1,6 @@
 (() => {
   const originalFetch = window.fetch.bind(window);
-  const API = () => (window.__GM_CONFIG__?.API_URL || localStorage.getItem('gm_api_url') || 'https://global-messenger-api.narsingbeesetti006.workers.dev').replace(/\/$/, '');
+  const API = () => location.origin.replace(/\/$/, '');
 
   const rewriteApiUrl = (input) => {
     try {
