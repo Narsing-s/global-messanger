@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const isLoadError = (text) => /unable to load conversations|request failed \((?:4|5)\d\d\)/i.test(String(text || ''));
-  const apiBase = () => (window.__GM_CONFIG__?.API_URL || localStorage.getItem('gm_api_url') || (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? location.origin : 'https://global-messenger-api.narsingbeesetti006.workers.dev')).replace(/\/$/, '');
+  const apiBase = () => (location.origin || window.__GM_CONFIG__?.API_URL || localStorage.getItem('gm_api_url')).replace(/\/$/, '');
   let checking = false;
   async function verifyConversationsAndClear(node) {
     if (checking || !node || !isLoadError(node.textContent)) return;
