@@ -12,7 +12,7 @@ async function request<T = any>(path: string, options: RequestInit = {}): Promis
   const headers = new Headers(options.headers || {});
   if (options.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
   if (token) headers.set('authorization', `Bearer ${token}`);
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const response = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: options.credentials || 'include' });
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     throw new Error(text || `Request failed: ${response.status}`);
@@ -47,6 +47,7 @@ async function uploadWithProgress(file: File, onProgress?: (percent: number) => 
 }
 
 const api = {
+  conversations:()=>request('/api/conversations'),
   searchMessages:(q:string,conversationId?:string,filters?:{senderId?:string;from?:string;to?:string;type?:string;hasAttachment?:boolean})=>{const params=new URLSearchParams({q});if(conversationId)params.set('conversationId',conversationId);for(const [k,v] of Object.entries(filters||{}))if(v!==undefined&&v!=='')params.set(k,String(v));return request(`/api/messages/search?${params}`);},
   profile:()=>request('/api/profile/me'), updateProfile:(data:any)=>request('/api/profile/me',{method:'PATCH',body:JSON.stringify(data)}), productFeatures:()=>request('/api/product/features'),
   sessions:()=>request('/api/security/sessions'), revokeSession:(id:string)=>request(`/api/security/sessions/${encodeURIComponent(id)}`,{method:'DELETE'}), revokeOtherSessions:()=>request('/api/security/sessions/revoke-others',{method:'POST'}),
@@ -58,4 +59,6 @@ const api = {
   forwardMessage:(messageId:string,conversationId:string)=>request('/api/messages/forward',{method:'POST',body:JSON.stringify({messageId,conversationId})}), editMessage:(id:string,body:string)=>request(`/api/messages/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({body})}), deleteMessage:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}`,{method:'DELETE'}), upload:(file:File,onProgress?:any,signal?:AbortSignal)=>uploadWithProgress(file,onProgress,signal), react:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reactions`,{method:'POST',body:JSON.stringify({emoji})}), unreact:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reactions`,{method:'DELETE',body:JSON.stringify({emoji})}), bookmark:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}/bookmark`,{method:'POST'}), unbookmark:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}/bookmark`,{method:'DELETE'}), registerDevice:(token:string,platform:string)=>request('/api/devices',{method:'POST',body:JSON.stringify({token,platform})}), aiAssist:(prompt:string,context?:string)=>request('/api/ai/assist',{method:'POST',body:JSON.stringify({prompt,context})}), logout:()=>request('/api/auth/logout',{method:'POST'})
 };
 
-export { request, api, API_URL };
+// Backward-compatible named export used by runtime-fixes and service adapters.
+const API = API_URL;
+export { request, api, API, API_URL };
