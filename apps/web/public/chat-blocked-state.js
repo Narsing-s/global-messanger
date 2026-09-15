@@ -1,5 +1,5 @@
 (() => {
-  const API = () => (window.__GM_CONFIG__?.API_URL || localStorage.getItem('gm_api_url') || ((location.hostname === '127.0.0.1' || location.hostname === 'localhost') ? location.origin : 'https://global-messenger-api.narsingbeesetti006.workers.dev')).replace(/\/$/, '');
+  const API = () => location.origin.replace(/\/$/, '');
   const blockedKey = 'gm_blocked_ids';
   const get = () => { try { return JSON.parse(localStorage.getItem(blockedKey) || '[]'); } catch { return []; } };
   const decorate = () => {
