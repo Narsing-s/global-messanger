@@ -5,11 +5,17 @@ declare global {
 }
 
 /**
- * Single production API origin for Cloudflare Pages, PWA and Capacitor.
- * The API is the Cloudflare Worker endpoint and uses Neon PostgreSQL.
- * Never fall back to Render, Vercel or localhost in production/native builds.
+ * Runtime API routing for Global Messenger.
+ *
+ * Browser deployments use the injected API URL (or the production API).
+ * A browser opened from localhost/127.0.0.1 always uses the same origin so
+ * the self-hosted Docker stack works without stale localStorage/env values
+ * sending requests to the public API and triggering CORS failures.
+ * Native Capacitor/Ionic/file runtimes continue to use the configured API.
  */
 const DEFAULT_PRODUCTION_API = 'https://global-messenger-api.narsingbeesetti006.workers.dev';
+const native = ['capacitor:', 'ionic:', 'file:', 'null'].includes(window.location.protocol);
+const localBrowser = !native && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
 const configured =
   window.__GM_CONFIG__?.API_URL ||
@@ -18,11 +24,12 @@ const configured =
   '';
 
 const loopback = (value: string) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(value);
-const native = ['capacitor:', 'ionic:', 'file:', 'null'].includes(window.location.protocol);
 
-export const API = (configured && (!loopback(configured) || import.meta.env.DEV))
-  ? configured.replace(/\/$/, '')
-  : (import.meta.env.DEV && !native ? window.location.origin : DEFAULT_PRODUCTION_API);
+export const API = localBrowser
+  ? window.location.origin
+  : (configured && (!loopback(configured) || import.meta.env.DEV)
+      ? configured.replace(/\/$/, '')
+      : DEFAULT_PRODUCTION_API);
 
 export const isNativeRuntime = native;
 
