@@ -1,5 +1,3 @@
-import type { ApiResponse } from './types';
-
 const API_URL = (() => {
   const configured = (globalThis as any).__GM_CONFIG__?.API_URL;
   if (configured) return String(configured).replace(/\/$/, '');
@@ -48,6 +46,13 @@ async function uploadWithProgress(file: File, onProgress?: (percent: number) => 
 
 const api = {
   conversations:()=>request('/api/conversations'),
+  messages:(conversationId:string,limit=100)=>request(`/api/conversations/${encodeURIComponent(conversationId)}/messages?limit=${limit}`),
+  searchUsers:(q:string)=>request(`/api/users/search?q=${encodeURIComponent(q)}`),
+  direct:(userId:string)=>request('/api/conversations/direct',{method:'POST',body:JSON.stringify({userId})}),
+  group:(title:string,userIds:string[])=>request('/api/conversations/group',{method:'POST',body:JSON.stringify({title,userIds})}),
+  read:(conversationId:string)=>request(`/api/conversations/${encodeURIComponent(conversationId)}/read`,{method:'POST'}),
+  pin:(conversationId:string,messageId:string)=>request(`/api/conversations/${encodeURIComponent(conversationId)}/pins`,{method:'POST',body:JSON.stringify({messageId})}),
+  unpin:(conversationId:string,messageId:string)=>request(`/api/conversations/${encodeURIComponent(conversationId)}/pins/${encodeURIComponent(messageId)}`,{method:'DELETE'}),
   searchMessages:(q:string,conversationId?:string,filters?:{senderId?:string;from?:string;to?:string;type?:string;hasAttachment?:boolean})=>{const params=new URLSearchParams({q});if(conversationId)params.set('conversationId',conversationId);for(const [k,v] of Object.entries(filters||{}))if(v!==undefined&&v!=='')params.set(k,String(v));return request(`/api/messages/search?${params}`);},
   profile:()=>request('/api/profile/me'), updateProfile:(data:any)=>request('/api/profile/me',{method:'PATCH',body:JSON.stringify(data)}), productFeatures:()=>request('/api/product/features'),
   sessions:()=>request('/api/security/sessions'), revokeSession:(id:string)=>request(`/api/security/sessions/${encodeURIComponent(id)}`,{method:'DELETE'}), revokeOtherSessions:()=>request('/api/security/sessions/revoke-others',{method:'POST'}),
@@ -59,6 +64,5 @@ const api = {
   forwardMessage:(messageId:string,conversationId:string)=>request('/api/messages/forward',{method:'POST',body:JSON.stringify({messageId,conversationId})}), editMessage:(id:string,body:string)=>request(`/api/messages/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({body})}), deleteMessage:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}`,{method:'DELETE'}), upload:(file:File,onProgress?:any,signal?:AbortSignal)=>uploadWithProgress(file,onProgress,signal), react:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reactions`,{method:'POST',body:JSON.stringify({emoji})}), unreact:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reactions`,{method:'DELETE',body:JSON.stringify({emoji})}), bookmark:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}/bookmark`,{method:'POST'}), unbookmark:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}/bookmark`,{method:'DELETE'}), registerDevice:(token:string,platform:string)=>request('/api/devices',{method:'POST',body:JSON.stringify({token,platform})}), aiAssist:(prompt:string,context?:string)=>request('/api/ai/assist',{method:'POST',body:JSON.stringify({prompt,context})}), logout:()=>request('/api/auth/logout',{method:'POST'})
 };
 
-// Backward-compatible named export used by runtime-fixes and service adapters.
 const API = API_URL;
 export { request, api, API, API_URL };
