@@ -2,14 +2,16 @@ import { decryptMessage } from './e2ee';
 
 const PREFIX = 'gm:e2ee:v1:';
 const LEGACY_PREFIX = 'gme2ee:v1:';
-const API = String((window as any).__GM_CONFIG__?.API_URL || localStorage.getItem('gm_api_url') || 'https://global-messenger-api.narsingbeesetti006.workers.dev').replace(/\/$/, '');
+const configuredApi = (window as any).__GM_CONFIG__?.API_URL || localStorage.getItem('gm_api_url') || '';
+const native = ['capacitor:', 'ionic:', 'file:', 'null'].includes(window.location.protocol);
+const API = native && configuredApi ? String(configuredApi).replace(/\/$/, '') : window.location.origin;
 const cache = new Map<string, Promise<string>>();
 const keyCache = new Map<string, Promise<CryptoKey>>();
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 type Identity = { publicKey?: JsonWebKey; privateKey: JsonWebKey; version?: 1 };
 type KeyBundle = { userId: string; publicKey: JsonWebKey | null };
-function b64(value: string) { const raw = atob(value); const out = new Uint8Array(raw.length); for (let i=0;i<raw.length;i++) out[i]=raw.charCodeAt(i); return out; }
+function b64(value: string) { const raw = atob(value); const out = new Uint8Array(raw.length); for (let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i); return out; }
 function identityKey(userId: string) { return `gm_e2ee_identity_v1:${userId}`; }
 function getIdentityCandidates(): Identity[] { const out: Identity[]=[]; const seen=new Set<string>(); try { for(let i=0;i<localStorage.length;i++){ const key=localStorage.key(i); if(!key||(key!=='gm_e2ee_identity_v1'&&!key.startsWith('gm_e2ee_identity_v1:')))continue; const raw=localStorage.getItem(key); if(!raw)continue; const identity=JSON.parse(raw) as Identity; if(!identity?.privateKey)continue; const fingerprint=JSON.stringify(identity.publicKey||identity.privateKey); if(seen.has(fingerprint))continue; seen.add(fingerprint); out.push(identity); } }catch{} try { const me=JSON.parse(localStorage.getItem('gm_user')||'null'); if(me?.id){const raw=localStorage.getItem(identityKey(String(me.id))); if(raw){const identity=JSON.parse(raw) as Identity; const fingerprint=JSON.stringify(identity.publicKey||identity.privateKey); if(identity?.privateKey&&!seen.has(fingerprint))out.unshift(identity);}}}catch{} return out; }
 async function derive(privateJwk: JsonWebKey, publicJwk: JsonWebKey, conversationId: string) { const cacheKey=`${conversationId}:${JSON.stringify(privateJwk)}:${JSON.stringify(publicJwk)}`; const hit=keyCache.get(cacheKey); if(hit)return hit; const pending=(async()=>{const priv=await crypto.subtle.importKey('jwk',privateJwk,{name:'ECDH',namedCurve:'P-256'},false,['deriveBits']); const pub=await crypto.subtle.importKey('jwk',publicJwk,{name:'ECDH',namedCurve:'P-256'},false,[]); const shared=await crypto.subtle.deriveBits({name:'ECDH',public:pub},priv,256); const hkdf=await crypto.subtle.importKey('raw',shared,'HKDF',false,['deriveKey']); return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:enc.encode(`global-messenger:${conversationId}`),info:enc.encode('gm-e2ee-v1')},hkdf,{name:'AES-GCM',length:256},false,['decrypt']);})(); keyCache.set(cacheKey,pending); try{return await pending;}catch(e){keyCache.delete(cacheKey);throw e;} }
