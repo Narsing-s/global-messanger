@@ -2,3 +2,116 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { io, Socket } from 'socket.io-client';
+import {
+  ArrowLeft, Bell, CheckCheck, ChevronDown, FileText, Globe2, Heart, Image as ImageIcon,
+  Link2, LogOut, Menu, MessageCircle, MoreVertical, Paperclip, Phone, Plus, Search,
+  Send, Settings, Smile, Sparkles, Star, Trash2, UserPlus, Users, Video, X
+} from 'lucide-react';
+import './styles.css';
+import { api, API } from './api';
+import { messagePing, typingTick, stopRingtone } from './sounds';
+import { initPushNotifications } from './push';
+import { installEnhancements } from './enhancements';
+
+type User = { id:string; username:string; displayName:string; avatarUrl?:string|null; lastSeenAt?:string };
+type Member = { user:User };
+type Message = { id:string; conversationId:string; senderId:string; body:string; createdAt:string; editedAt?:string|null; deletedAt?:string|null; sender?:User; type?:string; attachmentUrl?:string|null; attachmentName?:string|null; attachmentMime?:string|null; attachmentSize?:number|null; replyToId?:string|null; clientId?:string };
+type Chat = { id:string; isGroup:boolean; title?:string|null; members:Member[]; messages?:Message[] };
+const initials=(name:string)=>name.trim().split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase()||'GM';
+const chatName=(chat:Chat,me:string)=>chat.isGroup?(chat.title||'Global Team'):(chat.members.find(m=>m.user.id!==me)?.user.displayName||'Conversation');
+const time=(value?:string)=>value?new Date(value).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):'';
+const EMOJIS=['😀','😂','😍','🥰','😊','😎','🤔','😢','😭','😡','👍','👎','❤️','🔥','🎉','👏','🙏','💯','✨','🚀','💙','💚','💛','🤣','😮','😘','🙌','🤝','💔','😴'];
+
+function Avatar({user,name,size='md'}:{user?:User|null;name?:string;size?:'sm'|'md'|'lg'}){
+  const label=name||user?.displayName||'Global Messenger';
+  return <div className={`avatar ${size}`}>{user?.avatarUrl?<img src={user.avatarUrl} alt=""/>:initials(label)}</div>;
+}
+
+function Status({online=true}:{online?:boolean}){ return <span className={`status ${online?'online':''}`}><i/> {online?'Online':'Offline'}</span>; }
+
+class ErrorBoundary extends React.Component<{children:React.ReactNode},{failed:boolean}>{
+  state={failed:false};
+  static getDerivedStateFromError(){return {failed:true};}
+  componentDidCatch(error:unknown){console.error('[Global Messenger UI]',error);}
+  render(){return this.state.failed?<div className="fatal"><Globe2/><h2>Global Messenger</h2><p>A temporary display error occurred.</p><button onClick={()=>location.reload()}>Reload Messenger</button></div>:this.props.children;}
+}
+
+function App(){
+  const [user,setUser]=useState<User|null>(null),[register,setRegister]=useState(false),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[displayName,setDisplayName]=useState(''),[authError,setAuthError]=useState('');
+  const [chats,setChats]=useState<Chat[]>([]),[active,setActive]=useState<Chat|null>(null),[messages,setMessages]=useState<Message[]>([]),[query,setQuery]=useState(''),[results,setResults]=useState<User[]>([]),[text,setText]=useState('');
+  const [socket,setSocket]=useState<Socket|null>(null),[typing,setTyping]=useState(false),[socketError,setSocketError]=useState(''),[mobileChat,setMobileChat]=useState(false),[rightOpen,setRightOpen]=useState(true);
+  const [groupOpen,setGroupOpen]=useState(false),[groupTitle,setGroupTitle]=useState(''),[groupUsers,setGroupUsers]=useState<User[]>([]),[menu,setMenu]=useState<string|null>(null),[reply,setReply]=useState<Message|null>(null),[emojiOpen,setEmojiOpen]=useState(false),[reaction,setReaction]=useState<string|null>(null),[editing,setEditing]=useState<Message|null>(null),[aiLoading,setAiLoading]=useState(false),[presence,setPresence]=useState<Record<string,boolean>>({});
+  const fileRef=useRef<HTMLInputElement>(null),typingTimer=useRef<number|undefined>(undefined);
+
+  useEffect(()=>{installEnhancements();const token=localStorage.getItem('gm_token'),stored=localStorage.getItem('gm_user');if(!token||!stored)return;let me:User;try{me=JSON.parse(stored)}catch{return}setUser(me);void initPushNotifications();const s=io(API,{auth:{token},transports:['websocket','polling'],reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:800});
+    s.on('connect',()=>setSocketError(''));s.on('connect_error',e=>setSocketError(e.message||'Realtime connection failed'));
+    s.on('presence:update',(d:any)=>d?.userId&&setPresence(p=>({...p,[String(d.userId)]:Boolean(d.online)})));
+    s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>p.some(x=>x.id===m.id)?p:[...p,m]);setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[])]}:c))});
+    s.on('message:updated',(m:Message)=>setMessages(p=>p.map(x=>x.id===m.id?m:x)));s.on('message:deleted',(d:any)=>setMessages(p=>p.map(x=>x.id===d.id?{...x,body:'',deletedAt:d.deletedAt}:x)));s.on('message:failed',(d:any)=>setSocketError(d?.error||'Unable to send message'));s.on('message:delivered',()=>setSocketError(''));
+    s.on('typing',(d:any)=>d?.userId!==me.id&&setTyping(Boolean(d.typing)));setSocket(s);api.conversations().then(data=>setChats(Array.isArray(data)?data:[])).catch(e=>setSocketError(e.message||'Unable to load conversations'));return()=>{stopRingtone();s.disconnect()};},[]);
+
+  useEffect(()=>{if(!active||!socket)return;const id=active.id;setTyping(false);setMenu(null);setReaction(null);setReply(null);setEditing(null);setEmojiOpen(false);socket.emit('conversation:join',id);api.messages(id).then(data=>setMessages(Array.isArray(data)?data.filter((m:Message)=>m.conversationId===id):[])).catch(e=>setSocketError(e.message||'Unable to load messages'));api.read(id).catch(()=>{});setMobileChat(true);return()=>{socket.emit('conversation:leave',id)}},[active?.id,socket]);
+
+  async function searchPeople(value:string){setQuery(value);if(value.trim().length<2){setResults([]);return}try{setResults(await api.searchUsers(value))}catch(e:any){setAuthError(e.message)}}
+  async function openDirect(target:User){try{const c=await api.direct(target.id);setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setQuery('');setResults([])}catch(e:any){setSocketError(e.message)}}
+  async function createGroup(){if(!groupTitle.trim()||!groupUsers.length)return;try{const c=await api.group(groupTitle,groupUsers.map(u=>u.id));setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setGroupOpen(false);setGroupTitle('');setGroupUsers([])}catch(e:any){setSocketError(e.message)}}
+  function send(){const body=text.trim();if(!body||!active)return;if(editing){api.editMessage(editing.id,body).catch(e=>setSocketError(e.message));setEditing(null);setText('');return}if(!socket?.connected){setSocketError('Reconnecting to Global Messenger…');socket?.connect();return}socket.emit('message:send',{conversationId:active.id,body,type:'text',replyToId:reply?.id||null,clientId:crypto.randomUUID()});setText('');setReply(null);setEmojiOpen(false);socket.emit('typing',{conversationId:active.id,typing:false})}
+  async function sendFile(file:File){if(!active||!socket?.connected)return;try{const up=await api.upload(file);socket.emit('message:send',{conversationId:active.id,body:file.type.startsWith('image/')?'Image':file.name,type:'file',attachmentUrl:up.url,attachmentName:up.name||file.name,attachmentMime:file.type,attachmentSize:file.size,clientId:crypto.randomUUID()})}catch(e:any){setSocketError(e.message)}}
+  async function smartAssist(){if(!text.trim()){setSocketError('Write a message first.');return}setAiLoading(true);try{const recent=messages.slice(-8).map(m=>`${m.senderId===user?.id?'Me':'Them'}: ${m.body}`).join('\n');const d=await api.aiAssist('Improve this message for clarity, warmth, and natural tone. Preserve the meaning and return only the improved message.',recent+'\nDraft: '+text.trim());if(d?.answer)setText(String(d.answer));else throw Error('No suggestion returned')}catch(e:any){setSocketError(e.message||'Smart Assist unavailable')}finally{setAiLoading(false)}}
+  async function deleteMessage(m:Message){try{await api.deleteMessage(m.id);setMenu(null)}catch(e:any){setSocketError(e.message)}}
+  async function react(m:Message,emoji:string){try{await api.react(m.id,emoji);setReaction(null)}catch(e:any){setSocketError(e.message)}}
+  function logout(){localStorage.clear();socket?.disconnect();setUser(null);setChats([]);setActive(null)}
+
+  if(!user)return <Auth register={register}setRegister={setRegister}username={username}setUsername={setUsername}password={password}setPassword={setPassword}displayName={displayName}setDisplayName={setDisplayName}error={authError}setError={setAuthError}/>;
+  const activeOther=active?.members.find(m=>m.user.id!==user.id)?.user||null;
+  const online=activeOther?Boolean(presence[activeOther.id]):false;
+  const activeName=active?chatName(active,user.id):'Priya Sharma';
+  return <div className={`app-shell ${mobileChat?'mobile-chat-open':''}`}>
+    <aside className="rail">
+      <div className="rail-profile"><Avatar user={user} size="lg"/><span className="online-dot"/></div>
+      <nav className="rail-nav">
+        <button className="rail-active" title="Chats"><MessageCircle/><span>Chats</span><b>{chats.length||0}</b></button>
+        <button onClick={()=>setGroupOpen(true)} title="Groups"><Users/><span>Groups</span></button>
+        <button title="Contacts"><UserPlus/><span>Contacts</span></button>
+        <button title="Calls" onClick={()=>active&&window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:'audio',conversationId:active.id}}))}><Phone/><span>Calls</span></button>
+        <button title="Settings" onClick={()=>window.dispatchEvent(new CustomEvent('gm:options'))}><Settings/><span>Settings</span></button>
+      </nav>
+      <div className="rail-bottom"><button title="Notifications"><Bell/></button><button title="Log out" onClick={logout}><LogOut/></button></div>
+    </aside>
+
+    <section className="chat-pane">
+      <header className="pane-header"><div><h1>Global <span>Messenger</span></h1><p>Connect · Chat · Share · Across the World</p></div><button className="icon-button"><MoreVertical/></button></header>
+      <div className="profile-mini"><Avatar user={user}/><div><b>{user.displayName}</b><Status online={true}/></div><button className="icon-button" onClick={logout}><LogOut/></button></div>
+      <div className="search-box"><Search/><input value={query} onChange={e=>searchPeople(e.target.value)} placeholder="Search messages or people..."/><button><ChevronDown/></button></div>
+      {results.length>0&&<div className="people-results">{results.filter(u=>u.id!==user.id).map(u=><button key={u.id} onClick={()=>openDirect(u)}><Avatar user={u}/><span><b>{u.displayName}</b><small>@{u.username}</small></span><Plus/></button>)}</div>}
+      <div className="filter-tabs"><button className="selected">All <b>{chats.length}</b></button><button>Unread <b>{chats.filter(c=>(c.messages?.length||0)>0).length}</b></button><button>Groups</button><button>Contacts</button></div>
+      <div className="chat-list">{chats.map(c=>{const other=c.members.find(m=>m.user.id!==user.id)?.user;const latest=c.messages?.[0];return <button key={c.id} className={`chat-row ${active?.id===c.id?'selected':''}`} onClick={()=>setActive(c)}><Avatar user={other} name={chatName(c,user.id)}/><div className="chat-row-copy"><div><b>{chatName(c,user.id)}</b><time>{time(latest?.createdAt)}</time></div><p>{latest?.type==='file'?'📎 '+(latest.attachmentName||'File'):latest?.body||'Start a conversation'}</p>{!c.isGroup&&<Status online={Boolean(other?.id&&presence[other.id])}/>}</div>{latest&&<span className="unread-dot"/>}</button>})}</div>
+      {!chats.length&&<div className="chat-empty"><Globe2/><b>No conversations yet</b><span>Search for a person above to start chatting.</span></div>}
+      <div className="quick-actions"><span>Quick Actions</span><button onClick={()=>document.querySelector<HTMLInputElement>('.search-box input')?.focus()}><MessageCircle/>New Chat</button><button onClick={()=>setGroupOpen(true)}><Users/>Create Group</button><button onClick={()=>fileRef.current?.click()}><FileText/>Upload File</button><button onClick={()=>active&&window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:'audio',conversationId:active.id}}))}><Phone/>Start Call</button></div>
+    </section>
+
+    <main className="message-pane">
+      {active?<><header className="message-header"><button className="mobile-back" onClick={()=>setMobileChat(false)}><ArrowLeft/></button><Avatar user={activeOther} name={activeName}/><div className="header-copy"><b>{activeName}</b>{typing?<span>typing…</span>:active.isGroup?<span>{active.members.length} members</span>:<Status online={online}/>}</div><div className="header-actions"><button title="Voice call" onClick={()=>window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:'audio',conversationId:active.id}}))}><Phone/></button><button title="Video call" onClick={()=>window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:'video',conversationId:active.id}}))}><Video/></button><button title="Search"><Search/></button><button title="More"><MoreVertical/></button></div></header>
+      <div className="message-body"><div className="today-pill">Today</div>{messages.filter(m=>m.conversationId===active.id).map(m=><Bubble key={m.id} message={m} own={m.senderId===user.id} menu={menu===m.id} reaction={reaction===m.id} onMenu={()=>setMenu(menu===m.id?null:m.id)} onReply={()=>{setReply(m);setMenu(null)}} onEdit={()=>{setEditing(m);setText(m.body);setMenu(null)}} onDelete={()=>deleteMessage(m)} onReact={()=>setReaction(reaction===m.id?null:m.id)} onEmoji={e=>react(m,e)}/>)}</div>
+      <div className="composer-area">{reply&&<div className="context-bar"><span>Replying to <b>{reply.sender?.displayName||'message'}</b>: {reply.body}</span><button onClick={()=>setReply(null)}><X/></button></div>}{editing&&<div className="context-bar"><span>Editing message</span><button onClick={()=>{setEditing(null);setText('')}}><X/></button></div>}<div className="composer"><input ref={fileRef} type="file" hidden onChange={e=>e.target.files?.[0]&&sendFile(e.target.files[0])}/><button onClick={()=>fileRef.current?.click()} title="Attach"><Paperclip/></button><button className="mobile-hide"><Smile onClick={()=>setEmojiOpen(v=>!v)}/></button><input value={text} onChange={e=>{setText(e.target.value);if(socket?.connected&&active){socket.emit('typing',{conversationId:active.id,typing:Boolean(e.target.value.trim())});window.clearTimeout(typingTimer.current);typingTimer.current=window.setTimeout(()=>socket.emit('typing',{conversationId:active.id,typing:false}),1200);if(e.target.value.trim())typingTick()}}} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&send()} placeholder="Type a message..."/><button title="Smart Assist" onClick={smartAssist} disabled={aiLoading}><Sparkles/></button><button className="send-button" onClick={send} title="Send"><Send/></button></div>{emojiOpen&&<div className="emoji-panel">{EMOJIS.map(e=><button key={e} onClick={()=>{setText(t=>t+e);setEmojiOpen(false)}}>{e}</button>)}</div>}{socketError&&<div className="socket-error">{socketError}</div>}<small>{socket?.connected?'Securely connected':'Connecting…'} · Global Messenger</small></div></>:<div className="empty-conversation"><Globe2/><h2>Global Messenger</h2><p>Select a conversation to start chatting across the world.</p></div>}
+    </main>
+
+    {rightOpen&&active&&<aside className="info-pane"><div className="info-head"><h3>Contact Info</h3><button onClick={()=>setRightOpen(false)}><X/></button></div><div className="contact-card"><Avatar user={activeOther} name={activeName} size="lg"/><h2>{activeName}</h2>{activeOther&&<><span>@{activeOther.username}</span><Status online={online}/></>}</div><div className="info-section"><b>About</b><p>Good vibes · Tech Enthusiast · Traveler</p><p>“Collect moments, not things.”</p></div><div className="info-section"><div className="section-title"><b>Shared Media</b><button>See All</button></div><div className="media-grid"><div><ImageIcon/></div><div><ImageIcon/></div><div><ImageIcon/></div><div className="more-media">+12</div></div></div><div className="info-section"><div className="section-title"><b>Pinned Messages</b><button>See All</button></div><div className="pin-item"><Avatar user={activeOther}/><span><b>{activeName}</b><small>Let's plan the trip next month! ✈️</small></span><time>Apr 12</time></div><div className="pin-item"><Avatar user={user}/><span><b>You</b><small>Project details are in the file.</small></span><time>Apr 10</time></div></div><div className="info-actions"><button><Bell/>Mute Notifications <span className="toggle"/></button><button className="danger"><Trash2/>Block Contact</button><button className="danger"><Heart/>Report Contact</button></div></aside>}
+    {!rightOpen&&active&&<button className="reopen-info" onClick={()=>setRightOpen(true)}>Contact info</button>}
+    {groupOpen&&<GroupModal title={groupTitle} setTitle={setGroupTitle} users={groupUsers} setUsers={setGroupUsers} onClose={()=>setGroupOpen(false)} onCreate={createGroup} search={api.searchUsers}/>} 
+  </div>;
+}
+
+function Bubble({message,own,menu,reaction,onMenu,onReply,onEdit,onDelete,onReact,onEmoji}:{message:Message;own:boolean;menu:boolean;reaction:boolean;onMenu:()=>void;onReply:()=>void;onEdit:()=>void;onDelete:()=>void;onReact:()=>void;onEmoji:(e:string)=>void}){
+  return <div className={`message-row ${own?'own':''}`}><div className={`message-bubble ${message.deletedAt?'deleted':''}`}>{message.replyToId&&<div className="quoted">↳ Replied message</div>}{message.deletedAt?<p>Message deleted</p>:message.attachmentUrl?<div className="attachment">{message.attachmentMime?.startsWith('image/')?<img src={message.attachmentUrl} alt={message.attachmentName||'attachment'}/>:<a href={message.attachmentUrl} target="_blank" rel="noreferrer">📎 {message.attachmentName||'Download file'}</a>}{message.body!=='Image'&&<p>{message.body}</p>}</div>:<p>{message.body}</p>}<small>{time(message.createdAt)} {own&&<CheckCheck/>}{message.editedAt&&' · edited'}</small>{!message.deletedAt&&<button className="bubble-menu" onClick={onMenu}><MoreVertical/></button>}{menu&&<div className="message-menu"><button onClick={onReply}>Reply</button><button onClick={onReact}>React</button>{own&&<button onClick={onEdit}>Edit</button>}{own&&<button className="danger" onClick={onDelete}>Delete</button>}</div>}{reaction&&<div className="reaction-picker">{['❤️','👍','😂','😮','😢','🔥'].map(e=><button key={e} onClick={()=>onEmoji(e)}>{e}</button>)}</div>}</div></div>;
+}
+
+function GroupModal({title,setTitle,users,setUsers,onClose,onCreate,search}:{title:string;setTitle:(v:string)=>void;users:User[];setUsers:(v:User[])=>void;onClose:()=>void;onCreate:()=>void;search:(q:string)=>Promise<User[]>}){const[q,setQ]=useState(''),[found,setFound]=useState<User[]>([]);return <div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><div className="modal"><div className="modal-title"><div><h2>Create group</h2><p>Add people and start a group conversation.</p></div><button onClick={onClose}><X/></button></div><input className="modal-input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Group name"/>{users.length>0&&<div className="chips">{users.map(u=><button key={u.id} onClick={()=>setUsers(users.filter(x=>x.id!==u.id))}>{u.displayName}<X/></button>)}</div>}<div className="modal-search"><Search/><input value={q} onChange={async e=>{setQ(e.target.value);setFound(e.target.value.trim().length>1?await search(e.target.value):[])}} placeholder="Search people to add"/></div><div className="user-picks">{found.filter(u=>!users.some(x=>x.id===u.id)).map(u=><button key={u.id} onClick={()=>setUsers([...users,u])}><Avatar user={u}/><span><b>{u.displayName}</b><small>@{u.username}</small></span><Plus/></button>)}</div><div className="modal-actions"><button onClick={onClose}>Cancel</button><button className="primary" disabled={!title.trim()||!users.length} onClick={onCreate}>Create group</button></div></div></div>}
+
+function Auth({register,setRegister,username,setUsername,password,setPassword,displayName,setDisplayName,error,setError}:{register:boolean;setRegister:(v:boolean)=>void;username:string;setUsername:(v:string)=>void;password:string;setPassword:(v:string)=>void;displayName:string;setDisplayName:(v:string)=>void;error:string;setError:(v:string)=>void}){
+  const [email,setEmail]=useState(''),[confirm,setConfirm]=useState(''),[loading,setLoading]=useState(false);
+  async function submit(e:React.FormEvent){e.preventDefault();setError('');setLoading(true);try{const url=API+(register?'/api/auth/register-email':'/api/auth/login-email');const body=register?{username,displayName:displayName||username,email,password}:{identifier:username,password};const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.message||'Authentication failed');if(register&&password!==confirm)throw Error('Passwords do not match');localStorage.setItem('gm_token',d.token);localStorage.setItem('gm_user',JSON.stringify(d.user));location.href='/'}catch(e:any){setError(e.message||'Authentication failed')}finally{setLoading(false)}}
+  return <div className="auth-page"><div className="auth-brand"><div className="brand-mark"><Globe2/></div><div><b>Global <span>Messenger</span></b><small>One Messenger for a Global World</small></div></div><div className="auth-card"><div className="auth-icon"><Globe2/></div><h1>{register?'Create your account':'Welcome back'}</h1><p>{register?'Join Global Messenger and connect without borders.':'Connect with the world, instantly.'}</p><form onSubmit={submit}>{register&&<label>Display name<input value={displayName} onChange={e=>setDisplayName(e.target.value)} placeholder="Your name" required/></label>}<label>{register?'Username':'Username or email'}<input value={username} onChange={e=>setUsername(e.target.value)} placeholder={register?'your_username':'you@example.com or username'} required autoComplete="username"/></label>{register&&<label>Email address<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required autoComplete="email"/></label>}<label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 8 characters" required minLength={8} autoComplete={register?'new-password':'current-password'}/></label>{register&&<label>Confirm password<input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="Repeat your password" required minLength={8} autoComplete="new-password"/></label>}{error&&<div className="auth-error">{error}</div>}<button className="auth-submit" disabled={loading}>{loading?(register?'Creating…':'Signing in…'):(register?'Create account':'Sign in')}</button></form><button className="auth-switch" onClick={()=>{setRegister(!register);setError('')}}>{register?'Already have an account? Sign in':'New here? Create an account'}</button></div></div>;
+}
+
+createRoot(document.getElementById('root')!).render(<React.StrictMode><ErrorBoundary><App/></ErrorBoundary></React.StrictMode>);
