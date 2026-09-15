@@ -2,16 +2,26 @@
 
 Global Messenger should behave as one product on Web, PWA and Android. A user must not lose an operation because the UI is running inside Capacitor instead of a browser.
 
-## Current production API contract
+## Self-hosted deployment contract
 
-The active Render services are:
+Global Messenger is designed to run from infrastructure controlled by the operator. The browser uses same-origin `/api`, `/socket.io` and `/uploads` routes; there is no required hosted API, hosted database or provider-specific API URL.
 
-- Web: `https://global-messanger-web-new.onrender.com`
-- API: `https://global-messenger-api-new.onrender.com`
-- Health: `https://global-messenger-api-new.onrender.com/health`
-- Readiness: `https://global-messenger-api-new.onrender.com/ready`
+The canonical deployment is the repository's Docker stack:
 
-`render.yaml` is the source of truth for these deployment names. Client code must not fall back to retired API hosts.
+```text
+Public domain / LAN address
+        |
+        v
+   Web / reverse proxy
+        |
+        v
+   Fastify + Socket.IO
+        |
+        v
+   PostgreSQL container
+```
+
+Client code must not fall back to Render, Vercel, Cloudflare Workers, Neon or other hosted API/database endpoints.
 
 ## Device parity contract
 
