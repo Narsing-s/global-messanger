@@ -1,7 +1,7 @@
 {
   "name": "global-messenger-web",
   "private": true,
-  "version": "0.1.7",
+  "version": "0.1.8",
   "type": "module",
   "scripts": {
     "apply:product-patches": "node scripts/apply-advanced-center-launcher.mjs && node scripts/apply-chat-stability-patch.mjs && node scripts/apply-mobile-api-fallback-patch.mjs && node scripts/apply-mobile-auth-hardening.mjs && node scripts/apply-reliability-patch.mjs && node scripts/apply-chat-message-display-patch.mjs && node scripts/apply-premium-ui-patch.mjs && node scripts/apply-chat-workspace-patch.mjs && node scripts/apply-chat-workspace-styles.mjs && node scripts/apply-screen-share-patch.mjs && node scripts/apply-voice-message-patch.mjs && node scripts/apply-webrtc-relay-patch.mjs && node scripts/apply-p0-offline-outbox.mjs && node scripts/apply-e2ee-send-patch.mjs && node scripts/apply-product-center-selector-fix.mjs && node scripts/apply-cache-version-patch.mjs && node scripts/apply-complete-operations-center.mjs && node scripts/apply-operations-hardening.mjs && node scripts/apply-screen-share-runtime.mjs && node scripts/apply-final-source-integrity-patch.mjs && node scripts/apply-session-logout-patch.mjs && node scripts/apply-market-ui-patch.mjs && node scripts/apply-market-feature-suite.mjs && node scripts/apply-market-feature-fix.mjs && node scripts/apply-market-shortcuts.mjs",
@@ -34,6 +34,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.0",
+    "@vitejs/plugin-react": "^4.7.0",
     "typescript": "^5.7.3",
     "vite": "^6.4.3"
   },
