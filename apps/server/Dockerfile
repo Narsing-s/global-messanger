@@ -1,12 +1,7 @@
-# syntax=docker/dockerfile:1
-
 FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 
-# mediasoup may need to build its native worker when a matching prebuilt
-# binary is unavailable. Use Debian's system crypto/network libraries so the
-# native build does not need to download libuv/OpenSSL sources from GitHub.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     build-essential \
@@ -17,13 +12,8 @@ RUN apt-get update \
     libssl-dev \
     python3 \
     python3-pip \
-    python-is-python3 \
+    git \
   && rm -rf /var/lib/apt/lists/*
-
-# Build mediasoup locally instead of waiting for a platform-specific prebuilt
-# worker download. This is deterministic in the Linux container and avoids the
-# network-unavailable failure seen during Docker builds.
-ENV MEDIASOUP_SKIP_WORKER_PREBUILT_DOWNLOAD=true
 
 COPY package.json package-lock.json ./
 COPY apps/server/package.json apps/server/package.json
@@ -34,36 +24,35 @@ RUN --mount=type=cache,id=global-messenger-npm-api,target=/root/.npm,sharing=loc
 
 COPY . .
 
-# Docker builds must compile the already-versioned source directly. The normal
-# workspace build command intentionally runs a long chain of source mutation
-# patches for developer compatibility; rerunning that chain inside Docker is
-# unnecessary and made container builds dramatically slower. The canonical
-# source has already been validated by the repository build/CI workflow.
-RUN npx prisma generate --schema apps/server/prisma/schema.prisma \
-  && npx tsc -p apps/server/tsconfig.json
+# Keep Docker and the repository build path identical. The server build script
+# applies the required Prisma/TypeScript/mediasoup compatibility patch before
+# generating Prisma Client and compiling the server.
+RUN npm run build -w apps/server
 
 FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 ENV PORT=4000
-ENV UPLOAD_DIR=/data/uploads
-
-WORKDIR /app
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates libuv1 \
   && rm -rf /var/lib/apt/lists/* \
   && useradd --system --uid 10001 --create-home appuser
 
-COPY --from=build /app/package.json /app/package-lock.json ./
-COPY --from=build /app/apps/server/package.json ./apps/server/package.json
-COPY --from=build /app/apps/server/dist ./apps/server/dist
-COPY --from=build /app/apps/server/prisma ./apps/server/prisma
-COPY --from=build /app/node_modules ./node_modules
+WORKDIR /app
 
-RUN mkdir -p /data/uploads && chown -R appuser:appuser /app /data/uploads
+COPY --from=build /app/package.json /app/package.json
+COPY --from=build /app/apps/server/package.json /app/apps/server/package.json
+COPY --from=build /app/node_modules /app/node_modules
+COPY --from=build /app/apps/server/dist /app/apps/server/dist
+COPY --from=build /app/apps/server/prisma /app/apps/server/prisma
+COPY --from=build /app/apps/server/scripts /app/apps/server/scripts
 
+RUN chown -R appuser:appuser /app
 USER appuser
+
+WORKDIR /app/apps/server
+
 EXPOSE 4000
 
-CMD ["sh", "-c", "npx prisma migrate deploy --schema apps/server/prisma/schema.prisma && exec node apps/server/dist/index.js"]
+CMD ["node", "scripts/validate-production-config.mjs"]
