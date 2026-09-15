@@ -9,6 +9,10 @@ android {
         targetSdk 35
         versionCode 1
         versionName '1.0.0'
+        buildConfigField 'String', 'GM_APP_URL', '"' + (project.findProperty('GM_APP_URL') ?: 'http://10.0.2.2:8080/') + '"'
+    }
+    buildFeatures {
+        buildConfig true
     }
 }
 
