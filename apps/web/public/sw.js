@@ -1,4 +1,4 @@
-const CACHE_NAME = 'global-messenger-shell-v14-self-hosted';
+const CACHE_NAME = 'global-messenger-shell-v15-self-hosted';
 
 self.addEventListener('install', event => {
   event.waitUntil(self.skipWaiting());
@@ -26,17 +26,9 @@ self.addEventListener('fetch', event => {
   // API and realtime traffic must never be intercepted or cached by the shell worker.
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
 
-  // Deployment metadata and the app shell must always come directly from the
-  // self-hosted web container. This prevents an older hosted UI/configuration
-  // from surviving across releases.
-  const alwaysFresh = [
-    '/',
-    '/index.html',
-    '/sw.js',
-    '/manifest.webmanifest',
-    '/config.js'
-  ];
-
+  // Deployment metadata and the app shell always come directly from the self-hosted
+  // web container. This prevents an older UI/configuration from surviving releases.
+  const alwaysFresh = ['/', '/index.html', '/sw.js', '/manifest.webmanifest', '/config.js'];
   if (alwaysFresh.includes(url.pathname)) {
     event.respondWith(
       fetch(request, { cache: 'no-store' }).catch(() => {
