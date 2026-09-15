@@ -13,13 +13,14 @@ const supportSchema = z.object({
 });
 const makeRequestId = () => `GM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 const secured = (app: FastifyInstance) => ({ preHandler: [app.authenticate] });
+const configuredWebOrigins = () => String(process.env.WEB_ORIGIN || 'http://localhost:8080').split(',').map(value => value.trim()).filter(Boolean);
 
 export async function registerSupportRoutes(app: FastifyInstance, prisma: PrismaClient) {
   if (!app.hasRoute({ method: 'OPTIONS', url: '/api/support/requests' })) {
     app.options('/api/support/requests', async (request, reply) => {
       const origin = String(request.headers.origin || '');
-      const allowed = origin === 'https://global-messenger-help-centre.onrender.com';
-      if (allowed) reply.header('access-control-allow-origin', origin);
+      const allowed = !origin || configuredWebOrigins().includes(origin);
+      if (allowed && origin) reply.header('access-control-allow-origin', origin);
       reply.header('access-control-allow-methods', 'POST, OPTIONS').header('access-control-allow-headers', 'content-type, authorization').header('access-control-max-age', '86400');
       return reply.code(204).send();
     });
@@ -45,8 +46,6 @@ export async function registerSupportRoutes(app: FastifyInstance, prisma: Prisma
       return { ok: true, ...item };
     });
   }
-
-  // Authenticated Trust & Safety operations used by the Operations Center.
   if (!app.hasRoute({ method: 'POST', url: '/api/trust/reports' })) {
     app.post('/api/trust/reports', secured(app), async (request, reply) => {
       const userId = String((request.user as { id: string }).id);
