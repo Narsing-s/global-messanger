@@ -1,9 +1,0 @@
-name = "global-messenger-web"
-compatibility_date = "2026-08-31"
-
-# Static Vite/React application deployed as a Cloudflare Worker.
-# Keeping the frontend on Workers matches the existing production URL:
-# https://global-messenger-web.narsingbeesetti006.workers.dev
-[assets]
-directory = "./dist"
-not_found_handling = "single-page-application"
