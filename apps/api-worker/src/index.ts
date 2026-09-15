@@ -4,6 +4,8 @@ export interface Env {
 }
 
 const TRUSTED_PUBLIC_ORIGINS = [
+  "https://globalmessenger.com",
+  "https://www.globalmessenger.com",
   "https://global-messenger-web.narsingbeesetti006.workers.dev",
   "https://global-messenger-help-centre.onrender.com",
 ];
