@@ -33,7 +33,14 @@ RUN --mount=type=cache,id=global-messenger-npm-api,target=/root/.npm,sharing=loc
     npm ci --workspace apps/server --include-workspace-root=false --no-audit --no-fund
 
 COPY . .
-RUN npm run build -w apps/server
+
+# Docker builds must compile the already-versioned source directly. The normal
+# workspace build command intentionally runs a long chain of source mutation
+# patches for developer compatibility; rerunning that chain inside Docker is
+# unnecessary and made container builds dramatically slower. The canonical
+# source has already been validated by the repository build/CI workflow.
+RUN npx prisma generate --schema apps/server/prisma/schema.prisma \
+  && npx tsc -p apps/server/tsconfig.json
 
 FROM node:22-bookworm-slim AS runtime
 
