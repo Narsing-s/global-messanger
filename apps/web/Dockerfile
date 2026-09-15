@@ -23,6 +23,17 @@ RUN --mount=type=cache,id=global-messenger-npm,target=/root/.npm,sharing=locked 
     && npm install --prefix apps/web --no-save --ignore-scripts --no-audit --no-fund @esbuild/linux-x64@0.25.12
 
 COPY apps/web ./apps/web
+
+# The source-integrity build guard can restore the canonical main.tsx with
+# `git show HEAD:apps/web/src/main.tsx`. Docker build contexts do not include
+# the repository's .git directory, so create an ephemeral build-only git repo
+# containing the just-copied canonical source. This never enters the runtime image.
+RUN git init -q \
+  && git config user.email "build@global-messenger.local" \
+  && git config user.name "Global Messenger Build" \
+  && git add apps/web/src/main.tsx \
+  && git commit -qm "build: canonical web source"
+
 RUN npm run build -w apps/web
 
 FROM nginx:1.29-alpine AS runtime
