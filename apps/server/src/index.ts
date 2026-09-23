@@ -53,8 +53,12 @@ const isAllowedOrigin = (origin?: string | null) => {
     /^ionic:\/\/localhost$/.test(origin);
 
   const isHelpCentre = origin === 'https://global-messenger-help-centre.onrender.com';
+  const isVercelMessenger = /^https:\/\/global-messanger(?:-[a-z0-9-]+)?\.vercel\.app$/.test(origin);
+  const isKnownMessengerRender = origin === 'https://global-messanger.onrender.com';
 
-  return configured.includes(origin) || isLocalDev || isNativeApp || isHelpCentre;
+  // Keep production CORS working even when WEB_ORIGIN on the hosted API is stale.
+  // This does not change the UI; it only permits the known Messenger web origins.
+  return configured.includes(origin) || isLocalDev || isNativeApp || isHelpCentre || isVercelMessenger || isKnownMessengerRender;
 };
 
 const UPLOAD_DIR = path.resolve(
