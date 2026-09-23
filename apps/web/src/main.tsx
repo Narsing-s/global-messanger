@@ -6,7 +6,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Globe2, Copy, Link2, LogOut, Plus, Send, ShieldCheck, Trash2, UserPlus, Wifi, WifiOff } from 'lucide-react';
+import { Globe2, Copy, Link2, Send, ShieldCheck, Trash2, UserPlus, Wifi, WifiOff } from 'lucide-react';
 import { getContacts, getLocal, getMessages, getProfile, LocalContact, LocalMessage, LocalProfile, saveContacts, saveMessages, saveProfile, clearLocalData } from './p2p-store';
 import './styles.css';
 import './p2p.css';
@@ -191,7 +191,6 @@ function App() {
           {error&&<div className="p2p-warning">{error}</div>}
         </div>
         <div className="p2p-card"><h3><UserPlus size={16}/> Contacts</h3>{contacts.length===0?<div className="p2p-muted">No contacts yet. Pair with another device.</div>:contacts.map(c=><button className={'p2p-contact '+(activeId===c.id?'active':'')} key={c.id} onClick={()=>setActiveId(c.id)}><span className="p2p-avatar">{initials(c.displayName)}</span><span><b>{c.displayName}</b><br/><small className="p2p-muted">@{c.username}</small></span><span className={'p2p-dot '+(c.connected?'on':'')}/></button>)}</div>
-        <button className="p2p-btn" onClick={()=>{localStorage.removeItem('gm_token');setStatus('Local-only')}}><LogOut size={14}/> Server logout removed</button>
       </aside>
       <main className="p2p-main">
         {!active?<div className="p2p-empty"><Globe2 size={52}/><h2>Private peer-to-peer messaging</h2><p>Create an offer on this device, exchange it with another device, then chat directly.</p><span className="p2p-pill"><WifiOff size={13}/> No server required</span></div>:
