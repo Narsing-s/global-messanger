@@ -53,6 +53,11 @@ const api = {
   react:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reactions`,{method:'POST',body:JSON.stringify({emoji})}),
   bookmark:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}/bookmark`,{method:'POST'}),
   unbookmark:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}/bookmark`,{method:'DELETE'}),
+  forwardMessage:(messageId:string,conversationId:string)=>request('/api/messages/forward',{method:'POST',body:JSON.stringify({messageId,conversationId})}),
+  pin:(conversationId:string,messageId:string)=>request(`/api/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/pin`,{method:'POST'}),
+  unpin:(conversationId:string,messageId:string)=>request(`/api/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/pin`,{method:'DELETE'}),
+  unreact:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reactions`,{method:'DELETE',body:JSON.stringify({emoji})}),
+  media:(conversationId?:string,q?:string,limit=100)=>request(`/api/media?conversationId=${encodeURIComponent(conversationId||'')}&q=${encodeURIComponent(q||'')}&limit=${limit}`),
   logout:()=>request('/api/auth/logout',{method:'POST'})
 };
 const API = API_URL;
