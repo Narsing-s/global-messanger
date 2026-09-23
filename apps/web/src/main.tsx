@@ -44,11 +44,53 @@ function App(){
   const fileRef=useRef<HTMLInputElement>(null),typingTimer=useRef<number|undefined>(undefined);
 
   useEffect(()=>{installEnhancements();const token=localStorage.getItem('gm_token'),stored=localStorage.getItem('gm_user');if(!token||!stored)return;let me:User;try{me=JSON.parse(stored)}catch{return}setUser(me);void initPushNotifications();const s=io(API,{auth:{token},transports:['websocket','polling'],reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:800});
-    s.on('connect',()=>setSocketError(''));s.on('connect_error',e=>setSocketError(e.message||'Realtime connection failed'));
+    const syncConversations = (conversationList: Chat[]) => {
+      for (const chat of conversationList) {
+        const latest = chat.messages?.[0]?.createdAt;
+        s.emit('conversation:sync', {
+          conversationId: chat.id,
+          ...(latest ? { after: latest } : {})
+        });
+      }
+    };
+
+    s.on('connect',()=> {
+      setSocketError('');
+      api.conversations()
+        .then(data => {
+          const list = Array.isArray(data) ? data as Chat[] : [];
+          setChats(list);
+          syncConversations(list);
+        })
+        .catch(e=>setSocketError(e.message||'Unable to load conversations'));
+    });
+    s.on('connect_error',e=>setSocketError(e.message||'Realtime connection failed'));
     s.on('presence:update',(d:any)=>d?.userId&&setPresence(p=>({...p,[String(d.userId)]:Boolean(d.online)})));
-    s.on('message:new',(m:Message)=>{if(m.senderId!==me.id)messagePing();setMessages(p=>p.some(x=>x.id===m.id)?p:[...p,m]);setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[])]}:c))});
-    s.on('message:updated',(m:Message)=>setMessages(p=>p.map(x=>x.id===m.id?m:x)));s.on('message:deleted',(d:any)=>setMessages(p=>p.map(x=>x.id===d.id?{...x,body:'',deletedAt:d.deletedAt}:x)));s.on('message:failed',(d:any)=>setSocketError(d?.error||'Unable to send message'));s.on('message:delivered',()=>setSocketError(''));
-    s.on('typing',(d:any)=>d?.userId!==me.id&&setTyping(Boolean(d.typing)));setSocket(s);api.conversations().then(data=>setChats(Array.isArray(data)?data:[])).catch(e=>setSocketError(e.message||'Unable to load conversations'));return()=>{stopRingtone();s.disconnect()};},[]);
+    s.on('sync:messages',(d:any)=>{
+      if(!d?.conversationId||!Array.isArray(d.messages))return;
+      setMessages(p=>{
+        const byId=new Map(p.map(m=>[m.id,m]));
+        for(const m of d.messages)byId.set(m.id,m);
+        return Array.from(byId.values()).sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime());
+      });
+      setChats(p=>p.map(chat=>chat.id===d.conversationId
+        ? {...chat,messages:Array.from(new Map([...(chat.messages||[]),...d.messages].map(m=>[m.id,m])).values()).sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()).slice(0,1)}
+        : chat));
+    });
+    s.on('message:new',(m:Message)=>{
+      if(m.senderId!==me.id)messagePing();
+      setMessages(p=>p.some(x=>x.id===m.id)?p:[...p,m].sort((a,b)=>new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()));
+      setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[]).filter(x=>x.id!==m.id)].slice(0,1)}:c));
+    });
+    s.on('message:updated',(m:Message)=>setMessages(p=>p.map(x=>x.id===m.id?m:x)));
+    s.on('message:deleted',(d:any)=>setMessages(p=>p.map(x=>x.id===d.id?{...x,body:'',deletedAt:d.deletedAt}:x)));
+    s.on('message:failed',(d:any)=>setSocketError(d?.error||'Unable to send message'));
+    s.on('message:delivered',()=>setSocketError(''));
+    s.on('message:read',()=>{});
+    s.on('typing',(d:any)=>d?.userId!==me.id&&setTyping(Boolean(d.typing)));
+    setSocket(s);
+    return()=>{stopRingtone();s.disconnect()};
+  },[]);
 
   useEffect(()=>{if(!active||!socket)return;const id=active.id;setTyping(false);setMenu(null);setReaction(null);setReply(null);setEditing(null);setEmojiOpen(false);socket.emit('conversation:join',id);api.messages(id).then(data=>setMessages(Array.isArray(data)?data.filter((m:Message)=>m.conversationId===id):[])).catch(e=>setSocketError(e.message||'Unable to load messages'));api.read(id).catch(()=>{});setMobileChat(true);return()=>{socket.emit('conversation:leave',id)}},[active?.id,socket]);
 
