@@ -33,7 +33,7 @@ const PORT = Number(process.env.PORT ?? 4000);
 
 const WEB_ORIGIN =
   process.env.WEB_ORIGIN ??
-  'http://localhost:5173,https://web.narsingbeesetti006.workers.dev,https://global-messenger-help-centre.onrender.com';
+  'http://localhost:5173,https://web.narsingbeesetti006.workers.dev,https://global-messenger-help-centre.onrender.com,https://global-messanger-web.vercel.app';
 
 const isAllowedOrigin = (origin?: string | null) => {
   // Allow requests without an Origin header and native Capacitor/Ionic apps.
