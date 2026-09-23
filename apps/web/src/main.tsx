@@ -131,8 +131,12 @@ function App() {
       await pc.setRemoteDescription(invite.sdp);
       const contact={id:invite.peerId,displayName:invite.displayName,username:invite.username,connected:false};
       await persistContacts([contact,...contacts.filter(c=>c.id!==contact.id)]);
+      const ch=channels.current.get('pending-offer');
+      if(!ch)throw Error('The pending WebRTC data channel is missing. Create a new offer.');
+      channels.current.delete('pending-offer');
+      pcs.current.delete('pending-offer');
+      wirePeer(contact.id,pc,ch);
       setActiveId(contact.id);setPairMode('offer');setStatus('Connecting to peer…');
-      pcs.current.set(contact.id,pc);pcs.current.delete('pending-offer');
     }catch(e:any){setError(e.message||'Could not apply answer.');}
   }
 
