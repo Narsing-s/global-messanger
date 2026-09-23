@@ -833,16 +833,19 @@ app.post(
       }
     });
 
-    io
-      .to(`conversation:${conversationId}`)
-      .emit(
-        'message:read',
-        {
-          conversationId,
-          userId: id,
-          at
-        }
-      );
+    // Notify every connected member through their user room. A read
+    // receipt must not depend on the other participant having the chat open.
+    const readMembers = await prisma.conversationMember.findMany({
+      where: { conversationId },
+      select: { userId: true }
+    });
+    for (const memberRow of readMembers) {
+      io.to(`user:${memberRow.userId}`).emit('message:read', {
+        conversationId,
+        userId: id,
+        at
+      });
+    }
 
     return {
       ok: true,
@@ -1598,56 +1601,64 @@ io.on(
             }
           });
 
-          /* ----------------------- Broadcast Message ---------------------- */
+          /* ----------------------- Real delivery ------------------------- */
+          // Deliver through the server-owned user rooms, not only the currently
+          // opened conversation room. This makes background chats work: a
+          // recipient can receive a message while viewing another conversation.
+          const deliverableRecipientIds = recipientIds.filter(
+            id => !blockedRecipientIds.has(id)
+          );
 
-          io
-            .to(
-              `conversation:${data.conversationId}`
-            )
-            .emit(
-              'message:new',
-              {
-                ...message,
-                clientId: data.clientId
-              }
-            );
+          await prisma.messageReceipt.createMany({
+            data: deliverableRecipientIds.map(recipientId => ({
+              messageId: message.id,
+              userId: recipientId
+            })),
+            skipDuplicates: true
+          });
 
-          void sendPushForMessage(prisma, message, message.sender?.displayName || 'New message').catch(error => app.log.warn(error, 'Push notification delivery failed'));
+          for (const recipientId of deliverableRecipientIds) {
+            io.to(`user:${recipientId}`).emit('message:new', {
+              ...message,
+              clientId: data.clientId
+            });
 
+            // A connected recipient has received the realtime event.
+            if (online.has(recipientId)) {
+              await prisma.messageReceipt.update({
+                where: {
+                  messageId_userId: {
+                    messageId: message.id,
+                    userId: recipientId
+                  }
+                },
+                data: { deliveredAt: new Date() }
+              });
 
+              io.to(`user:${userId}`).emit('message:delivered', {
+                messageId: message.id,
+                conversationId: message.conversationId,
+                recipientId,
+                clientId: data.clientId,
+                deliveredAt: new Date().toISOString()
+              });
+            }
+          }
 
+          // Also update the sender immediately so the sent message appears
+          // on every sender device connected to the same account.
+          io.to(`user:${userId}`).emit('message:new', {
+            ...message,
+            clientId: data.clientId
+          });
 
-
-
-
-
-
-
-
-
-
-          /* ---------------------- Delivery Ack ---------------------------- */
-
-          io
-            .to(
-              `user:${userId}`
-            )
-            .emit(
-              'message:delivered',
-              {
-                messageId:
-                  message.id,
-
-                conversationId:
-                  message.conversationId,
-
-                clientId:
-                  data.clientId,
-
-                deliveredAt:
-                  new Date().toISOString()
-              }
-            );
+          void sendPushForMessage(
+            prisma,
+            message,
+            message.sender?.displayName || 'New message'
+          ).catch(error =>
+            app.log.warn(error, 'Push notification delivery failed')
+          );
         } catch (error) {
           console.error(
             'message:send failed:',
