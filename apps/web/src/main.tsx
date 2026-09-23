@@ -1,201 +1,140 @@
-// True serverless / peer-to-peer Global Messenger.
-// Persistent data lives only in the device's IndexedDB. There is no REST API,
-// authentication server, database, Docker service, or message relay.
-// WebRTC uses DTLS encryption for the peer connection. Initial signaling is
-// intentionally manual (copy/paste SDP) so two devices can pair without a server.
-
+// Global Messenger — full-stack Messenger experience.
+// Authentication, conversations, groups, folders and messages are server-backed.
+// The browser keeps only the active session token needed by the existing API.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Globe2, Copy, Link2, Send, ShieldCheck, Trash2, UserPlus, Wifi, WifiOff } from 'lucide-react';
-import { getContacts, getLocal, getMessages, getProfile, LocalContact, LocalMessage, LocalProfile, saveContacts, saveMessages, saveProfile, clearLocalData } from './p2p-store';
+import { io, Socket } from 'socket.io-client';
+import {
+  Archive, Bell, CheckCheck, ChevronLeft, Copy, Heart, LogIn, LogOut,
+  MessageCircle, MoreVertical, Paperclip, Plus, Search, Send, Settings,
+  ShieldCheck, Smile, Star, Trash2, UserPlus, Users, X
+} from 'lucide-react';
+import { api, API } from './api';
 import './styles.css';
-import './p2p.css';
 
-const RTC_CONFIG: RTCConfiguration = { iceServers: [] };
-const waitForIce = (pc: RTCPeerConnection) => new Promise<void>(resolve => {
-  if (pc.iceGatheringState === 'complete') return resolve();
-  const timer = window.setTimeout(() => resolve(), 3000);
-  pc.addEventListener('icegatheringstatechange', () => {
-    if (pc.iceGatheringState === 'complete') { clearTimeout(timer); resolve(); }
-  });
-});
+type User={id:string;username:string;displayName:string;avatarUrl?:string|null;lastSeenAt?:string};
+type Member={user:User;favoriteAt?:string|null;archivedAt?:string|null};
+type Message={id:string;conversationId:string;senderId:string;body:string;createdAt:string;editedAt?:string|null;deletedAt?:string|null;sender?:User;type?:string;attachmentUrl?:string|null;attachmentName?:string|null;attachmentMime?:string|null;attachmentSize?:number|null;replyToId?:string|null};
+type Chat={id:string;isGroup:boolean;title?:string|null;members:Member[];messages?:Message[];favorite?:boolean;archived?:boolean;unreadCount?:number};
+type Folder='all'|'unread'|'groups'|'favorites'|'archived';
 
-const uid = () => crypto.randomUUID();
-const initials = (name: string) => name.trim().split(/\s+/).map(x => x[0]).join('').slice(0,2).toUpperCase() || 'GM';
-const now = () => new Date().toISOString();
+const initials=(s:string)=>s.trim().split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase()||'GM';
+const time=(v?:string)=>v?new Date(v).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):'';
+const nameOf=(c:Chat,me:string)=>c.isGroup?(c.title||'Group'):(c.members.find(m=>m.user.id!==me)?.user.displayName||'Conversation');
 
-type WireMessage = { kind:'message'; message:LocalMessage };
-type PairInvite = { v:1; type:'offer'|'answer'; peerId:string; displayName:string; username:string; sdp:RTCSessionDescriptionInit };
+function Avatar({user,name,size='md'}:{user?:User|null;name?:string;size?:string}) {
+  const label=name||user?.displayName||'Global Messenger';
+  return <div className={'avatar '+size}>{user?.avatarUrl?<img src={user.avatarUrl} alt="" />:initials(label)}</div>;
+}
 
-function App() {
-  const [profile,setProfile]=useState<LocalProfile|null>(null);
-  const [contacts,setContacts]=useState<LocalContact[]>([]);
-  const [messages,setMessages]=useState<LocalMessage[]>([]);
-  const [activeId,setActiveId]=useState<string|null>(null);
-  const [setupName,setSetupName]=useState('');
-  const [setupUsername,setSetupUsername]=useState('');
-  const [pairText,setPairText]=useState('');
-  const [pairMode,setPairMode]=useState<'offer'|'answer'|'apply'>('offer');
-  const [signalText,setSignalText]=useState('');
-  const [status,setStatus]=useState('Local-only');
-  const [error,setError]=useState('');
-  const [draft,setDraft]=useState('');
-  const pcs=useRef(new Map<string,RTCPeerConnection>());
-  const channels=useRef(new Map<string,RTCDataChannel>());
-  const profileRef=useRef<LocalProfile|null>(null);
-
-  useEffect(()=>{(async()=>{
-    const [p,c,m]=await Promise.all([getProfile(),getContacts(),getMessages()]);
-    if(p){setProfile(p);profileRef.current=p;}
-    setContacts(c);setMessages(m);
-  })()},[]);
-
-  const active=contacts.find(c=>c.id===activeId)||null;
-  const activeMessages=useMemo(()=>messages.filter(m=>m.peerId===activeId),[messages,activeId]);
-
-  async function persistMessages(next:LocalMessage[]){setMessages(next);await saveMessages(next);}
-  async function persistContacts(next:LocalContact[]){setContacts(next);await saveContacts(next);}
-
-  async function createProfile(){
-    setError('');
-    const displayName=setupName.trim(), username=setupUsername.trim().replace(/^@/,'').toLowerCase();
-    if(!displayName||username.length<3)return setError('Enter a display name and username (3+ characters).');
-    const p={id:uid(),displayName,username,createdAt:now()};
-    await saveProfile(p);profileRef.current=p;setProfile(p);
-  }
-
-  function closePeer(id:string){
-    channels.current.get(id)?.close(); channels.current.delete(id);
-    pcs.current.get(id)?.close(); pcs.current.delete(id);
-    void persistContacts(contacts.map(c=>c.id===id?{...c,connected:false}:c));
-  }
-
-  function wirePeer(id:string,pc:RTCPeerConnection,ch:RTCDataChannel){
-    pcs.current.set(id,pc); channels.current.set(id,ch);
-    ch.onopen=()=>{setStatus('Peer connected');void persistContacts(contacts.map(c=>c.id===id?{...c,connected:true,lastSeenAt:now()}:c));};
-    ch.onclose=()=>{setStatus('Peer disconnected');void persistContacts(contacts.map(c=>c.id===id?{...c,connected:false}:c));};
-    ch.onerror=()=>setStatus('Peer connection error');
-    ch.onmessage=async e=>{
-      try{
-        const data=JSON.parse(String(e.data)) as WireMessage;
-        if(data.kind!=='message')return;
-        const msg={...data.message,peerId:id};
-        const current=await getMessages();
-        if(current.some(x=>x.id===msg.id))return;
-        await persistMessages([...current,msg]);
-        setActiveId(id);
-      }catch{setError('Received an invalid peer message.');}
-    };
-    pc.onconnectionstatechange=()=>{if(['failed','closed','disconnected'].includes(pc.connectionState))setStatus('Peer offline');};
-  }
-
-  async function makeOffer(){
-    if(!profile)return;
-    setError('');
-    const pc=new RTCPeerConnection(RTC_CONFIG);
-    const ch=pc.createDataChannel('messages',{ordered:true});
-    const tempId='pending-offer';
-    wirePeer(tempId,pc,ch);
-    const offer=await pc.createOffer();await pc.setLocalDescription(offer);await waitForIce(pc);
-    const payload:PairInvite={v:1,type:'offer',peerId:profile.id,displayName:profile.displayName,username:profile.username,sdp:pc.localDescription!};
-    setSignalText(JSON.stringify(payload));
-    setPairMode('answer');
-    setStatus('Offer created — send it to the other device.');
-  }
-
-  async function acceptOffer(){
-    if(!profile)return;
-    setError('');
+function Auth({onLogin}:{onLogin:(u:User,t:string)=>void}) {
+  const [register,setRegister]=useState(false),[username,setUsername]=useState(''),[displayName,setDisplayName]=useState('');
+  const [password,setPassword]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  async function submit(e:React.FormEvent){e.preventDefault();setError('');if(register&&password!==confirm)return setError('Passwords do not match');setBusy(true);
     try{
-      const invite=JSON.parse(signalText) as PairInvite;
-      if(invite.v!==1||invite.type!=='offer')throw Error('Paste a valid offer.');
-      const pc=new RTCPeerConnection(RTC_CONFIG);
-      pc.ondatachannel=e=>wirePeer(invite.peerId,pc,e.channel);
-      await pc.setRemoteDescription(invite.sdp);
-      const answer=await pc.createAnswer();await pc.setLocalDescription(answer);await waitForIce(pc);
-      const contact={id:invite.peerId,displayName:invite.displayName,username:invite.username,connected:false};
-      const next=[contact,...contacts.filter(c=>c.id!==contact.id)];await persistContacts(next);setActiveId(contact.id);
-      const payload:PairInvite={v:1,type:'answer',peerId:profile.id,displayName:profile.displayName,username:profile.username,sdp:pc.localDescription!};
-      pcs.current.set(invite.peerId,pc);
-      setSignalText(JSON.stringify(payload));setPairMode('apply');
-      setStatus('Answer created — send it back to the first device.');
-    }catch(e:any){setError(e.message||'Could not accept offer.');}
+      const path=register?'/api/auth/register':'/api/auth/login';
+      const body=register?{username:username.trim().replace(/^@/,''),displayName:displayName.trim()||username.trim(),password}:{username:username.trim().replace(/^@/,''),password};
+      const r=await fetch(API+path,{method:'POST',headers:{'content-type':'application/json'},credentials:'include',body:JSON.stringify(body)});
+      const d=await r.json().catch(()=>({})); if(!r.ok)throw Error(d.message||'Authentication failed');
+      if(!d.token||!d.user)throw Error('Authentication server returned an invalid session');
+      localStorage.setItem('gm_token',d.token);localStorage.setItem('gm_user',JSON.stringify(d.user));onLogin(d.user,d.token);
+    }catch(e:any){setError(e.message||'Authentication failed')}finally{setBusy(false)}
   }
+  return <div className="auth-page"><form className="auth-card" onSubmit={submit}>
+    <div className="brand"><div className="brand-mark"><MessageCircle/></div><div><b>Global Messenger</b><small>Connect · Chat · Share</small></div></div>
+    <h1>{register?'Create your account':'Welcome back'}</h1><p>{register?'Create a real Messenger account and start chatting.':'Sign in to your conversations.'}</p>
+    {register&&<input value={displayName} onChange={e=>setDisplayName(e.target.value)} placeholder="Display name" autoComplete="name" />}
+    <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="Username" autoComplete="username" />
+    <input value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password (8+ characters)" type="password" autoComplete={register?'new-password':'current-password'} />
+    {register&&<input value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="Confirm password" type="password" autoComplete="new-password" />}
+    {error&&<div className="error">{error}</div>}
+    <button className="primary big" disabled={busy}>{busy?<span>Working…</span>:register?<><UserPlus/> Create account</>:<><LogIn/> Login</>}</button>
+    <button type="button" className="link-button" onClick={()=>{setRegister(!register);setError('')}}>{register?'Already have an account? Login':'New here? Create an account'}</button>
+    <div className="security-note"><ShieldCheck/> Your conversations are stored in your Messenger account and synced across signed-in devices.</div>
+  </form></div>
+}
 
-  async function applyAnswer(){
-    try{
-      const invite=JSON.parse(signalText) as PairInvite;
-      if(invite.v!==1||invite.type!=='answer')throw Error('Paste a valid answer.');
-      const pc=pcs.current.get('pending-offer');
-      if(!pc)throw Error('This device has no pending offer. Create a new offer first.');
-      await pc.setRemoteDescription(invite.sdp);
-      const contact={id:invite.peerId,displayName:invite.displayName,username:invite.username,connected:false};
-      await persistContacts([contact,...contacts.filter(c=>c.id!==contact.id)]);
-      setActiveId(contact.id);setPairMode('offer');setStatus('Connecting to peer…');
-      pcs.current.set(contact.id,pc);pcs.current.delete('pending-offer');
-    }catch(e:any){setError(e.message||'Could not apply answer.');}
-  }
+function App(){
+  const [user,setUser]=useState<User|null>(null),[chats,setChats]=useState<Chat[]>([]),[active,setActive]=useState<Chat|null>(null);
+  const [messages,setMessages]=useState<Message[]>([]),[query,setQuery]=useState(''),[people,setPeople]=useState<User[]>([]);
+  const [text,setText]=useState(''),[folder,setFolder]=useState<Folder>('all'),[socket,setSocket]=useState<Socket|null>(null);
+  const [error,setError]=useState(''),[typing,setTyping]=useState(false),[mobile,setMobile]=useState(false);
+  const [groupOpen,setGroupOpen]=useState(false),[groupTitle,setGroupTitle]=useState(''),[groupUsers,setGroupUsers]=useState<User[]>([]);
+  const [menu,setMenu]=useState(false),[profileOpen,setProfileOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false);
+  const [emoji,setEmoji]=useState(false),[reaction,setReaction]=useState<string|null>(null),[reply,setReply]=useState<Message|null>(null);
+  const [editing,setEditing]=useState<Message|null>(null),[presence,setPresence]=useState<Record<string,boolean>>({});
+  const fileRef=useRef<HTMLInputElement>(null),typingTimer=useRef<number>();
 
-  function send(){
-    const body=draft.trim();if(!body||!activeId||!profile)return;
-    const ch=channels.current.get(activeId);
-    if(!ch||ch.readyState!=='open')return setError('Peer is offline. No server is available to queue messages.');
-    const msg:LocalMessage={id:uid(),peerId:activeId,senderId:profile.id,senderName:profile.displayName,body,createdAt:now(),status:'delivered'};
-    ch.send(JSON.stringify({kind:'message',message:msg} satisfies WireMessage));
-    void persistMessages([...messages,msg]);setDraft('');
-  }
+  useEffect(()=>{const t=localStorage.getItem('gm_token'),u=localStorage.getItem('gm_user');if(t&&u){try{setUser(JSON.parse(u));}catch{localStorage.clear()}}},[]);
+  useEffect(()=>{if(!user)return; let alive=true;
+    api.conversations().then((d:any)=>alive&&setChats(Array.isArray(d)?d:[])).catch(e=>setError(e.message));
+    const s=io(API,{auth:{token:localStorage.getItem('gm_token')},transports:['websocket','polling'],reconnection:true});
+    s.on('connect',()=>setError(''));s.on('connect_error',(e:any)=>setError(e.message||'Realtime connection failed'));
+    s.on('presence:update',(d:any)=>d?.userId&&setPresence(p=>({...p,[d.userId]:!!d.online})));
+    s.on('typing',(d:any)=>d?.userId!==user.id&&setTyping(!!d.typing));
+    s.on('message:new',(m:Message)=>{setMessages(p=>p.some(x=>x.id===m.id)?p:[...p,m].sort((a,b)=>+new Date(a.createdAt)-+new Date(b.createdAt)));setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[]).filter(x=>x.id!==m.id)].slice(0,1)}:c));});
+    s.on('message:updated',(m:Message)=>setMessages(p=>p.map(x=>x.id===m.id?m:x)));
+    s.on('message:deleted',(d:any)=>setMessages(p=>p.map(x=>x.id===d.id?{...x,body:'',deletedAt:d.deletedAt}:x)));
+    s.on('reaction:update',()=>{if(active)setActive({...active})});
+    setSocket(s);return()=>{alive=false;s.disconnect()};
+  },[user?.id]);
+  useEffect(()=>{if(!active)return;setTyping(false);socket?.emit('conversation:join',active.id);api.messages(active.id,100).then((d:any)=>setMessages(Array.isArray(d)?d:[])).catch(e=>setError(e.message));api.read(active.id).catch(()=>{});setChats(p=>p.map(c=>c.id===active.id?{...c,unreadCount:0}:c));return()=>{socket?.emit('conversation:leave',active.id)}},[active?.id,socket]);
 
-  async function addContactFromInvite(){
-    setError('');
-    try{
-      const invite=JSON.parse(pairText) as PairInvite;
-      if(!invite.peerId||!invite.displayName)throw Error('Invalid peer information.');
-      const c={id:invite.peerId,displayName:invite.displayName,username:invite.username||invite.peerId,connected:false};
-      await persistContacts([c,...contacts.filter(x=>x.id!==c.id)]);setActiveId(c.id);setPairText('');
-    }catch(e:any){setError(e.message||'Invalid contact code.');}
-  }
+  const visible=useMemo(()=>chats.filter(c=>folder==='all'?!c.archived:folder==='archived'?!!c.archived:folder==='favorites'?!!c.favorite:folder==='groups'?c.isGroup:(c.unreadCount||0)>0).filter(c=>{const n=nameOf(c,user?.id||'').toLowerCase();return !query||n.includes(query.toLowerCase())}),[chats,folder,query,user?.id]);
+  const activeOther=active?.members.find(m=>m.user.id!==user?.id)?.user;
+  async function search(q:string){setQuery(q);if(q.trim().length<2)return setPeople([]);try{setPeople((await api.searchUsers(q)).filter((u:User)=>u.id!==user?.id))}catch(e:any){setError(e.message)}}
+  async function openDirect(u:User){try{const c=await api.direct(u.id);setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setPeople([]);setQuery('');setMobile(true)}catch(e:any){setError(e.message)}}
+  async function createGroup(){if(!groupTitle.trim()||!groupUsers.length)return;try{const c=await api.group(groupTitle.trim(),groupUsers.map(u=>u.id));setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setGroupOpen(false);setGroupTitle('');setGroupUsers([]);setMobile(true)}catch(e:any){setError(e.message)}}
+  function send(){const body=text.trim();if(!body||!active)return;if(editing){api.editMessage(editing.id,body).catch(e=>setError(e.message));setEditing(null);setText('');return}if(!socket?.connected)return setError('Realtime connection is offline. Reconnecting…');socket.emit('message:send',{conversationId:active.id,body,type:'text',replyToId:reply?.id||null,clientId:crypto.randomUUID()});setText('');setReply(null);setEmoji(false)}
+  async function sendFile(f:File){if(!active)return;try{const u=await api.upload(f);socket?.emit('message:send',{conversationId:active.id,body:f.type.startsWith('image/')?'Image':f.name,type:'file',attachmentUrl:u.url,attachmentName:u.name||f.name,attachmentMime:f.type,attachmentSize:f.size,clientId:crypto.randomUUID()})}catch(e:any){setError(e.message)}}
+  async function organize(kind:'favorite'|'archived',value:boolean){if(!active)return;try{await api.organization(active.id,{[kind]:value});setChats(p=>p.map(c=>c.id===active.id?{...c,[kind==='favorite'?'favorite':'archived']:value}:c));setActive(c=>c?{...c,[kind==='favorite'?'favorite':'archived']:value}:c);setMenu(false)}catch(e:any){setError(e.message)}}
+  async function logout(){try{await api.logout()}catch{}localStorage.removeItem('gm_token');localStorage.removeItem('gm_user');socket?.disconnect();setSocket(null);setUser(null);setChats([]);setActive(null);setMessages([])}
+  async function react(m:Message,e:string){try{await api.react(m.id,e);setReaction(null)}catch(err:any){setError(err.message)}}
+  async function del(m:Message){try{await api.deleteMessage(m.id);setMenu(false)}catch(e:any){setError(e.message)}}
 
-  async function reset(){
-    if(!confirm('Delete this device profile, contacts and local messages?'))return;
-    for(const pc of pcs.current.values())pc.close();
-    pcs.current.clear();channels.current.clear();await clearLocalData();location.reload();
-  }
+  if(!user)return <Auth onLogin={(u)=>setUser(u)}/>;
+  const activeMessages=messages.filter(m=>m.conversationId===active?.id);
+  return <div className={'messenger '+(mobile?'mobile-open':'')}>
+    <aside className="rail"><div className="rail-avatar"><Avatar user={user} size="lg"/></div>
+      <nav><button className="active"><MessageCircle/><span>Chats</span></button><button onClick={()=>setGroupOpen(true)}><Users/><span>Groups</span></button><button onClick={()=>setFolder('favorites')}><Star/><span>Favorites</span></button><button onClick={()=>setFolder('archived')}><Archive/><span>Archive</span></button></nav>
+      <div className="rail-bottom"><button onClick={()=>setSettingsOpen(true)}><Settings/></button><button onClick={logout}><LogOut/></button></div>
+    </aside>
+    <section className="chat-list-pane">
+      <header className="list-header"><div className="brand"><div className="brand-mark"><MessageCircle/></div><div><b>Global Messenger</b><small>{socket?.connected?'Connected':'Connecting…'}</small></div></div><button onClick={()=>setSettingsOpen(true)}><Settings/></button></header>
+      <div className="me-row"><Avatar user={user}/><div><b>{user.displayName}</b><small>@{user.username}</small></div><button onClick={()=>setProfileOpen(true)}><MoreVertical/></button></div>
+      <div className="search"><Search/><input value={query} onChange={e=>search(e.target.value)} placeholder="Search people or chats…"/></div>
+      {people.length>0&&<div className="people"><b>People</b>{people.map(p=><button key={p.id} onClick={()=>openDirect(p)}><Avatar user={p}/><span><strong>{p.displayName}</strong><small>@{p.username}</small></span><Plus/></button>)}</div>}
+      <div className="folders">{(['all','unread','groups','favorites','archived'] as Folder[]).map(f=><button key={f} className={folder===f?'selected':''} onClick={()=>setFolder(f)}>{f==='all'?'All':f[0].toUpperCase()+f.slice(1)}</button>)}</div>
+      <div className="chat-list">{visible.map(c=>{const other=c.members.find(m=>m.user.id!==user.id)?.user;const latest=c.messages?.[0];return <button key={c.id} className={'chat '+(active?.id===c.id?'selected':'')} onClick={()=>{setActive(c);setMobile(true)}}><Avatar user={other} name={nameOf(c,user.id)}/><div><div><strong>{nameOf(c,user.id)}</strong><time>{time(latest?.createdAt)}</time></div><p>{latest?.type==='file'?'📎 '+(latest.attachmentName||'File'):latest?.body||'Start a conversation'}</p></div>{c.favorite&&<Star className="star"/>}{(c.unreadCount||0)>0&&<i className="unread"/>}</button>})}{!visible.length&&<div className="empty-list"><MessageCircle/><b>No chats here</b><span>Search for a person to start a conversation.</span></div>}</div>
+      <div className="new-actions"><button onClick={()=>document.querySelector<HTMLInputElement>('.search input')?.focus()}><Plus/> New chat</button><button onClick={()=>setGroupOpen(true)}><Users/> New group</button></div>
+    </section>
+    <main className="conversation">
+      {!active?<div className="welcome"><MessageCircle/><h1>Your messages</h1><p>Private and group conversations in one place.</p><div><button className="primary" onClick={()=>document.querySelector<HTMLInputElement>('.search input')?.focus()}><Search/> Find people</button><button onClick={()=>setGroupOpen(true)}><Users/> Create group</button></div></div>:
+      <><header className="conversation-head"><button className="back" onClick={()=>setMobile(false)}><ChevronLeft/></button><Avatar user={activeOther} name={nameOf(active,user.id)}/><div><b>{nameOf(active,user.id)}</b><small>{active.isGroup?active.members.length+' members':activeOther&&presence[activeOther.id]?'Online':'Offline'}</small></div><span className="head-actions"><button onClick={()=>setMenu(!menu)}><MoreVertical/></button></span></header>
+      {menu&&<div className="chat-menu"><button onClick={()=>organize('favorite',!active.favorite)}><Star/> {active.favorite?'Remove favorite':'Add to favorites'}</button><button onClick={()=>organize('archived',!active.archived)}><Archive/> {active.archived?'Unarchive chat':'Archive chat'}</button><button onClick={()=>navigator.clipboard?.writeText(location.href)}><Copy/> Copy chat link</button></div>}
+      <div className="messages">{activeMessages.length===0?<div className="empty-conversation"><MessageCircle/><span>No messages yet. Say hello!</span></div>:activeMessages.map(m=><Bubble key={m.id} m={m} own={m.senderId===user.id} onReply={()=>setReply(m)} onEdit={()=>{setEditing(m);setText(m.body)}} onDelete={()=>del(m)} reaction={reaction===m.id} onReact={()=>setReaction(reaction===m.id?null:m.id)} onEmoji={e=>react(m,e)}/>)}</div>
+      <div className="composer-area">{reply&&<div className="context">Replying to {reply.sender?.displayName||'message'}<button onClick={()=>setReply(null)}><X/></button></div>}{editing&&<div className="context">Editing message<button onClick={()=>{setEditing(null);setText('')}}><X/></button></div>}
+        <div className="composer"><input ref={fileRef} hidden type="file" onChange={e=>e.target.files?.[0]&&sendFile(e.target.files[0])}/><button onClick={()=>fileRef.current?.click()}><Paperclip/></button><button onClick={()=>setEmoji(!emoji)}><Smile/></button><input value={text} onChange={e=>{setText(e.target.value);if(socket?.connected){socket.emit('typing',{conversationId:active.id,typing:!!e.target.value.trim()});window.clearTimeout(typingTimer.current);typingTimer.current=window.setTimeout(()=>socket.emit('typing',{conversationId:active.id,typing:false}),1000)}}} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&send()} placeholder="Type a message…"/><button className="send" onClick={send}><Send/></button></div>
+        {emoji&&<div className="emoji">{['😀','😂','😍','😊','😎','👍','❤️','🔥','🎉','👏','🙏','💯','✨','🚀','🤣','😮'].map(e=><button key={e} onClick={()=>{setText(t=>t+e);setEmoji(false)}}>{e}</button>)}</div>}
+        {typing&&<small className="typing">Someone is typing…</small>}{error&&<div className="error inline">{error}<button onClick={()=>setError('')}><X/></button></div>}
+      </div></>}
+    </main>
+    {profileOpen&&<Modal title="My profile" onClose={()=>setProfileOpen(false)}><Avatar user={user} size="xl"/><h2>{user.displayName}</h2><p>@{user.username}</p><button className="primary" onClick={logout}><LogOut/> Logout</button></Modal>}
+    {settingsOpen&&<Modal title="Settings" onClose={()=>setSettingsOpen(false)}><div className="setting"><Bell/><div><b>Notifications</b><small>Realtime message notifications are enabled when supported.</small></div></div><div className="setting"><ShieldCheck/><div><b>Account security</b><small>Use a strong password and sign out of shared devices.</small></div></div><button className="danger big" onClick={logout}><LogOut/> Log out</button></Modal>}
+    {groupOpen&&<GroupModal title={groupTitle} setTitle={setGroupTitle} users={groupUsers} setUsers={setGroupUsers} onCreate={createGroup} onClose={()=>setGroupOpen(false)}/>}
+  </div>
+}
 
-  if(!profile)return <div className="p2p-welcome"><div className="p2p-welcome-card">
-    <div className="p2p-brand"><div className="p2p-mark"><Globe2/></div><div><strong>Global Messenger</strong><small>True peer-to-peer edition</small></div></div>
-    <h1>Create your device identity</h1>
-    <p className="p2p-muted">There is no account server. Your identity, contacts and messages stay in this browser/app.</p>
-    <input className="p2p-input" value={setupName} onChange={e=>setSetupName(e.target.value)} placeholder="Display name"/>
-    <input className="p2p-input" value={setupUsername} onChange={e=>setSetupUsername(e.target.value)} placeholder="Username"/>
-    {error&&<div className="p2p-warning">{error}</div>}
-    <button className="p2p-btn p2p-primary" onClick={createProfile}>Create local identity</button>
-    <div className="p2p-warning">Keep this device data safe. Clearing app/browser storage removes the identity and local chat history.</div>
-  </div></div>;
+function Bubble({m,own,onReply,onEdit,onDelete,reaction,onReact,onEmoji}:{m:Message;own:boolean;onReply:()=>void;onEdit:()=>void;onDelete:()=>void;reaction:boolean;onReact:()=>void;onEmoji:(e:string)=>void}){
+  return <div className={'bubble-row '+(own?'own':'')}><div className="bubble">{m.deletedAt?<i>Message deleted</i>:m.attachmentUrl?<>{m.attachmentMime?.startsWith('image/')?<img src={m.attachmentUrl} alt={m.attachmentName||'image'}/>:<a href={m.attachmentUrl} target="_blank" rel="noreferrer"><Paperclip/> {m.attachmentName||'Download file'}</a>}{m.body!=='Image'&&<p>{m.body}</p>}</>:<p>{m.body}</p>}<small>{time(m.createdAt)} {own&&<CheckCheck/>}</small><button className="bubble-more" onClick={onReact}><Heart/></button>{reaction&&<div className="reaction">{['❤️','👍','😂','😮','😢','🔥'].map(e=><button key={e} onClick={()=>onEmoji(e)}>{e}</button>)}</div>}<div className="bubble-actions"><button onClick={onReply}>Reply</button>{own&&<><button onClick={onEdit}>Edit</button><button onClick={onDelete}>Delete</button></>}</div></div></div>
+}
 
-  const copy=async()=>{await navigator.clipboard?.writeText(signalText);setStatus('Pairing text copied');};
-  return <div className="p2p-app">
-    <header className="p2p-top"><div className="p2p-brand"><div className="p2p-mark"><Globe2/></div><div><strong>Global Messenger</strong><small>Serverless · Device-owned · P2P</small></div></div>
-      <div className="p2p-actions"><span className="p2p-pill"><ShieldCheck size={13}/> DTLS encrypted transport</span><span className="p2p-pill">{status}</span><button className="p2p-btn p2p-danger" onClick={reset}><Trash2 size={15}/></button></div>
-    </header>
-    <div className="p2p-layout">
-      <aside className="p2p-sidebar">
-        <div className="p2p-card"><div className="p2p-row"><div className="p2p-avatar">{initials(profile.displayName)}</div><div><b>{profile.displayName}</b><div className="p2p-muted">@{profile.username}</div></div></div><div className="p2p-muted" style={{marginTop:10}}>Device ID: {profile.id}</div></div>
-        <div className="p2p-card"><h3><Link2 size={16}/> Pair a device</h3><p className="p2p-muted">No signaling server is used. Exchange the text below manually.</p>
-          <div className="p2p-actions"><button className="p2p-btn p2p-primary" onClick={makeOffer}>Create offer</button><button className="p2p-btn" onClick={()=>setPairMode('answer')}>I received an offer</button></div>
-          <textarea className="p2p-textarea" value={signalText} onChange={e=>setSignalText(e.target.value)} placeholder="Paste offer/answer here"/>
-          <div className="p2p-actions"><button className="p2p-btn" onClick={pairMode==='answer'?acceptOffer:applyAnswer}>{pairMode==='answer'?'Create answer':'Apply answer'}</button>{signalText&&<button className="p2p-btn" onClick={copy}><Copy size={15}/> Copy</button>}</div>
-          {error&&<div className="p2p-warning">{error}</div>}
-        </div>
-        <div className="p2p-card"><h3><UserPlus size={16}/> Contacts</h3>{contacts.length===0?<div className="p2p-muted">No contacts yet. Pair with another device.</div>:contacts.map(c=><button className={'p2p-contact '+(activeId===c.id?'active':'')} key={c.id} onClick={()=>setActiveId(c.id)}><span className="p2p-avatar">{initials(c.displayName)}</span><span><b>{c.displayName}</b><br/><small className="p2p-muted">@{c.username}</small></span><span className={'p2p-dot '+(c.connected?'on':'')}/></button>)}</div>
-      </aside>
-      <main className="p2p-main">
-        {!active?<div className="p2p-empty"><Globe2 size={52}/><h2>Private peer-to-peer messaging</h2><p>Create an offer on this device, exchange it with another device, then chat directly.</p><span className="p2p-pill"><WifiOff size={13}/> No server required</span></div>:
-        <><header className="p2p-chat-head"><div className="p2p-avatar">{initials(active.displayName)}</div><div><h2>{active.displayName}</h2><small>@{active.username} · {active.connected?'Connected directly':'Offline'}</small></div><span className="p2p-pill" style={{marginLeft:'auto'}}>{active.connected?<><Wifi size={13}/> P2P online</>:<><WifiOff size={13}/> offline</>}</span></header>
-        <div className="p2p-messages">{activeMessages.length===0?<div className="p2p-empty"><p>No local messages yet.</p></div>:activeMessages.map(m=><div key={m.id} className={'p2p-msg '+(m.senderId===profile.id?'mine':'')}><div>{m.body}</div><small>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</small></div>)}</div>
-        <div className="p2p-composer"><input className="p2p-input" value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder={active.connected?'Type a message…':'Peer is offline — messages are not queued on a server'}/><button className="p2p-btn p2p-primary" onClick={send} disabled={!active.connected}><Send size={17}/> Send</button></div></>}
-      </main>
-    </div>
-  </div>;
+function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){return <div className="modal-backdrop"><div className="modal"><header><b>{title}</b><button onClick={onClose}><X/></button></header><div className="modal-body">{children}</div></div></div>}
+
+function GroupModal({title,setTitle,users,setUsers,onCreate,onClose}:{title:string;setTitle:(v:string)=>void;users:User[];setUsers:(v:User[])=>void;onCreate:()=>void;onClose:()=>void}){
+ const [q,setQ]=useState(''),[found,setFound]=useState<User[]>([]);
+ async function search(){if(q.trim().length<2)return;try{setFound(await api.searchUsers(q))}catch{}}
+ return <div className="modal-backdrop"><div className="modal"><header><b>Create group</b><button onClick={onClose}><X/></button></header><div className="modal-body"><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Group name"/><div className="group-search"><input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&search()} placeholder="Search people"/><button onClick={search}><Search/></button></div><div className="selected-users">{users.map(u=><button key={u.id} onClick={()=>setUsers(users.filter(x=>x.id!==u.id))}><Avatar user={u} size="sm"/>{u.displayName}<X/></button>)}</div><div className="results">{found.map(u=><button key={u.id} onClick={()=>{if(!users.some(x=>x.id===u.id))setUsers([...users,u])}}><Avatar user={u} size="sm"/><span>{u.displayName}<small>@{u.username}</small></span><Plus/></button>)}</div><button className="primary big" disabled={!title.trim()||!users.length} onClick={onCreate}><Users/> Create group</button></div></div></div>
 }
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
