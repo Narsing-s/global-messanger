@@ -1,6 +1,6 @@
 {
+  "installCommand": "npm install --ignore-scripts",
   "buildCommand": "npm run build:web",
   "outputDirectory": "apps/web/dist",
-  "installCommand": "npm install",
   "framework": "vite"
 }
