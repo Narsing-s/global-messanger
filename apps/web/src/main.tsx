@@ -17,6 +17,7 @@ type Member={user:User;favoriteAt?:string|null;archivedAt?:string|null};
 type Message={id:string;conversationId:string;senderId:string;body:string;createdAt:string;editedAt?:string|null;deletedAt?:string|null;sender?:User;type?:string;attachmentUrl?:string|null;attachmentName?:string|null;attachmentMime?:string|null;attachmentSize?:number|null;replyToId?:string|null};
 type Chat={id:string;isGroup:boolean;title?:string|null;members:Member[];messages?:Message[];favorite?:boolean;archived?:boolean;unreadCount?:number};
 type Folder='all'|'unread'|'groups'|'favorites'|'archived';
+const normalizeChat=(c:any):Chat=>({...c,favorite:!!(c.favorite ?? c.members?.some((m:any)=>m.favoriteAt)),archived:!!(c.archived ?? c.members?.some((m:any)=>m.archivedAt)),unreadCount:Number(c.unreadCount??0)});
 
 const initials=(s:string)=>s.trim().split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase()||'GM';
 const time=(v?:string)=>v?new Date(v).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):'';
@@ -63,11 +64,11 @@ function App(){
   const [menu,setMenu]=useState(false),[profileOpen,setProfileOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false);
   const [emoji,setEmoji]=useState(false),[reaction,setReaction]=useState<string|null>(null),[reply,setReply]=useState<Message|null>(null);
   const [editing,setEditing]=useState<Message|null>(null),[presence,setPresence]=useState<Record<string,boolean>>({});
-  const fileRef=useRef<HTMLInputElement>(null),typingTimer=useRef<number>();
+  const fileRef=useRef<HTMLInputElement>(null),typingTimer=useRef<number | undefined>(undefined);
 
   useEffect(()=>{const t=localStorage.getItem('gm_token'),u=localStorage.getItem('gm_user');if(t&&u){try{setUser(JSON.parse(u));}catch{localStorage.clear()}}},[]);
   useEffect(()=>{if(!user)return; let alive=true;
-    api.conversations().then((d:any)=>alive&&setChats(Array.isArray(d)?d:[])).catch(e=>setError(e.message));
+    api.conversations().then((d:any)=>alive&&setChats(Array.isArray(d)?d.map(normalizeChat):[])).catch(e=>setError(e.message));
     const s=io(API,{auth:{token:localStorage.getItem('gm_token')},transports:['websocket','polling'],reconnection:true});
     s.on('connect',()=>setError(''));s.on('connect_error',(e:any)=>setError(e.message||'Realtime connection failed'));
     s.on('presence:update',(d:any)=>d?.userId&&setPresence(p=>({...p,[d.userId]:!!d.online})));
@@ -83,8 +84,8 @@ function App(){
   const visible=useMemo(()=>chats.filter(c=>folder==='all'?!c.archived:folder==='archived'?!!c.archived:folder==='favorites'?!!c.favorite:folder==='groups'?c.isGroup:(c.unreadCount||0)>0).filter(c=>{const n=nameOf(c,user?.id||'').toLowerCase();return !query||n.includes(query.toLowerCase())}),[chats,folder,query,user?.id]);
   const activeOther=active?.members.find(m=>m.user.id!==user?.id)?.user;
   async function search(q:string){setQuery(q);if(q.trim().length<2)return setPeople([]);try{setPeople((await api.searchUsers(q)).filter((u:User)=>u.id!==user?.id))}catch(e:any){setError(e.message)}}
-  async function openDirect(u:User){try{const c=await api.direct(u.id);setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setPeople([]);setQuery('');setMobile(true)}catch(e:any){setError(e.message)}}
-  async function createGroup(){if(!groupTitle.trim()||!groupUsers.length)return;try{const c=await api.group(groupTitle.trim(),groupUsers.map(u=>u.id));setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setGroupOpen(false);setGroupTitle('');setGroupUsers([]);setMobile(true)}catch(e:any){setError(e.message)}}
+  async function openDirect(u:User){try{const c=normalizeChat(await api.direct(u.id));setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setPeople([]);setQuery('');setMobile(true)}catch(e:any){setError(e.message)}}
+  async function createGroup(){if(!groupTitle.trim()||!groupUsers.length)return;try{const c=normalizeChat(await api.group(groupTitle.trim(),groupUsers.map(u=>u.id)));setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setGroupOpen(false);setGroupTitle('');setGroupUsers([]);setMobile(true)}catch(e:any){setError(e.message)}}
   function send(){const body=text.trim();if(!body||!active)return;if(editing){api.editMessage(editing.id,body).catch(e=>setError(e.message));setEditing(null);setText('');return}if(!socket?.connected)return setError('Realtime connection is offline. Reconnecting…');socket.emit('message:send',{conversationId:active.id,body,type:'text',replyToId:reply?.id||null,clientId:crypto.randomUUID()});setText('');setReply(null);setEmoji(false)}
   async function sendFile(f:File){if(!active)return;try{const u=await api.upload(f);socket?.emit('message:send',{conversationId:active.id,body:f.type.startsWith('image/')?'Image':f.name,type:'file',attachmentUrl:u.url,attachmentName:u.name||f.name,attachmentMime:f.type,attachmentSize:f.size,clientId:crypto.randomUUID()})}catch(e:any){setError(e.message)}}
   async function organize(kind:'favorite'|'archived',value:boolean){if(!active)return;try{await api.organization(active.id,{[kind]:value});setChats(p=>p.map(c=>c.id===active.id?{...c,[kind==='favorite'?'favorite':'archived']:value}:c));setActive(c=>c?{...c,[kind==='favorite'?'favorite':'archived']:value}:c);setMenu(false)}catch(e:any){setError(e.message)}}
