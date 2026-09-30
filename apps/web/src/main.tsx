@@ -31,12 +31,21 @@ function Avatar({user,name,size='md'}:{user?:User|null;name?:string;size?:string
 function Auth({onLogin}:{onLogin:(u:User,t:string)=>void}) {
   const [register,setRegister]=useState(false),[name,setName]=useState(''),[email,setEmail]=useState('');
   const [password,setPassword]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  async function submit(e:React.FormEvent){e.preventDefault();setError('');if(register&&password!==confirm)return setError('Passwords do not match');setBusy(true);
+  async function submit(e:React.FormEvent){
+    e.preventDefault(); setError('');
+    if(register&&password!==confirm)return setError('Passwords do not match');
+    if(!email.trim())return setError('Email is required');
+    setBusy(true);
     try{
       const path=register?'/api/auth/register':'/api/auth/login';
-      const derivedUsername=email.trim().toLowerCase().split('@')[0].replace(/[^a-z0-9_.-]/g,'').slice(0,24) || `user${Date.now()}`; const body=register?{username:derivedUsername,displayName:name.trim()||derivedUsername,email:email.trim().toLowerCase(),password}:{identifier:email.trim().toLowerCase(),password};
+      const cleanEmail=email.trim().toLowerCase();
+      const derivedUsername=cleanEmail.split('@')[0].replace(/[^a-z0-9_.-]/g,'').slice(0,24)||`user${Date.now()}`;
+      const body=register
+        ? {username:derivedUsername,displayName:name.trim()||derivedUsername,email:cleanEmail,password}
+        : {identifier:cleanEmail,password};
       const r=await fetch(API+path,{method:'POST',headers:{'content-type':'application/json'},credentials:'include',body:JSON.stringify(body)});
-      const d=await r.json().catch(()=>({})); if(!r.ok)throw Error(d.message||'Authentication failed');
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw Error(d.message||'Authentication failed');
       if(!d.token||!d.user)throw Error('Authentication server returned an invalid session');
       localStorage.setItem('gm_token',d.token);localStorage.setItem('gm_user',JSON.stringify(d.user));onLogin(d.user,d.token);
     }catch(e:any){setError(e.message||'Authentication failed')}finally{setBusy(false)}
@@ -44,8 +53,8 @@ function Auth({onLogin}:{onLogin:(u:User,t:string)=>void}) {
   return <div className="auth-page"><form className="auth-card" onSubmit={submit}>
     <div className="brand"><div className="brand-mark"><MessageCircle/></div><div><b>Global Messenger</b><small>Connect · Chat · Share</small></div></div>
     <h1>{register?'Create your account':'Welcome back'}</h1><p>{register?'Create a real Messenger account and start chatting.':'Sign in to your conversations. Use your email and password.'}</p>
-    {register&&<input value={displayName} onChange={e=>setDisplayName(e.target.value)} placeholder="Display name" autoComplete="name" />}
-    <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="Username" autoComplete="username" />
+    {register&&<input value={name} onChange={e=>setName(e.target.value)} placeholder="Name" autoComplete="name" />}
+    <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email" type="email" autoComplete="email" />
     <input value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password (8+ characters)" type="password" autoComplete={register?'new-password':'current-password'} />
     {register&&<input value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="Confirm password" type="password" autoComplete="new-password" />}
     {error&&<div className="error">{error}</div>}
@@ -54,7 +63,6 @@ function Auth({onLogin}:{onLogin:(u:User,t:string)=>void}) {
     <div className="security-note"><ShieldCheck/> Your conversations are stored in your Messenger account and synced across signed-in devices.</div>
   </form></div>
 }
-
 function App(){
   const [user,setUser]=useState<User|null>(null),[chats,setChats]=useState<Chat[]>([]),[active,setActive]=useState<Chat|null>(null);
   const [messages,setMessages]=useState<Message[]>([]),[query,setQuery]=useState(''),[people,setPeople]=useState<User[]>([]);
