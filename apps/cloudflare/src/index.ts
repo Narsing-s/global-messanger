@@ -106,6 +106,7 @@ async function broadcast(env: Env, conversationId: string, event: string, data: 
 async function handleApi(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/api/, "") || "/";
+  if (path === "/" && request.method === "GET") return json({ ok: true, service: "global-messenger-api", status: "online", api: "/api", health: "/api/health", register: "POST /api/auth/register", login: "POST /api/auth/login" }, { headers: originHeaders(request) });
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: originHeaders(request) });
 
   if (path === "/health" || path === "/ready") return json({ ok: true, service: "global-messenger-cloudflare", time: new Date().toISOString() });
