@@ -32,7 +32,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '\r\n')"
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#Bearer}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#bearer}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#\"}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN%\"}"
+          export CLOUDFLARE_API_TOKEN
+          test -n "$CLOUDFLARE_API_TOKEN"
           DB_JSON="$(npx wrangler d1 list --json)"
           DB_ID="$(echo "$DB_JSON" | jq -r '.[] | select(.name=="global-messenger") | .uuid' | head -n1)"
           if [ -z "$DB_ID" ] || [ "$DB_ID" = "null" ]; then
@@ -46,16 +52,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '\r\n')"
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#Bearer}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#bearer}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#\"}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN%\"}"
+          export CLOUDFLARE_API_TOKEN
+          test -n "$CLOUDFLARE_API_TOKEN"
           npx wrangler d1 migrations apply global-messenger --remote
       - name: Set JWT secret
         shell: bash
         run: |
-          export CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '\r\n')"
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#Bearer}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#bearer}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#\"}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN%\"}"
+          export CLOUDFLARE_API_TOKEN
+          test -n "$CLOUDFLARE_API_TOKEN"
           printf '%s' "${{ secrets.GM_JWT_SECRET }}" | npx wrangler secret put JWT_SECRET
       - name: Deploy Worker
         shell: bash
         run: |
           set -euo pipefail
-          export CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '\r\n')"
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#Bearer}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#bearer}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN#\"}"
+          CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN%\"}"
+          export CLOUDFLARE_API_TOKEN
+          test -n "$CLOUDFLARE_API_TOKEN"
           npx wrangler deploy
