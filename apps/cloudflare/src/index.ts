@@ -16,7 +16,7 @@ const id = () => crypto.randomUUID();
 function b64u(bytes: Uint8Array): string {
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/g, "");
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 function b64uText(text: string): string {
@@ -88,7 +88,7 @@ async function userShape(env: Env, userId: string) {
 
 async function handleApi(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const path = url.pathname.replace(/^\\/api/, "") || "/";
+  const path = url.pathname.replace(/^\/api/, "") || "/";
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: originHeaders(request) });
 
   if (path === "/health" || path === "/ready") return json({ ok: true, service: "global-messenger-cloudflare", time: new Date().toISOString() });
@@ -172,7 +172,7 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
     return json({ id: conversationId }, { status: 201, headers: originHeaders(request) });
   }
 
-  const msgMatch = path.match(/^\\/conversations/([^/]+)\\/messages$/);
+  const msgMatch = path.match(/^\/conversations\/([^/]+)\/messages$/);
   if (msgMatch && request.method === "GET") {
     const conversationId = msgMatch[1];
     const member = await env.DB.prepare("SELECT 1 FROM conversation_members WHERE conversation_id=? AND user_id=?").bind(conversationId,userId).first();
@@ -186,7 +186,7 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
 
   if (path === "/conversations" && request.method === "POST") return json({ message: "Use /conversations/direct or group." }, { status: 400, headers: originHeaders(request) });
 
-  const convInfo = path.match(/^\\/conversations/([^/]+)\\/info$/);
+  const convInfo = path.match(/^\/conversations\/([^/]+)\/info$/);
   if (convInfo) {
     const conversationId = convInfo[1];
     const member = await env.DB.prepare("SELECT 1 FROM conversation_members WHERE conversation_id=? AND user_id=?").bind(conversationId,userId).first();
