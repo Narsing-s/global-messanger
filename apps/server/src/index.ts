@@ -405,14 +405,12 @@ app.get(
         OR: [
           {
             username: {
-              contains: query,
-              mode: 'insensitive'
+              contains: query
             }
           },
           {
             displayName: {
-              contains: query,
-              mode: 'insensitive'
+              contains: query
             }
           }
         ]
