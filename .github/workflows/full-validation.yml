@@ -19,20 +19,6 @@ jobs:
     name: Build and validate web + server
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: global_messenger_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -d global_messenger_test"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,7 +43,7 @@ jobs:
 
       - name: Build server application
         env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/global_messenger_test?schema=public
+          DATABASE_URL: file:/tmp/global-messenger-test.db
           JWT_SECRET: ci-release-test-secret
         run: npm run build -w apps/server
 
@@ -66,14 +52,14 @@ jobs:
 
       - name: Apply database migrations
         env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/global_messenger_test?schema=public
+          DATABASE_URL: file:/tmp/global-messenger-test.db
         run: npm run db:deploy -w apps/server
 
       - name: Start API for release E2E
         env:
           NODE_ENV: test
           PORT: 4000
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/global_messenger_test?schema=public
+          DATABASE_URL: file:/tmp/global-messenger-test.db
           JWT_SECRET: ci-release-test-secret
           WEB_ORIGIN: http://127.0.0.1:4173
           UPLOAD_DIR: /tmp/global-messenger-uploads
