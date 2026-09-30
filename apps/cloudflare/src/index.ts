@@ -111,7 +111,16 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
   if (path === "/" && request.method === "GET") return json({ ok: true, service: "global-messenger-api", status: "online", api: "/api", health: "/api/health", register: "POST /api/auth/register", login: "POST /api/auth/login" }, { headers: originHeaders(request) });
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: originHeaders(request) });
 
-  if (path === "/health" || path === "/ready") return json({ ok: true, service: "global-messenger-cloudflare", version: DEPLOY_VERSION, time: new Date().toISOString() }, { headers: originHeaders(request) });\n\n  if (path === "/health/db") {\n    try {\n      const row: any = await env.DB.prepare("SELECT 1 AS ok").first();\n      return json({ ok: row?.ok === 1, database: "D1", status: row?.ok === 1 ? "connected" : "not_ready", time: new Date().toISOString() }, { headers: originHeaders(request) });\n    } catch (error) {\n      return json({ ok: false, database: "D1", status: "error", message: error instanceof Error ? error.message : "D1 query failed" }, { status: 503, headers: originHeaders(request) });\n    }\n  }
+  if (path === "/health" || path === "/ready") return json({ ok: true, service: "global-messenger-cloudflare", version: DEPLOY_VERSION, time: new Date().toISOString() }, { headers: originHeaders(request) });
+
+  if (path === "/health/db") {
+    try {
+      const row: any = await env.DB.prepare("SELECT 1 AS ok").first();
+      return json({ ok: row?.ok === 1, database: "D1", status: row?.ok === 1 ? "connected" : "not_ready", time: new Date().toISOString() }, { headers: originHeaders(request) });
+    } catch (error) {
+      return json({ ok: false, database: "D1", status: "error", message: error instanceof Error ? error.message : "D1 query failed" }, { status: 503, headers: originHeaders(request) });
+    }
+  }
 
   // Authentication endpoints are public. A browser GET to these URLs should return
   // an explicit usage message instead of falling through to the protected API routes.
