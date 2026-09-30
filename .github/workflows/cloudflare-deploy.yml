@@ -39,11 +39,11 @@ jobs:
           CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN%\"}"
           export CLOUDFLARE_API_TOKEN
           test -n "$CLOUDFLARE_API_TOKEN"
-          DB_JSON="$(npx wrangler d1 list --json)"
-          DB_ID="$(echo "$DB_JSON" | jq -r '.[] | select(.name=="global-messenger") | .uuid' | head -n1)"
+          DB_JSON="$(npx wrangler d1 list)"
+          DB_ID="$(echo "$DB_JSON" | grep -E 'global-messenger' | grep -Eo '[0-9a-fA-F-]{36}' | head -n1 || true)"
           if [ -z "$DB_ID" ] || [ "$DB_ID" = "null" ]; then
-            DB_JSON="$(npx wrangler d1 create global-messenger --json)"
-            DB_ID="$(echo "$DB_JSON" | jq -r '.uuid // .result.uuid')"
+            DB_CREATE_OUTPUT="$(npx wrangler d1 create global-messenger)"
+            DB_ID="$(echo "$DB_CREATE_OUTPUT" | grep -Eio '[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}' | head -n1 || true)"
           fi
           test -n "$DB_ID" && test "$DB_ID" != "null"
           sed -i "s/REPLACE_WITH_D1_DATABASE_ID/$DB_ID/" wrangler.toml
