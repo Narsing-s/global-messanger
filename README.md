@@ -5,7 +5,7 @@
 [![Open Source](https://img.shields.io/badge/open--source-yes-success)](https://github.com/Narsing-s/global-messanger)
 [![Web](https://img.shields.io/badge/web-React%20%2B%20Vite-blue)](https://github.com/Narsing-s/global-messanger)
 [![Backend](https://img.shields.io/badge/backend-Fastify%20%2B%20Socket.IO-orange)](https://github.com/Narsing-s/global-messanger)
-[![Database](https://img.shields.io/badge/database-PostgreSQL-informational)](https://github.com/Narsing-s/global-messanger)
+[![Database](https://img.shields.io/badge/database-SQLite-informational)](https://github.com/Narsing-s/global-messanger)
 [![Mobile](https://img.shields.io/badge/mobile-Capacitor%20%2B%20Android-brightgreen)](https://github.com/Narsing-s/global-messanger)
 
 ## 🚀 What is Global Messenger?
@@ -129,7 +129,7 @@ The product is intentionally being developed as a **communication workspace**, n
                                   │
                                   ▼
                     ┌────────────────────────────┐
-                    │ PostgreSQL + Prisma        │
+                    │ SQLite + Prisma            │
                     │ Users / chats / messages   │
                     │ sessions / media / groups  │
                     └────────────────────────────┘
@@ -301,7 +301,7 @@ Requirements:
 
 - Node.js
 - npm
-- PostgreSQL for the server
+- SQLite for the server (no database service required)
 - Android Studio + Android SDK for native Android builds
 - Docker for containerized deployment/testing
 
@@ -339,13 +339,16 @@ npm run smoke
 
 ## 🗄️ Database
 
-The server uses PostgreSQL through Prisma.
+The server uses SQLite through Prisma. The database is a single persistent file, with WAL enabled for better concurrent Messenger read/write behavior.
 
 ```bash
 npm run db:generate
 npm run db:migrate
 npm run db:deploy
+npm run db:backup
 ```
+
+Docker stores the database and uploads in the persistent `/data` volume. PostgreSQL is not required.
 
 Never commit production database credentials.
 
