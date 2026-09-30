@@ -135,7 +135,7 @@ The product is intentionally being developed as a **communication workspace**, n
                     └────────────────────────────┘
 ```
 
-The Docker web service is the recommended production frontend/source of truth because it serves the current Vite build and proxies API, Socket.IO and upload routes to the backend.
+Production can run without Docker. Deploy the Node.js/Fastify backend on a persistent cloud VM/service and serve the built Vite frontend from the same public origin, or set VITE_API_URL for a separate API domain. Socket.IO, SQLite and uploads require persistent cloud storage.
 
 ## 🔒 Message Security & Rendering
 
@@ -228,7 +228,7 @@ E2EE behavior
 The configured production backend exposes a health endpoint:
 
 ```text
-https://global-messanger-backend.onrender.com/health
+https://api.example.com/health
 ```
 
 Run:
@@ -244,7 +244,7 @@ Expected: HTTP `200` with an `ok: true` health response.
 Native Android requests use the Capacitor origin `capacitor://localhost`. Verify production CORS before debugging application features:
 
 ```bash
-curl -i -X OPTIONS "https://global-messanger-backend.onrender.com/api/auth/login-email" \
+curl -i -X OPTIONS "https://api.example.com/api/auth/login-email" \
   -H "Origin: capacitor://localhost" \
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: content-type,authorization"
