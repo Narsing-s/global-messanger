@@ -358,8 +358,11 @@ export default {
       return new Response("Socket.IO is not used by the Cloudflare backend. The Cloudflare WebSocket endpoint is /ws.", { status: 426 });
     }
     if (url.pathname === "/ws") {
-      const roomId = url.searchParams.get("room") || "global";
-      const stub = env.CHAT_ROOMS.get(env.CHAT_ROOMS.idFromName(roomId));
+      const token = url.searchParams.get("token") || "";
+      const payload = await verifyJwt(token, env.JWT_SECRET || "change-me-before-production");
+      if (!payload?.sub) return new Response("Authentication required.", {status:401});
+      // One hub is used for all transient WebSocket subscriptions; the DO filters events by conversation.
+      const stub = env.CHAT_ROOMS.get(env.CHAT_ROOMS.idFromName("global-hub"));
       return stub.fetch(new Request("https://chat-room/connect", request));
     }
     const response = await handleApi(request, env);
