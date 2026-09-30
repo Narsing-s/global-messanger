@@ -4,7 +4,7 @@ const API_URL = (() => {
   if (configured) return String(configured).replace(/\/$/, '');
   if (env) return String(env).replace(/\/$/, '');
   if (typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.hostname)) return window.location.origin;
-  // Cloudflare web and API are deployed as separate Workers. Use the production
+  // CLOUDFLARE-D1-API-2026-09-30: always resolve the separate D1 Worker API.\n  // Cloudflare web and API are deployed as separate Workers. Use the production
   // API automatically when the browser is on the public Cloudflare web Worker.
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
