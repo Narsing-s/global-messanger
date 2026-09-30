@@ -108,7 +108,6 @@ services:
 
 volumes:
   global_messenger_data:
-  global_messenger_uploads:
 
 networks:
   gm:
