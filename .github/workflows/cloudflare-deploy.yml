@@ -84,4 +84,4 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           npx wrangler deploy
 
-# redeploy trigger 2026-09-30
+# forced D1 deployment trigger 2026-09-30T08:45
