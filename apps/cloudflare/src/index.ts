@@ -86,6 +86,23 @@ async function userShape(env: Env, userId: string) {
   return env.DB.prepare("SELECT id, username, display_name AS displayName, avatar_url AS avatarUrl, last_seen_at AS lastSeenAt FROM users WHERE id = ?").bind(userId).first();
 }
 
+async function messageShape(env: Env, messageId: string) {
+  const m: any = await env.DB.prepare(`SELECT m.id,m.client_id AS clientId,m.conversation_id AS conversationId,m.sender_id AS senderId,m.body,m.type,m.created_at AS createdAt,m.edited_at AS editedAt,m.deleted_at AS deletedAt,
+    u.username,u.display_name AS displayName,u.avatar_url AS avatarUrl
+    FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=?`).bind(messageId).first();
+  if (!m) return null;
+  return {...m, sender:{id:m.senderId,username:m.username,displayName:m.displayName,avatarUrl:m.avatarUrl}};
+}
+
+async function isMember(env: Env, conversationId: string, userId: string) {
+  return !!(await env.DB.prepare("SELECT 1 FROM conversation_members WHERE conversation_id=? AND user_id=?").bind(conversationId,userId).first());
+}
+
+async function broadcast(env: Env, conversationId: string, event: string, data: unknown) {
+  const stub = env.CHAT_ROOMS.get(env.CHAT_ROOMS.idFromName(conversationId));
+  await stub.fetch("https://chat-room/event", { method:"POST", body: JSON.stringify({ event, data }) });
+}
+
 async function handleApi(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/api/, "") || "/";
@@ -190,11 +207,7 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
     await env.DB.prepare("UPDATE conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(conversationId).run();
     const sender = await userShape(env, userId);
     const message = { id: messageId, clientId: body.clientId || null, conversationId, senderId: userId, body: text, type: body.type || "text", createdAt: new Date().toISOString(), sender };
-    const members = await env.DB.prepare("SELECT user_id AS userId FROM conversation_members WHERE conversation_id=?").bind(conversationId).all();
-    for (const row of members.results as any[]) {
-      const stub = env.CHAT_ROOMS.get(env.CHAT_ROOMS.idFromName(conversationId));
-      await stub.fetch("https://chat-room/message", { method: "POST", body: JSON.stringify({ userId: row.userId, event: "message:new", message }) });
-    }
+    await broadcast(env, conversationId, "message:new", message);
     return json(message, { status: 201, headers: originHeaders(request) });
   }
 
@@ -207,6 +220,82 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
       u.username,u.display_name AS displayName,u.avatar_url AS avatarUrl FROM messages m JOIN users u ON u.id=m.sender_id
       WHERE m.conversation_id=? ORDER BY m.created_at DESC LIMIT ?`).bind(conversationId,limit).all();
     return json((rows.results as any[]).reverse().map(m=>({...m,sender:{id:m.senderId,username:m.username,displayName:m.displayName,avatarUrl:m.avatarUrl}})), { headers: originHeaders(request) });
+  }
+
+  const editMatch = path.match(/^\/messages\/([^/]+)$/);
+  if (editMatch && request.method === "PATCH") {
+    const messageId = editMatch[1];
+    const body = await readBody(request);
+    const text = String(body.body || "").trim();
+    const m: any = await env.DB.prepare("SELECT conversation_id AS conversationId,sender_id AS senderId FROM messages WHERE id=?").bind(messageId).first();
+    if (!m || m.senderId !== userId || !(await isMember(env,m.conversationId,userId))) return json({message:"Message not found."},{status:404,headers:originHeaders(request)});
+    if (!text) return json({message:"Message body is required."},{status:400,headers:originHeaders(request)});
+    await env.DB.prepare("UPDATE messages SET body=?,edited_at=CURRENT_TIMESTAMP WHERE id=?").bind(text,messageId).run();
+    const message=await messageShape(env,messageId); await broadcast(env,m.conversationId,"message:updated",message);
+    return json(message,{headers:originHeaders(request)});
+  }
+
+  if (editMatch && request.method === "DELETE") {
+    const messageId=editMatch[1];
+    const m:any=await env.DB.prepare("SELECT conversation_id AS conversationId,sender_id AS senderId FROM messages WHERE id=?").bind(messageId).first();
+    if (!m || m.senderId !== userId) return json({message:"Message not found."},{status:404,headers:originHeaders(request)});
+    await env.DB.prepare("UPDATE messages SET deleted_at=CURRENT_TIMESTAMP,body='' WHERE id=?").bind(messageId).run();
+    const message=await messageShape(env,messageId); await broadcast(env,m.conversationId,"message:deleted",message);
+    return json(message,{headers:originHeaders(request)});
+  }
+
+  const readMatch=path.match(/^\/conversations\/([^/]+)\/read$/);
+  if (readMatch && request.method==="POST") {
+    const conversationId=readMatch[1];
+    if (!(await isMember(env,conversationId,userId))) return json({message:"Chat not found."},{status:404,headers:originHeaders(request)});
+    await env.DB.prepare("UPDATE conversation_members SET last_read_at=CURRENT_TIMESTAMP WHERE conversation_id=? AND user_id=?").bind(conversationId,userId).run();
+    await broadcast(env,conversationId,"message:read",{conversationId,userId});
+    return json({ok:true,conversationId,userId},{headers:originHeaders(request)});
+  }
+
+  const reactionMatch=path.match(/^\/messages\/([^/]+)\/reaction$/);
+  if (reactionMatch && request.method==="POST") {
+    const messageId=reactionMatch[1]; const body=await readBody(request); const emoji=String(body.emoji||body.reaction||"").trim().slice(0,32);
+    const m:any=await env.DB.prepare("SELECT conversation_id AS conversationId FROM messages WHERE id=?").bind(messageId).first();
+    if (!m || !(await isMember(env,m.conversationId,userId))) return json({message:"Message not found."},{status:404,headers:originHeaders(request)});
+    await env.DB.prepare("DELETE FROM message_reactions WHERE message_id=? AND user_id=?").bind(messageId,userId).run();
+    if (emoji) await env.DB.prepare("INSERT INTO message_reactions (message_id,user_id,emoji) VALUES (?,?,?)").bind(messageId,userId,emoji).run();
+    const rows=await env.DB.prepare("SELECT user_id AS userId,emoji FROM message_reactions WHERE message_id=?").bind(messageId).all();
+    const data={messageId,reactions:rows.results}; await broadcast(env,m.conversationId,"message:reaction",data); return json(data,{headers:originHeaders(request)});
+  }
+
+  const bookmarkMatch=path.match(/^\/messages\/([^/]+)\/bookmark$/);
+  if (bookmarkMatch && (request.method==="POST" || request.method==="DELETE")) {
+    const messageId=bookmarkMatch[1]; const m:any=await env.DB.prepare("SELECT conversation_id AS conversationId FROM messages WHERE id=?").bind(messageId).first();
+    if (!m || !(await isMember(env,m.conversationId,userId))) return json({message:"Message not found."},{status:404,headers:originHeaders(request)});
+    if(request.method==="POST") await env.DB.prepare("INSERT OR IGNORE INTO bookmarks (user_id,message_id) VALUES (?,?)").bind(userId,messageId).run();
+    else await env.DB.prepare("DELETE FROM bookmarks WHERE user_id=? AND message_id=?").bind(userId,messageId).run();
+    return json({ok:true},{headers:originHeaders(request)});
+  }
+  if (path==="/bookmarks" && request.method==="GET") {
+    const rows=await env.DB.prepare(`SELECT b.created_at AS createdAt,m.id AS messageId FROM bookmarks b JOIN messages m ON m.id=b.message_id WHERE b.user_id=? ORDER BY b.created_at DESC LIMIT 200`).bind(userId).all();
+    const out=[]; for(const row of rows.results as any[]){ const message=await messageShape(env,row.messageId); if(message) out.push({createdAt:row.createdAt,message}); } return json(out,{headers:originHeaders(request)});
+  }
+
+  const pinMatch=path.match(/^\/messages\/([^/]+)\/pin$/);
+  if(pinMatch && (request.method==="POST" || request.method==="DELETE")){
+    const messageId=pinMatch[1]; const m:any=await env.DB.prepare("SELECT conversation_id AS conversationId FROM messages WHERE id=?").bind(messageId).first();
+    if(!m || !(await isMember(env,m.conversationId,userId))) return json({message:"Message not found."},{status:404,headers:originHeaders(request)});
+    if(request.method==="POST") await env.DB.prepare("INSERT OR IGNORE INTO pinned_messages (conversation_id,message_id,user_id) VALUES (?,?,?)").bind(m.conversationId,messageId,userId).run();
+    else await env.DB.prepare("DELETE FROM pinned_messages WHERE conversation_id=? AND message_id=? AND user_id=?").bind(m.conversationId,messageId,userId).run();
+    await broadcast(env,m.conversationId,"message:pin",{messageId,pinned:request.method==="POST"}); return json({ok:true},{headers:originHeaders(request)});
+  }
+  const pinsMatch=path.match(/^\/conversations\/([^/]+)\/pins$/);
+  if(pinsMatch && request.method==="GET"){
+    const conversationId=pinsMatch[1]; if(!(await isMember(env,conversationId,userId))) return json({message:"Chat not found."},{status:404,headers:originHeaders(request)});
+    const rows=await env.DB.prepare("SELECT created_at AS createdAt,message_id AS messageId FROM pinned_messages WHERE conversation_id=? ORDER BY created_at DESC").bind(conversationId).all();
+    const out=[]; for(const row of rows.results as any[]){const message=await messageShape(env,row.messageId);if(message)out.push({createdAt:row.createdAt,message});} return json(out,{headers:originHeaders(request)});
+  }
+
+  if(path==="/messages/search" && request.method==="GET"){
+    const q=String(url.searchParams.get("q")||"").trim(); const limit=Math.min(Number(url.searchParams.get("limit")||50),100);
+    const rows=await env.DB.prepare(`SELECT m.id,m.conversation_id AS conversationId FROM messages m JOIN conversation_members cm ON cm.conversation_id=m.conversation_id WHERE cm.user_id=? AND m.body LIKE ? ORDER BY m.created_at DESC LIMIT ?`).bind(userId,"%"+q+"%",limit).all();
+    const out=[]; for(const row of rows.results as any[]){const message=await messageShape(env,row.id);if(message)out.push(message);} return json(out,{headers:originHeaders(request)});
   }
 
   if (path === "/conversations/group" && request.method === "POST") {
@@ -244,14 +333,11 @@ export class ChatRoom {
   async fetch(request: Request) {
     if (request.method === "POST") {
       try {
-        const payload = await request.json();
+        const payload:any = await request.json();
         const encoded = JSON.stringify(payload);
         for (const socket of this.sockets) if (socket.readyState === WebSocket.OPEN) socket.send(encoded);
         return new Response("ok");
-      } catch {
-        return new Response("bad payload", { status: 400 });
-      }
-    }
+      } catch { return new Response("bad payload", { status: 400 }); }
     if (request.headers.get("Upgrade") !== "websocket") return new Response("WebSocket endpoint", { status: 426 });
     const pair = new WebSocketPair();
     const client = pair[0], server = pair[1];
