@@ -57,4 +57,4 @@ WORKDIR /app/apps/server
 
 EXPOSE 4000
 
-CMD ["node", "scripts/validate-production-config.mjs"]
+CMD ["sh", "-c", "node scripts/validate-production-config.mjs && npx prisma db push --skip-generate && node dist/index.js"]
