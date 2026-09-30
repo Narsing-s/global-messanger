@@ -1,0 +1,19 @@
+name = "global-messenger-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-30"
+
+[vars]
+APP_NAME = "Global Messenger"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "global-messenger"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[[durable_objects.bindings]]
+name = "CHAT_ROOMS"
+class_name = "ChatRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]
