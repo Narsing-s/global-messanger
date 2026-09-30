@@ -173,6 +173,27 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
   }
 
   const msgMatch = path.match(/^\/conversations\/([^/]+)\/messages$/);
+  if (msgMatch && request.method === "POST") {
+    const conversationId = msgMatch[1];
+    const member = await env.DB.prepare("SELECT 1 FROM conversation_members WHERE conversation_id=? AND user_id=?").bind(conversationId,userId).first();
+    if (!member) return json({ message: "Chat not found." }, { status: 404, headers: originHeaders(request) });
+    const body = await readBody(request);
+    const text = String(body.body || "").trim();
+    if (!text) return json({ message: "Message body is required." }, { status: 400, headers: originHeaders(request) });
+    const messageId = id();
+    await env.DB.prepare("INSERT INTO messages (id,client_id,conversation_id,sender_id,body,type) VALUES (?,?,?,?,?,?)")
+      .bind(messageId, body.clientId ? String(body.clientId) : null, conversationId, userId, text, String(body.type || "text")).run();
+    await env.DB.prepare("UPDATE conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(conversationId).run();
+    const sender = await userShape(env, userId);
+    const message = { id: messageId, clientId: body.clientId || null, conversationId, senderId: userId, body: text, type: body.type || "text", createdAt: new Date().toISOString(), sender };
+    const members = await env.DB.prepare("SELECT user_id AS userId FROM conversation_members WHERE conversation_id=?").bind(conversationId).all();
+    for (const row of members.results as any[]) {
+      const stub = env.CHAT_ROOMS.get(env.CHAT_ROOMS.idFromName(conversationId));
+      await stub.fetch("https://chat-room/message", { method: "POST", body: JSON.stringify({ userId: row.userId, event: "message:new", message }) });
+    }
+    return json(message, { status: 201, headers: originHeaders(request) });
+  }
+
   if (msgMatch && request.method === "GET") {
     const conversationId = msgMatch[1];
     const member = await env.DB.prepare("SELECT 1 FROM conversation_members WHERE conversation_id=? AND user_id=?").bind(conversationId,userId).first();
@@ -219,7 +240,12 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/socket.io/")) {
-      return new Response("Cloudflare realtime endpoint is being migrated; use the native Worker WebSocket endpoint during the migration.", { status: 501 });
+      return new Response("Socket.IO is not used by the Cloudflare backend. The Cloudflare WebSocket endpoint is /ws.", { status: 426 });
+    }
+    if (url.pathname === "/ws") {
+      const roomId = url.searchParams.get("room") || "global";
+      const stub = env.CHAT_ROOMS.get(env.CHAT_ROOMS.idFromName(roomId));
+      return stub.fetch(new Request("https://chat-room/connect", request));
     }
     const response = await handleApi(request, env);
     const headers = new Headers(response.headers);
