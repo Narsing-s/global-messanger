@@ -27,7 +27,7 @@ const prisma = new PrismaClient();
 
 // SQLite production settings: WAL improves concurrent read/write behavior for the self-hosted Messenger backend.
 if (process.env.DATABASE_URL?.startsWith('file:')) {
-  await prisma.$executeRawUnsafe('PRAGMA journal_mode=WAL');
+  await prisma.$queryRawUnsafe('PRAGMA journal_mode=WAL');
   await prisma.$executeRawUnsafe('PRAGMA busy_timeout=5000');
 }
 
