@@ -1,4 +1,5 @@
-const DEPLOY_VERSION = "auth-fix-2026-09-30";
+const DEPLOY_VERSION = "d1-only-2026-09-30";
+// Production database: Cloudflare D1 only. No PostgreSQL, Neon, or Prisma runtime.
 
 interface Env {
   DB: D1Database;
