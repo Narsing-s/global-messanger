@@ -5,8 +5,7 @@
   "description": "Serverless peer-to-peer messenger with device-owned local data",
   "workspaces": [
     "apps/web",
-    "apps/server",
-    "apps/cloudflare"
+    "apps/server"
   ],
   "scripts": {
     "doctor": "node scripts/doctor.mjs",
