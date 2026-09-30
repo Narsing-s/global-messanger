@@ -1,20 +1,4 @@
 services:
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-global_messenger}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    volumes:
-      - messenger_pg:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    networks: [messenger]
-
   api:
     build:
       context: .
@@ -26,9 +10,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      # Self-hosted default: PostgreSQL runs in this Compose stack.
-      # An external DATABASE_URL is intentionally opt-in rather than required.
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-global_messenger}?schema=public}
+      DATABASE_URL: file:${SQLITE_DB_PATH:-/data/global-messenger.db}
+      SQLITE_DB_PATH: ${SQLITE_DB_PATH:-/data/global-messenger.db}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
       PASSWORD_RESET_WEB_ORIGIN: ${PASSWORD_RESET_WEB_ORIGIN:-http://localhost:8080}
@@ -40,11 +23,8 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-Global Messenger <no-reply@localhost>}
-    depends_on:
-      postgres:
-        condition: service_healthy
     volumes:
-      - messenger_uploads:/data/uploads
+      - messenger_data:/data
     expose:
       - "4000"
     healthcheck:
@@ -55,8 +35,6 @@ services:
       start_period: 20s
     networks: [messenger]
 
-  # Canonical self-hosted web frontend. Browser traffic uses same-origin
-  # /api, /socket.io and /uploads routing through nginx.
   web:
     build:
       context: .
@@ -107,8 +85,7 @@ services:
     networks: [messenger]
 
 volumes:
-  messenger_pg:
-  messenger_uploads:
+  messenger_data:
   caddy_data:
   caddy_config:
 
