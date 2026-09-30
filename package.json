@@ -24,7 +24,7 @@
     "e2e:local": "node scripts/local-e2e.mjs",
     "db:generate": "npm run db:generate -w apps/server",
     "db:migrate": "npm run db:migrate -w apps/server",
-    "db:deploy": "prisma migrate deploy --schema apps/server/prisma/schema.prisma",
+    "db:deploy": "npm run db:deploy -w apps/server",
     "android:add": "npm run android:add -w apps/web",
     "android:sync": "npm run android:sync -w apps/web",
     "android:open": "npm run android:open -w apps/web",
