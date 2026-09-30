@@ -4,7 +4,7 @@ const API_URL = (() => {
   if (configured) return String(configured).replace(/\/$/, '');
   if (env) return String(env).replace(/\/$/, '');
   if (typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.hostname)) return window.location.origin;
-  return 'https://global-messanger-backend.onrender.com';
+  // Production defaults to the public app origin; set VITE_API_URL for a separate API domain.\n  return typeof window !== 'undefined' ? window.location.origin : '';
 })();
 
 async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
