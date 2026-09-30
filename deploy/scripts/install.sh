@@ -11,7 +11,7 @@ docker compose version >/dev/null 2>&1 || { echo "Docker Compose v2 is required.
 if [[ ! -f .env ]]; then
   cp .env.self-hosted.example .env
   echo "Created deploy/.env. Edit it before continuing."
-  echo "Required: POSTGRES_PASSWORD, JWT_SECRET and TURN_CREDENTIAL."
+  echo "Required: JWT_SECRET and TURN_CREDENTIAL."
   exit 0
 fi
 
@@ -19,7 +19,6 @@ set -a
 source .env
 set +a
 
-: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/.env}"
 : "${JWT_SECRET:?Set JWT_SECRET in deploy/.env}"
 : "${TURN_CREDENTIAL:?Set TURN_CREDENTIAL in deploy/.env}"
 
