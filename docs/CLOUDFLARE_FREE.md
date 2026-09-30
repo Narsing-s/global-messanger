@@ -56,27 +56,28 @@ The existing Node/Fastify backend is intentionally kept. This Cloudflare backend
 
 ## Current Cloudflare migration scope
 
-Implemented in this first slice:
+Implemented in the current migration:
 - health/readiness
-- registration
-- username/email login
-- JWT sessions
-- profile lookup
-- user search
-- direct conversations
-- conversation list
-- message history
-- message creation
-- Durable Object room broadcast foundation
+- registration and username/email login
+- JWT authentication
+- profile lookup and user search
+- direct conversations and basic group creation
+- conversation list and message history
+- message creation/edit/delete
+- read receipts
+- message search
+- reactions
+- bookmarks/saved messages
+- pinned messages
+- Durable Object realtime event hub
+- native WebSocket client compatibility for the web app
 
-Not yet migrated:
-- groups and group administration
-- reactions/bookmarks/pins
-- uploads/media storage
-- password reset email
+Still outside the Cloudflare-native path:
+- uploads/media object storage
+- password-reset email delivery
 - passkeys/2FA
 - push notifications
 - SFU/mediasoup calling
-- the existing Socket.IO protocol
+- some advanced group/admin and organization features
 
-Do not switch the production frontend to this backend until the remaining API and realtime compatibility work has been completed.
+The existing Node/Fastify + SQLite backend remains available for self-hosting. The Cloudflare backend is intentionally isolated so it can be deployed and tested independently.
