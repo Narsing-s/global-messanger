@@ -39,9 +39,9 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
+    // Local development uses the Cloudflare Worker through Wrangler on port 8787.
     proxy: {
-      '/api': { target: 'http://127.0.0.1:4000', changeOrigin: true },
-      '/socket.io': { target: 'ws://127.0.0.1:4000', ws: true, changeOrigin: true }
+      '/api': { target: 'http://127.0.0.1:8787', changeOrigin: true }
     },
     hmr: { host: '127.0.0.1', port: 5173 }
   }
