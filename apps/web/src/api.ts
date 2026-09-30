@@ -1,4 +1,4 @@
-const API_URL = (() => {
+// Cloudflare production API only; legacy Prisma/Neon backends are intentionally not used.\nconst API_URL = (() => {
   // Production is always the Cloudflare D1 API. Do not fall back to the
   // legacy Prisma/Neon/Render backend.
   const PRODUCTION_API = 'https://global-messenger-api.narsingbeesetti006.workers.dev';
