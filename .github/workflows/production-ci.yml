@@ -15,10 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    services:
-      postgres:
-        image: postgres:16
-        env:
+    env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: global_messenger_ci
@@ -31,7 +28,7 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/global_messenger_ci
+      DATABASE_URL: file:/tmp/global-messenger-ci.db
       JWT_SECRET: ci-only-secret
       NODE_ENV: production
       WEB_ORIGIN: https://ci.example.invalid
