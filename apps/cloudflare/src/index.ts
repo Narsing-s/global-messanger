@@ -1,3 +1,5 @@
+const DEPLOY_VERSION = "auth-fix-2026-09-30";
+
 interface Env {
   DB: D1Database;
   CHAT_ROOMS: DurableObjectNamespace;
@@ -109,7 +111,7 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
   if (path === "/" && request.method === "GET") return json({ ok: true, service: "global-messenger-api", status: "online", api: "/api", health: "/api/health", register: "POST /api/auth/register", login: "POST /api/auth/login" }, { headers: originHeaders(request) });
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: originHeaders(request) });
 
-  if (path === "/health" || path === "/ready") return json({ ok: true, service: "global-messenger-cloudflare", time: new Date().toISOString() });
+  if (path === "/health" || path === "/ready") return json({ ok: true, service: "global-messenger-cloudflare", version: DEPLOY_VERSION, time: new Date().toISOString() }, { headers: originHeaders(request) });
 
   // Authentication endpoints are public. A browser GET to these URLs should return
   // an explicit usage message instead of falling through to the protected API routes.
