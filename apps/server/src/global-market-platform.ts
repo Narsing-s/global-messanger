@@ -9,6 +9,8 @@ const auth = (app: FastifyInstance) => ({ preHandler: [app.authenticate] });
 const kinds = ['story','community','channel','topic','event','bot','mini_app','webhook','business','catalog','moderation_case','call_room'] as const;
 type Kind = typeof kinds[number];
 
+const normalizeRows = (rows: any[]) => rows.map(row => ({ ...row, payload: typeof row.payload === 'string' ? (() => { try { return JSON.parse(row.payload); } catch { return row.payload; } })() : row.payload }));
+
 const createSchema = z.object({
   kind: z.enum(kinds),
   title: z.string().trim().max(200).optional(),
@@ -23,10 +25,10 @@ async function ensureTable(prisma: PrismaClient) {
       kind TEXT NOT NULL,
       owner_id TEXT NOT NULL,
       title TEXT,
-      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      payload TEXT NOT NULL DEFAULT '{}',
       status TEXT NOT NULL DEFAULT 'ACTIVE',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS global_platform_entities_owner_kind ON global_platform_entities(owner_id, kind, updated_at DESC)`);
@@ -56,7 +58,7 @@ export async function registerGlobalMarketPlatform(app: FastifyInstance, prisma:
     const b = parsed.data;
     await prisma.$executeRaw`
       INSERT INTO global_platform_entities (id, kind, owner_id, title, payload, status)
-      VALUES (${id}, ${b.kind}, ${uid(request)}, ${b.title || null}, ${JSON.stringify(b.payload)}::jsonb, ${b.status})
+      VALUES (${id}, ${b.kind}, ${uid(request)}, ${b.title || null}, ${JSON.stringify(b.payload)}, ${b.status})
     `;
     return reply.code(201).send({ id, kind: b.kind, ownerId: uid(request), title: b.title || null, payload: b.payload, status: b.status });
   });
@@ -66,13 +68,13 @@ export async function registerGlobalMarketPlatform(app: FastifyInstance, prisma:
     const rows = kind && (kinds as readonly string[]).includes(kind)
       ? await prisma.$queryRaw`SELECT id, kind, title, payload, status, created_at AS "createdAt", updated_at AS "updatedAt" FROM global_platform_entities WHERE owner_id=${uid(request)} AND kind=${kind} ORDER BY updated_at DESC LIMIT 200`
       : await prisma.$queryRaw`SELECT id, kind, title, payload, status, created_at AS "createdAt", updated_at AS "updatedAt" FROM global_platform_entities WHERE owner_id=${uid(request)} ORDER BY updated_at DESC LIMIT 200`;
-    return rows;
+    return normalizeRows(rows);
   });
 
   app.get('/api/global/entities/:id', protectedRoute, async (request: any, reply) => {
     const rows: any[] = await prisma.$queryRaw`SELECT id, kind, title, payload, status, created_at AS "createdAt", updated_at AS "updatedAt" FROM global_platform_entities WHERE id=${String(request.params.id)} AND owner_id=${uid(request)} LIMIT 1`;
     if (!rows[0]) return reply.notFound('Feature entity not found');
-    return rows[0];
+    return normalizeRows(rows)[0];
   });
 
   app.patch('/api/global/entities/:id', protectedRoute, async (request: any, reply) => {
@@ -83,7 +85,7 @@ export async function registerGlobalMarketPlatform(app: FastifyInstance, prisma:
     const payload = body.payload === undefined ? null : JSON.stringify(body.payload);
     const result: any = await prisma.$queryRaw`
       UPDATE global_platform_entities
-      SET title=COALESCE(${title}, title), status=COALESCE(${status}, status), payload=COALESCE(${payload}::jsonb, payload), updated_at=NOW()
+      SET title=COALESCE(${title}, title), status=COALESCE(${status}, status), payload=COALESCE(${payload}, payload), updated_at=CURRENT_TIMESTAMP
       WHERE id=${id} AND owner_id=${uid(request)}
       RETURNING id, kind, title, payload, status, created_at AS "createdAt", updated_at AS "updatedAt"
     `;
@@ -104,7 +106,7 @@ export async function registerGlobalMarketPlatform(app: FastifyInstance, prisma:
     const secret = `gm_${crypto.randomBytes(32).toString('base64url')}`;
     const hash = crypto.createHash('sha256').update(secret).digest('hex');
     const id = crypto.randomUUID();
-    await prisma.$executeRaw`INSERT INTO global_platform_entities (id, kind, owner_id, title, payload) VALUES (${id}, 'webhook', ${uid(request)}, ${label}, ${JSON.stringify({ keyHash: hash, scopes: Array.isArray(request.body?.scopes) ? request.body.scopes : ['messages:read','messages:write'], lastUsedAt: null })}::jsonb)`;
+    await prisma.$executeRaw`INSERT INTO global_platform_entities (id, kind, owner_id, title, payload) VALUES (${id}, 'webhook', ${uid(request)}, ${label}, ${JSON.stringify({ keyHash: hash, scopes: Array.isArray(request.body?.scopes) ? request.body.scopes : ['messages:read','messages:write'], lastUsedAt: null })})`;
     return reply.code(201).send({ id, label, apiKey: secret, warning: 'Store this key now. It is not returned again.' });
   });
 
@@ -115,7 +117,7 @@ export async function registerGlobalMarketPlatform(app: FastifyInstance, prisma:
     if (!/^https:\/\//i.test(url)) return reply.badRequest('Webhook URL must use HTTPS');
     const events = Array.isArray(request.body?.events) ? request.body.events.map(String).slice(0, 50) : ['message.created'];
     const id = crypto.randomUUID();
-    await prisma.$executeRaw`INSERT INTO global_platform_entities (id, kind, owner_id, title, payload) VALUES (${id}, 'webhook', ${uid(request)}, ${url.slice(0, 200)}, ${JSON.stringify({ url, events, enabled: true })}::jsonb)`;
+    await prisma.$executeRaw`INSERT INTO global_platform_entities (id, kind, owner_id, title, payload) VALUES (${id}, 'webhook', ${uid(request)}, ${url.slice(0, 200)}, ${JSON.stringify({ url, events, enabled: true })})`;
     return reply.code(201).send({ id, url, events, enabled: true });
   });
 
