@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: apps/cloudflare/package.json
       - name: Install Wrangler
@@ -48,4 +48,4 @@ jobs:
         run: |
           printf '%s' "${{ secrets.GM_JWT_SECRET }}" | npx wrangler secret put JWT_SECRET
       - name: Deploy Worker
-        run: npx wrangler deploy\n
+        run: npx wrangler deploy
