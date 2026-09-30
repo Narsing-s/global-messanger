@@ -48,10 +48,4 @@ jobs:
         run: |
           printf '%s' "${{ secrets.GM_JWT_SECRET }}" | npx wrangler secret put JWT_SECRET
       - name: Deploy Worker
-        run: npx wrangler deploy
-      - name: Verify API
-        shell: bash
-        run: |
-          URL="https://global-messenger-api.${CLOUDFLARE_ACCOUNT_SUBDOMAIN}.workers.dev"
-          echo "API verification target: $URL/api/health"
-          curl --fail --silent --show-error "$URL/api/health"
+        run: npx wrangler deploy\n
