@@ -14,6 +14,11 @@ const required = [
 
 const missing = required.filter(name => !String(process.env[name] ?? '').trim());
 
+if (String(process.env.DATABASE_URL ?? '').trim() && !String(process.env.DATABASE_URL).startsWith('file:')) {
+  console.error('DATABASE_URL must use SQLite (file:...) in this build. PostgreSQL is not supported.');
+  process.exit(1);
+}
+
 if (missing.length) {
   console.error(`Production configuration is incomplete. Missing: ${missing.join(', ')}`);
   process.exit(1);
