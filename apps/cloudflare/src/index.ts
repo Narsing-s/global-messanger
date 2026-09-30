@@ -110,6 +110,15 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
 
   if (path === "/health" || path === "/ready") return json({ ok: true, service: "global-messenger-cloudflare", time: new Date().toISOString() });
 
+  // Authentication endpoints are public. A browser GET to these URLs should return
+  // an explicit usage message instead of falling through to the protected API routes.
+  if ((path === "/auth/register-email" || path === "/auth/register") && request.method === "GET") {
+    return json({ ok: true, endpoint: "/api/auth/register", method: "POST", message: "Registration endpoint is public. Send username, displayName, email (optional), and password as JSON." }, { headers: originHeaders(request) });
+  }
+  if ((path === "/auth/login-email" || path === "/auth/login") && request.method === "GET") {
+    return json({ ok: true, endpoint: "/api/auth/login", method: "POST", message: "Login endpoint is public. Send identifier (or username) and password as JSON." }, { headers: originHeaders(request) });
+  }
+
   if (path === "/auth/register-email" || path === "/auth/register") {
     const body = await readBody(request);
     const username = String(body.username || "").trim();
