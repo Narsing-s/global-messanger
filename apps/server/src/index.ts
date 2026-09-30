@@ -208,7 +208,7 @@ app.get(
 );
 
 // Readiness is DB-backed so Docker only marks the API healthy after
-// migrations have completed and the application can query PostgreSQL.
+// migrations have completed and the application can query SQLite.
 app.get('/ready', async (request, reply) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
