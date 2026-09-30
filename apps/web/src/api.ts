@@ -4,7 +4,9 @@ const API_URL = (() => {
   if (configured) return String(configured).replace(/\/$/, '');
   if (env) return String(env).replace(/\/$/, '');
   if (typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.hostname)) return window.location.origin;
-  // Production defaults to the public app origin; set VITE_API_URL for a separate API domain.\n  return typeof window !== 'undefined' ? window.location.origin : '';
+  // Cloudflare deployment can provide the API origin at build time.
+  // Keep same-origin as the fallback so self-hosted deployments continue to work.
+  return typeof window !== 'undefined' ? window.location.origin : '';
 })();
 
 async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
