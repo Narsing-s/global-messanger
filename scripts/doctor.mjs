@@ -55,7 +55,7 @@ if (!fs.existsSync('apps/server/prisma/schema.prisma')) failures.push('Prisma sc
 if (!fs.existsSync('apps/web/src/main.tsx')) failures.push('Web application entrypoint is missing.');
 
 const dockerVersion = command('docker', ['--version']);
-if (!dockerVersion) warnings.push('Docker is not installed/on PATH. PostgreSQL local development will need another database.');
+if (!dockerVersion) warnings.push('Docker is not installed/on PATH. SQLite is used for local development.');
 
 const gitVersion = command('git', ['--version']);
 if (!gitVersion) warnings.push('Git is not available on PATH.');
