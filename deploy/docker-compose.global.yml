@@ -1,22 +1,6 @@
 name: global-messenger
 
 services:
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-global_messenger}
-      POSTGRES_USER: ${POSTGRES_USER:-global_messenger}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    volumes:
-      - global_messenger_pg:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    networks: [gm]
-
   api:
     build:
       context: ..
@@ -26,7 +10,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-global_messenger}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-global_messenger}?schema=public
+      DATABASE_URL: file:/data/global-messenger.db
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost}
       PASSWORD_RESET_WEB_ORIGIN: ${PASSWORD_RESET_WEB_ORIGIN:-http://localhost}
@@ -52,12 +36,10 @@ services:
       REGIONS: ${REGIONS:-self-hosted}
       CDN_ORIGIN: ${CDN_ORIGIN:-}
     depends_on:
-      postgres:
-        condition: service_healthy
       clamav:
         condition: service_healthy
     volumes:
-      - global_messenger_uploads:/data/uploads
+      - global_messenger_data:/data
     expose: ["4000"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -125,7 +107,7 @@ services:
     networks: [gm]
 
 volumes:
-  global_messenger_pg:
+  global_messenger_data:
   global_messenger_uploads:
 
 networks:
