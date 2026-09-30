@@ -129,6 +129,10 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
   const userId = await authUser(request, env);
   if (!userId) return json({ message: "Authentication required." }, { status: 401, headers: originHeaders(request) });
 
+  if (path === "/auth/logout" && request.method === "POST") {
+    return json({ ok: true }, { headers: originHeaders(request) });
+  }
+
   if (path === "/profile/me") {
     const user: any = await env.DB.prepare("SELECT id,username,email,display_name AS displayName,bio,avatar_url AS avatarUrl,last_seen_at AS lastSeenAt,created_at AS createdAt FROM users WHERE id = ?").bind(userId).first();
     return json(user || {}, { headers: originHeaders(request) });
@@ -203,6 +207,21 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
       u.username,u.display_name AS displayName,u.avatar_url AS avatarUrl FROM messages m JOIN users u ON u.id=m.sender_id
       WHERE m.conversation_id=? ORDER BY m.created_at DESC LIMIT ?`).bind(conversationId,limit).all();
     return json((rows.results as any[]).reverse().map(m=>({...m,sender:{id:m.senderId,username:m.username,displayName:m.displayName,avatarUrl:m.avatarUrl}})), { headers: originHeaders(request) });
+  }
+
+  if (path === "/conversations/group" && request.method === "POST") {
+    const body = await readBody(request);
+    const title = String(body.title || "Group").trim().slice(0, 120);
+    const userIds = Array.isArray(body.userIds) ? body.userIds.map((v:any)=>String(v)).filter(Boolean) : [];
+    const unique = Array.from(new Set([userId, ...userIds]));
+    if (unique.length < 3) return json({ message: "A group needs at least 3 members." }, { status: 400, headers: originHeaders(request) });
+    const conversationId = id();
+    const statements = [
+      env.DB.prepare("INSERT INTO conversations (id,title,is_group,creator_id) VALUES (?,?,1,?)").bind(conversationId,title,userId),
+      ...unique.map(uid=>env.DB.prepare("INSERT INTO conversation_members (conversation_id,user_id) VALUES (?,?)").bind(conversationId,uid))
+    ];
+    await env.DB.batch(statements);
+    return json({ id: conversationId, title, isGroup: true }, { status: 201, headers: originHeaders(request) });
   }
 
   if (path === "/conversations" && request.method === "POST") return json({ message: "Use /conversations/direct or group." }, { status: 400, headers: originHeaders(request) });
