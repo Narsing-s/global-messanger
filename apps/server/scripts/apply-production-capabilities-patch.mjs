@@ -30,7 +30,21 @@ if (fs.existsSync(capability)) {
   s = s.replace(/\n  app\.post\('\/api\/developer\/webhooks'[\s\S]*?\n  app\.post\('\/api\/business\/inbox'/, "\n  app.post('/api/business/inbox'");
 
   if (!s.includes('/api/ai/semantic-search')) {
-    const searchRoute = `  app.post('/api/ai/semantic-search', a, async (request, reply) => { const parsed=z.object({q:z.string().trim().min(2).max(200),conversationId:z.string().optional(),limit:z.number().int().min(1).max(100).default(30)}).safeParse(request.body??{}); if(!parsed.success)return reply.badRequest('Search query required'); const user=userOf(request); const memberships=await prisma.conversationMember.findMany({where:{userId:user.id,...(parsed.data.conversationId?{conversationId:parsed.data.conversationId}:{})},select:{conversationId:true}}); const ids=memberships.map(x=>x.conversationId); if(!ids.length)return {mode:'postgres-fts',results:[]}; const q=parsed.data.q.replace(/[&|!():*]/g,' ').trim(); const results=await prisma.$queryRawUnsafe<any[]>(\`SELECT id,"conversationId",body,"createdAt",ts_rank(to_tsvector('simple',coalesce(body,'')),plainto_tsquery('simple',$1)) AS rank FROM "Message" WHERE "conversationId"=ANY($2) AND "deletedAt" IS NULL AND to_tsvector('simple',coalesce(body,'')) @@ plainto_tsquery('simple',$1) ORDER BY rank DESC,"createdAt" DESC LIMIT $3\`,q,ids,parsed.data.limit); return {mode:'postgres-fts-ranked',results}; });\n`;
+    const searchRoute = `  app.post('/api/ai/semantic-search', a, async (request, reply) => {
+      const parsed = z.object({ q: z.string().trim().min(2).max(200), conversationId: z.string().optional(), limit: z.number().int().min(1).max(100).default(30) }).safeParse(request.body ?? {});
+      if (!parsed.success) return reply.badRequest('Search query required');
+      const user = userOf(request);
+      const memberships = await prisma.conversationMember.findMany({ where: { userId: user.id, ...(parsed.data.conversationId ? { conversationId: parsed.data.conversationId } : {}) }, select: { conversationId: true } });
+      const ids = memberships.map(x => x.conversationId);
+      if (!ids.length) return { mode: 'sqlite-like', results: [] };
+      const results = await prisma.message.findMany({
+        where: { conversationId: { in: ids }, deletedAt: null, body: { contains: parsed.data.q } },
+        orderBy: { createdAt: 'desc' },
+        take: parsed.data.limit,
+        select: { id: true, conversationId: true, body: true, createdAt: true }
+      });
+      return { mode: 'sqlite-like', results };
+    });\n`;
     s = s.replace("  app.get('/api/ai/privacy-boundary'", searchRoute + "  app.get('/api/ai/privacy-boundary'");
   }
   fs.writeFileSync(capability, s);
