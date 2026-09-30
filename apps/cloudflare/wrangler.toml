@@ -8,7 +8,7 @@ APP_NAME = "Global Messenger"
 [[d1_databases]]
 binding = "DB"
 database_name = "global-messenger"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "REPLACE_WITH_D1_DATABASE_ID" # Set after: npx wrangler d1 create global-messenger
 
 [[durable_objects.bindings]]
 name = "CHAT_ROOMS"
