@@ -28,7 +28,9 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-      - name: Build web app
+      - name: Build web app against Cloudflare D1 API
+        env:
+          VITE_API_URL: https://global-messenger-api.narsingbeesetti006.workers.dev
         run: npm run build
       - name: Deploy static web Worker
         shell: bash
