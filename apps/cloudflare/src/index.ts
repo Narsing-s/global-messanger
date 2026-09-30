@@ -223,6 +223,16 @@ export class ChatRoom {
   sockets = new Set<WebSocket>();
   constructor(state: DurableObjectState) { this.state = state; }
   async fetch(request: Request) {
+    if (request.method === "POST") {
+      try {
+        const payload = await request.json();
+        const encoded = JSON.stringify(payload);
+        for (const socket of this.sockets) if (socket.readyState === WebSocket.OPEN) socket.send(encoded);
+        return new Response("ok");
+      } catch {
+        return new Response("bad payload", { status: 400 });
+      }
+    }
     if (request.headers.get("Upgrade") !== "websocket") return new Response("WebSocket endpoint", { status: 426 });
     const pair = new WebSocketPair();
     const client = pair[0], server = pair[1];
