@@ -338,6 +338,7 @@ export class ChatRoom {
         for (const socket of this.sockets) if (socket.readyState === WebSocket.OPEN) socket.send(encoded);
         return new Response("ok");
       } catch { return new Response("bad payload", { status: 400 }); }
+    }
     if (request.headers.get("Upgrade") !== "websocket") return new Response("WebSocket endpoint", { status: 426 });
     const pair = new WebSocketPair();
     const client = pair[0], server = pair[1];
