@@ -32,6 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '\r\n')"
           DB_JSON="$(npx wrangler d1 list --json)"
           DB_ID="$(echo "$DB_JSON" | jq -r '.[] | select(.name=="global-messenger") | .uuid' | head -n1)"
           if [ -z "$DB_ID" ] || [ "$DB_ID" = "null" ]; then
@@ -42,10 +43,19 @@ jobs:
           sed -i "s/REPLACE_WITH_D1_DATABASE_ID/$DB_ID/" wrangler.toml
           echo "D1 database configured: $DB_ID"
       - name: Apply D1 migrations
-        run: npx wrangler d1 migrations apply global-messenger --remote
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '\r\n')"
+          npx wrangler d1 migrations apply global-messenger --remote
       - name: Set JWT secret
         shell: bash
         run: |
+          export CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '\r\n')"
           printf '%s' "${{ secrets.GM_JWT_SECRET }}" | npx wrangler secret put JWT_SECRET
       - name: Deploy Worker
-        run: npx wrangler deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '\r\n')"
+          npx wrangler deploy
