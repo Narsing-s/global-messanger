@@ -1,6 +1,6 @@
-// Cloudflare production API only; legacy Prisma/Neon backends are intentionally not used.\nconst API_URL = (() => {
-  // Production is always the Cloudflare D1 API. Do not fall back to the
-  // legacy Prisma/Neon/Render backend.
+// Cloudflare D1 API is the only production backend.
+const API_URL = (() => {
+  // Production always uses the Cloudflare Worker backed by D1.
   const PRODUCTION_API = 'https://global-messenger-api.narsingbeesetti006.workers.dev';
   if (typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.hostname)) {
     return window.location.origin;
