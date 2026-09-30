@@ -52,13 +52,13 @@ const api = {
   editMessage:(id:string,body:string)=>request(`/api/messages/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({body})}),
   deleteMessage:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}`,{method:'DELETE'}),
   upload:(file:File,onProgress?:any,signal?:AbortSignal)=>uploadWithProgress(file,onProgress,signal),
-  react:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reactions`,{method:'POST',body:JSON.stringify({emoji})}),
+  react:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reaction`,{method:'POST',body:JSON.stringify({emoji})}),
   bookmark:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}/bookmark`,{method:'POST'}),
   unbookmark:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}/bookmark`,{method:'DELETE'}),
   forwardMessage:(messageId:string,conversationId:string)=>request('/api/messages/forward',{method:'POST',body:JSON.stringify({messageId,conversationId})}),
   pin:(conversationId:string,messageId:string)=>request(`/api/messages/${encodeURIComponent(messageId)}/pin`,{method:'POST',body:JSON.stringify({conversationId})}),
   unpin:(conversationId:string,messageId:string)=>request(`/api/messages/${encodeURIComponent(messageId)}/pin`,{method:'DELETE',body:JSON.stringify({conversationId})}),
-  unreact:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reactions`,{method:'DELETE',body:JSON.stringify({emoji})}),
+  unreact:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reaction`,{method:'DELETE',body:JSON.stringify({emoji})}),
   media:(conversationId?:string,q?:string,limit=100)=>request(`/api/media?conversationId=${encodeURIComponent(conversationId||'')}&q=${encodeURIComponent(q||'')}&limit=${limit}`),
   logout:()=>request('/api/auth/logout',{method:'POST'})
 };
