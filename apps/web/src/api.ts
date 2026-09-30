@@ -6,8 +6,13 @@ const API_URL = (() => {
   if (typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.hostname)) return window.location.origin;
   // Cloudflare web and API are deployed as separate Workers. Use the production
   // API automatically when the browser is on the public Cloudflare web Worker.
-  if (typeof window !== 'undefined' && window.location.hostname === 'global-messenger-web.narsingbeesetti22.workers.dev') {
-    return 'https://global-messenger-api.narsingbeesetti22.workers.dev';
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // Cloudflare Workers use the same account subdomain for both web and API.
+    // Derive the API hostname instead of hard-coding one account subdomain.
+    if (host.startsWith('global-messenger-web.') && host.endsWith('.workers.dev')) {
+      return `https://global-messenger-api.${host.slice('global-messenger-web.'.length)}`;
+    }
   }
   // Keep same-origin as the fallback for self-hosted/reverse-proxy deployments.
   return typeof window !== 'undefined' ? window.location.origin : '';
