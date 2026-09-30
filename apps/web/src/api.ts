@@ -4,8 +4,12 @@ const API_URL = (() => {
   if (configured) return String(configured).replace(/\/$/, '');
   if (env) return String(env).replace(/\/$/, '');
   if (typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.hostname)) return window.location.origin;
-  // Cloudflare deployment can provide the API origin at build time.
-  // Keep same-origin as the fallback so self-hosted deployments continue to work.
+  // Cloudflare web and API are deployed as separate Workers. Use the production
+  // API automatically when the browser is on the public Cloudflare web Worker.
+  if (typeof window !== 'undefined' && window.location.hostname === 'global-messenger-web.narsingbeesetti006.workers.dev') {
+    return 'https://global-messenger-api.narsingbeesetti006.workers.dev';
+  }
+  // Keep same-origin as the fallback for self-hosted/reverse-proxy deployments.
   return typeof window !== 'undefined' ? window.location.origin : '';
 })();
 
