@@ -1,21 +1,11 @@
 const API_URL = (() => {
-  const configured = (globalThis as any).__GM_CONFIG__?.API_URL;
-  const env = (import.meta as any).env?.VITE_API_URL;
-  if (configured) return String(configured).replace(/\/$/, '');
-  if (env) return String(env).replace(/\/$/, '');
-  if (typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.hostname)) return window.location.origin;
-  // CLOUDFLARE-D1-API-2026-09-30: always resolve the separate D1 Worker API.\n  // Cloudflare web and API are deployed as separate Workers. Use the production
-  // API automatically when the browser is on the public Cloudflare web Worker.
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    // Cloudflare Workers use the same account subdomain for both web and API.
-    // Derive the API hostname instead of hard-coding one account subdomain.
-    if (host.startsWith('global-messenger-web.') && host.endsWith('.workers.dev')) {
-      return `https://global-messenger-api.${host.slice('global-messenger-web.'.length)}`;
-    }
+  // Production is always the Cloudflare D1 API. Do not fall back to the
+  // legacy Prisma/Neon/Render backend.
+  const PRODUCTION_API = 'https://global-messenger-api.narsingbeesetti006.workers.dev';
+  if (typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.hostname)) {
+    return window.location.origin;
   }
-  // Keep same-origin as the fallback for self-hosted/reverse-proxy deployments.
-  return typeof window !== 'undefined' ? window.location.origin : '';
+  return PRODUCTION_API;
 })();
 
 async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
@@ -42,7 +32,13 @@ async function uploadWithProgress(file: File, onProgress?: (percent: number) => 
     if (token) xhr.setRequestHeader('authorization', `Bearer ${token}`);
     if (signal) signal.addEventListener('abort', () => xhr.abort(), { once: true });
     xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100)); };
-    xhr.onload = () => { try { const data = xhr.responseText ? JSON.parse(xhr.responseText) : {}; if (xhr.status >= 200 && xhr.status < 300) resolve(data); else reject(new Error(data?.message || `Upload failed: ${xhr.status}`)); } catch { reject(new Error(`Upload failed: ${xhr.status}`)); } };
+    xhr.onload = () => {
+      try {
+        const data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+        else reject(new Error(data?.message || `Upload failed: ${xhr.status}`));
+      } catch { reject(new Error(`Upload failed: ${xhr.status}`)); }
+    };
     xhr.onerror = () => reject(new Error('Network error during upload'));
     xhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
     xhr.send(form);
