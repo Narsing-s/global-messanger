@@ -10,7 +10,6 @@
   "scripts": {
     "doctor": "node scripts/doctor.mjs",
     "dev": "node scripts/dev.mjs",
-    "dev:server": "npm run doctor && node scripts/upgrade-auth.mjs && npm --prefix apps/server run dev",
     "dev:web": "npm run dev -w apps/web -- --host 127.0.0.1 --strictPort",
     "dev:web:direct": "npm run dev -w apps/web -- --host 127.0.0.1 --strictPort",
     "build": "npm run build -w apps/web",
