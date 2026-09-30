@@ -29,12 +29,12 @@ function Avatar({user,name,size='md'}:{user?:User|null;name?:string;size?:string
 }
 
 function Auth({onLogin}:{onLogin:(u:User,t:string)=>void}) {
-  const [register,setRegister]=useState(false),[username,setUsername]=useState(''),[displayName,setDisplayName]=useState('');
+  const [register,setRegister]=useState(false),[name,setName]=useState(''),[email,setEmail]=useState('');
   const [password,setPassword]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
   async function submit(e:React.FormEvent){e.preventDefault();setError('');if(register&&password!==confirm)return setError('Passwords do not match');setBusy(true);
     try{
       const path=register?'/api/auth/register':'/api/auth/login';
-      const body=register?{username:username.trim().replace(/^@/,''),displayName:displayName.trim()||username.trim(),password}:{username:username.trim().replace(/^@/,''),password};
+      const derivedUsername=email.trim().toLowerCase().split('@')[0].replace(/[^a-z0-9_.-]/g,'').slice(0,24) || `user${Date.now()}`; const body=register?{username:derivedUsername,displayName:name.trim()||derivedUsername,email:email.trim().toLowerCase(),password}:{identifier:email.trim().toLowerCase(),password};
       const r=await fetch(API+path,{method:'POST',headers:{'content-type':'application/json'},credentials:'include',body:JSON.stringify(body)});
       const d=await r.json().catch(()=>({})); if(!r.ok)throw Error(d.message||'Authentication failed');
       if(!d.token||!d.user)throw Error('Authentication server returned an invalid session');
@@ -43,7 +43,7 @@ function Auth({onLogin}:{onLogin:(u:User,t:string)=>void}) {
   }
   return <div className="auth-page"><form className="auth-card" onSubmit={submit}>
     <div className="brand"><div className="brand-mark"><MessageCircle/></div><div><b>Global Messenger</b><small>Connect · Chat · Share</small></div></div>
-    <h1>{register?'Create your account':'Welcome back'}</h1><p>{register?'Create a real Messenger account and start chatting.':'Sign in to your conversations.'}</p>
+    <h1>{register?'Create your account':'Welcome back'}</h1><p>{register?'Create a real Messenger account and start chatting.':'Sign in to your conversations. Use your email and password.'}</p>
     {register&&<input value={displayName} onChange={e=>setDisplayName(e.target.value)} placeholder="Display name" autoComplete="name" />}
     <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="Username" autoComplete="username" />
     <input value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password (8+ characters)" type="password" autoComplete={register?'new-password':'current-password'} />
