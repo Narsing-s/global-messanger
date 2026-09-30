@@ -1,0 +1,229 @@
+interface Env {
+  DB: D1Database;
+  CHAT_ROOMS: DurableObjectNamespace;
+  APP_NAME: string;
+  JWT_SECRET?: string;
+}
+
+const json = (data: unknown, init: ResponseInit = {}) =>
+  new Response(JSON.stringify(data), {
+    ...init,
+    headers: { "content-type": "application/json; charset=utf-8", ...(init.headers || {}) }
+  });
+
+const id = () => crypto.randomUUID();
+
+function b64u(bytes: Uint8Array): string {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/g, "");
+}
+
+function b64uText(text: string): string {
+  return b64u(new TextEncoder().encode(text));
+}
+
+function unb64u(input: string): Uint8Array {
+  const s = input.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - input.length % 4) % 4);
+  const raw = atob(s);
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+
+async function hmacKey(secret: string) {
+  return crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+}
+
+async function signJwt(payload: Record<string, unknown>, secret: string) {
+  const header = b64uText(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const body = b64uText(JSON.stringify({ ...payload, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 }));
+  const data = new TextEncoder().encode(header + "." + body);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(secret), data));
+  return header + "." + body + "." + b64u(sig);
+}
+
+async function verifyJwt(token: string, secret: string): Promise<any | null> {
+  try {
+    const [h, p, s] = token.split(".");
+    if (!h || !p || !s) return null;
+    const ok = await crypto.subtle.verify("HMAC", await hmacKey(secret), unb64u(s), new TextEncoder().encode(h + "." + p));
+    if (!ok) return null;
+    const payload = JSON.parse(new TextDecoder().decode(unb64u(p)));
+    if (Number(payload.exp || 0) < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch { return null; }
+}
+
+async function passwordHash(password: string, salt: Uint8Array) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: 120000, hash: "SHA-256" }, key, 256);
+  return b64u(new Uint8Array(bits));
+}
+
+async function readBody(request: Request) {
+  try { return await request.json<any>(); } catch { return {}; }
+}
+
+function originHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  return {
+    "access-control-allow-origin": origin || "*",
+    "access-control-allow-headers": "authorization,content-type",
+    "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
+    "access-control-allow-credentials": "true",
+    "cache-control": "no-store"
+  };
+}
+
+async function authUser(request: Request, env: Env) {
+  const auth = request.headers.get("authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return null;
+  const payload = await verifyJwt(token, env.JWT_SECRET || "change-me-before-production");
+  return payload?.sub ? String(payload.sub) : null;
+}
+
+async function userShape(env: Env, userId: string) {
+  return env.DB.prepare("SELECT id, username, display_name AS displayName, avatar_url AS avatarUrl, last_seen_at AS lastSeenAt FROM users WHERE id = ?").bind(userId).first();
+}
+
+async function handleApi(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const path = url.pathname.replace(/^\\/api/, "") || "/";
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: originHeaders(request) });
+
+  if (path === "/health" || path === "/ready") return json({ ok: true, service: "global-messenger-cloudflare", time: new Date().toISOString() });
+
+  if (path === "/auth/register-email" || path === "/auth/register") {
+    const body = await readBody(request);
+    const username = String(body.username || "").trim();
+    const displayName = String(body.displayName || username).trim();
+    const email = body.email ? String(body.email).trim().toLowerCase() : null;
+    const password = String(body.password || "");
+    if (!/^[a-zA-Z0-9_.-]{3,24}$/.test(username) || displayName.length < 1 || password.length < 8) return json({ message: "Username, display name and password are invalid." }, { status: 400, headers: originHeaders(request) });
+    const exists = await env.DB.prepare("SELECT id FROM users WHERE username = ? OR (? IS NOT NULL AND email = ?)").bind(username, email, email).first();
+    if (exists) return json({ message: "Username or email is already registered." }, { status: 409, headers: originHeaders(request) });
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const userId = id();
+    const hash = await passwordHash(password, salt);
+    await env.DB.prepare("INSERT INTO users (id,username,email,display_name,password_hash,password_salt) VALUES (?,?,?,?,?,?)").bind(userId, username, email, displayName, hash, b64u(salt)).run();
+    const token = await signJwt({ sub: userId, username }, env.JWT_SECRET || "change-me-before-production");
+    const user = await userShape(env, userId);
+    return json({ token, user }, { status: 201, headers: originHeaders(request) });
+  }
+
+  if (path === "/auth/login-email" || path === "/auth/login") {
+    const body = await readBody(request);
+    const identifier = String(body.identifier || body.username || "").trim();
+    const password = String(body.password || "");
+    const user: any = await env.DB.prepare("SELECT * FROM users WHERE lower(username)=lower(?) OR lower(email)=lower(?) LIMIT 1").bind(identifier, identifier).first();
+    if (!user) return json({ message: "Invalid username/email or password." }, { status: 401, headers: originHeaders(request) });
+    const salt = unb64u(String(user.password_salt));
+    const hash = await passwordHash(password, salt);
+    if (hash !== String(user.password_hash)) return json({ message: "Invalid username/email or password." }, { status: 401, headers: originHeaders(request) });
+    await env.DB.prepare("UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?").bind(user.id).run();
+    const token = await signJwt({ sub: user.id, username: user.username }, env.JWT_SECRET || "change-me-before-production");
+    const shaped = await userShape(env, String(user.id));
+    return json({ token, user: shaped }, { headers: originHeaders(request) });
+  }
+
+  const userId = await authUser(request, env);
+  if (!userId) return json({ message: "Authentication required." }, { status: 401, headers: originHeaders(request) });
+
+  if (path === "/profile/me") {
+    const user: any = await env.DB.prepare("SELECT id,username,email,display_name AS displayName,bio,avatar_url AS avatarUrl,last_seen_at AS lastSeenAt,created_at AS createdAt FROM users WHERE id = ?").bind(userId).first();
+    return json(user || {}, { headers: originHeaders(request) });
+  }
+
+  if (path === "/users/search") {
+    const q = String(url.searchParams.get("q") || "").trim();
+    const rows = await env.DB.prepare("SELECT id,username,display_name AS displayName,avatar_url AS avatarUrl,last_seen_at AS lastSeenAt FROM users WHERE id <> ? AND (username LIKE ? OR display_name LIKE ?) ORDER BY username LIMIT 30").bind(userId, "%" + q + "%", "%" + q + "%").all();
+    return json(rows.results, { headers: originHeaders(request) });
+  }
+
+  if (path === "/conversations" && request.method === "GET") {
+    const rows = await env.DB.prepare(`SELECT c.id,c.title,c.is_group AS isGroup,c.created_at AS createdAt,c.updated_at AS updatedAt
+      FROM conversations c JOIN conversation_members m ON m.conversation_id=c.id
+      WHERE m.user_id=? ORDER BY c.updated_at DESC`).bind(userId).all();
+    const out = [];
+    for (const c of rows.results as any[]) {
+      const members = await env.DB.prepare("SELECT u.id,u.username,u.display_name AS displayName,u.avatar_url AS avatarUrl,u.last_seen_at AS lastSeenAt FROM users u JOIN conversation_members m ON m.user_id=u.id WHERE m.conversation_id=?").bind(c.id).all();
+      const last = await env.DB.prepare("SELECT id,body,type,sender_id AS senderId,created_at AS createdAt FROM messages WHERE conversation_id=? ORDER BY created_at DESC LIMIT 1").bind(c.id).first();
+      out.push({ ...c, isGroup: !!c.isGroup, members: members.results.map((user:any)=>({user})), messages: last ? [last] : [] });
+    }
+    return json(out, { headers: originHeaders(request) });
+  }
+
+  if (path === "/conversations/direct" && request.method === "POST") {
+    const body = await readBody(request);
+    const other = String(body.userId || "");
+    const found: any = await env.DB.prepare(`SELECT c.id FROM conversations c
+      JOIN conversation_members a ON a.conversation_id=c.id AND a.user_id=?
+      JOIN conversation_members b ON b.conversation_id=c.id AND b.user_id=?
+      WHERE c.is_group=0 LIMIT 1`).bind(userId, other).first();
+    let conversationId = found?.id;
+    if (!conversationId) {
+      conversationId = id();
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO conversations (id,is_group,creator_id) VALUES (?,0,?)").bind(conversationId,userId),
+        env.DB.prepare("INSERT INTO conversation_members (conversation_id,user_id) VALUES (?,?)").bind(conversationId,userId),
+        env.DB.prepare("INSERT INTO conversation_members (conversation_id,user_id) VALUES (?,?)").bind(conversationId,other)
+      ]);
+    }
+    return json({ id: conversationId }, { status: 201, headers: originHeaders(request) });
+  }
+
+  const msgMatch = path.match(/^\\/conversations/([^/]+)\\/messages$/);
+  if (msgMatch && request.method === "GET") {
+    const conversationId = msgMatch[1];
+    const member = await env.DB.prepare("SELECT 1 FROM conversation_members WHERE conversation_id=? AND user_id=?").bind(conversationId,userId).first();
+    if (!member) return json({ message: "Chat not found." }, { status: 404, headers: originHeaders(request) });
+    const limit = Math.min(Number(url.searchParams.get("limit") || 100), 100);
+    const rows = await env.DB.prepare(`SELECT m.id,m.client_id AS clientId,m.conversation_id AS conversationId,m.sender_id AS senderId,m.body,m.type,m.created_at AS createdAt,
+      u.username,u.display_name AS displayName,u.avatar_url AS avatarUrl FROM messages m JOIN users u ON u.id=m.sender_id
+      WHERE m.conversation_id=? ORDER BY m.created_at DESC LIMIT ?`).bind(conversationId,limit).all();
+    return json((rows.results as any[]).reverse().map(m=>({...m,sender:{id:m.senderId,username:m.username,displayName:m.displayName,avatarUrl:m.avatarUrl}})), { headers: originHeaders(request) });
+  }
+
+  if (path === "/conversations" && request.method === "POST") return json({ message: "Use /conversations/direct or group." }, { status: 400, headers: originHeaders(request) });
+
+  const convInfo = path.match(/^\\/conversations/([^/]+)\\/info$/);
+  if (convInfo) {
+    const conversationId = convInfo[1];
+    const member = await env.DB.prepare("SELECT 1 FROM conversation_members WHERE conversation_id=? AND user_id=?").bind(conversationId,userId).first();
+    if (!member) return json({ message: "Chat not found." }, { status: 404, headers: originHeaders(request) });
+    return json(await env.DB.prepare("SELECT id,title,is_group AS isGroup,created_at AS createdAt,updated_at AS updatedAt FROM conversations WHERE id=?").bind(conversationId).first(), { headers: originHeaders(request) });
+  }
+
+  return json({ message: "This Cloudflare API route is not migrated yet.", path }, { status: 501, headers: originHeaders(request) });
+}
+
+export class ChatRoom {
+  state: DurableObjectState;
+  sockets = new Set<WebSocket>();
+  constructor(state: DurableObjectState) { this.state = state; }
+  async fetch(request: Request) {
+    if (request.headers.get("Upgrade") !== "websocket") return new Response("WebSocket endpoint", { status: 426 });
+    const pair = new WebSocketPair();
+    const client = pair[0], server = pair[1];
+    server.accept();
+    this.sockets.add(server);
+    server.addEventListener("message", event => {
+      for (const socket of this.sockets) if (socket !== server && socket.readyState === WebSocket.OPEN) socket.send(String(event.data));
+    });
+    server.addEventListener("close", () => this.sockets.delete(server));
+    return new Response(null, { status: 101, webSocket: client });
+  }
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/socket.io/")) {
+      return new Response("Cloudflare realtime endpoint is being migrated; use the native Worker WebSocket endpoint during the migration.", { status: 501 });
+    }
+    const response = await handleApi(request, env);
+    const headers = new Headers(response.headers);
+    Object.entries(originHeaders(request)).forEach(([k,v]) => headers.set(k,v));
+    return new Response(response.body, { status: response.status, headers });
+  }
+};
