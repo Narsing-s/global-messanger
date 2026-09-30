@@ -52,7 +52,7 @@ For the web app, set:
 VITE_API_URL=https://global-messenger-api.<your-subdomain>.workers.dev
 ```
 
-The existing Node/Fastify backend is intentionally kept. This Cloudflare backend is a separate migration path so the current self-hosted/SQLite deployment is not broken while Cloudflare functionality is moved endpoint-by-endpoint.
+The Cloudflare Worker + D1 stack is now the only supported application backend in this repository. The legacy Node/Fastify/Prisma/PostgreSQL backend has been removed.
 
 ## Current Cloudflare migration scope
 
@@ -72,12 +72,4 @@ Implemented in the current migration:
 - Durable Object realtime event hub
 - native WebSocket client compatibility for the web app
 
-Still outside the Cloudflare-native path:
-- uploads/media object storage
-- password-reset email delivery
-- passkeys/2FA
-- push notifications
-- SFU/mediasoup calling
-- some advanced group/admin and organization features
-
-The existing Node/Fastify + SQLite backend remains available for self-hosting. The Cloudflare backend is intentionally isolated so it can be deployed and tested independently.
+Remaining integrations can be added to the Cloudflare Worker using Cloudflare-native services or external APIs where required; they must not introduce PostgreSQL, Neon, Prisma, Render, or Vercel as a database/backend dependency.
