@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMessengerSocket, type Socket } from './services/socket';
+import { LoadingState } from './LoadingState';
 import {
   Archive, Bell, CheckCheck, ChevronLeft, Copy, Heart, LogIn, LogOut,
   MessageCircle, MoreVertical, Paperclip, Plus, Search, Send, Settings,
@@ -58,7 +59,7 @@ function Auth({onLogin}:{onLogin:(u:User,t:string)=>void}) {
     <input value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password (8+ characters)" type="password" autoComplete={register?'new-password':'current-password'} />
     {register&&<input value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="Confirm password" type="password" autoComplete="new-password" />}
     {error&&<div className="error">{error}</div>}
-    <button className="primary big" disabled={busy}>{busy?<span>Working…</span>:register?<><UserPlus/> Create account</>:<><LogIn/> Login</>}</button>
+    <button className="primary big" disabled={busy}>{busy?<LoadingState label="Working…" />:register?<><UserPlus/> Create account</>:<><LogIn/> Login</>}</button>
     <button type="button" className="link-button" onClick={()=>{setRegister(!register);setError('')}}>{register?'Already have an account? Login':'New here? Create an account'}</button>
     <div className="security-note"><ShieldCheck/> Your conversations are stored in your Messenger account and synced across signed-in devices.</div>
   </form></div>
