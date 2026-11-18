@@ -10,7 +10,7 @@ import {
   MessageCircle, MoreVertical, Paperclip, Plus, Search, Send, Settings,
   ShieldCheck, Smile, Star, Sun, Moon, Trash2, UserPlus, Users, X
 } from 'lucide-react';
-import { api, API } from './api';
+import { api, auth } from './api';
 import './styles.css';
 import './ui-polish.css';
 
@@ -39,17 +39,14 @@ function Auth({onLogin}:{onLogin:(u:User,t:string)=>void}) {
     if(!email.trim())return setError('Email is required');
     setBusy(true);
     try{
-      const path=register?'/api/auth/register':'/api/auth/login';
       const cleanEmail=email.trim().toLowerCase();
       const derivedUsername=cleanEmail.split('@')[0].replace(/[^a-z0-9_.-]/g,'').slice(0,24)||`user${Date.now()}`;
-      const body=register
-        ? {username:derivedUsername,displayName:name.trim()||derivedUsername,email:cleanEmail,password}
-        : {identifier:cleanEmail,password};
-      const r=await fetch(API+path,{method:'POST',headers:{'content-type':'application/json'},credentials:'omit',body:JSON.stringify(body)});
-      const d=await r.json().catch(()=>({}));
-      if(!r.ok)throw Error(d.message||'Authentication failed');
-      if(!d.token||!d.user)throw Error('Authentication server returned an invalid session');
-      localStorage.setItem('gm_token',d.token);localStorage.setItem('gm_user',JSON.stringify(d.user));onLogin(d.user,d.token);
+      const d=register
+        ? await auth.register({username:derivedUsername,displayName:name.trim()||derivedUsername,email:cleanEmail,password})
+        : await auth.login(cleanEmail,password);
+      if((d as any).confirmationRequired){setError('Account created. Check your email to confirm your address, then log in.');return;}
+      if(!(d as any).token||!(d as any).user)throw Error('Supabase did not return an active session.');
+      localStorage.setItem('gm_token',(d as any).token);localStorage.setItem('gm_user',JSON.stringify((d as any).user));onLogin((d as any).user,(d as any).token);
     }catch(e:any){setError(e instanceof TypeError?'Cannot reach the messaging server. Check the API connection and CORS configuration, then retry.':e.message||'Authentication failed')}finally{setBusy(false)}
   }
   return <div className="auth-page"><form className="auth-card" onSubmit={submit}>
@@ -99,10 +96,10 @@ function App(){
   async function openDirect(u:User){try{const c=normalizeChat(await api.direct(u.id));setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setPeople([]);setQuery('');setMobile(true)}catch(e:any){setError(e.message)}}
   async function createGroup(){if(!groupTitle.trim()||!groupUsers.length)return;try{const c=normalizeChat(await api.group(groupTitle.trim(),groupUsers.map(u=>u.id)));setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setGroupOpen(false);setGroupTitle('');setGroupUsers([]);setMobile(true)}catch(e:any){setError(e.message)}}
   async function send(){const body=text.trim();if(!body||!active)return;if(editing){api.editMessage(editing.id,body).catch(e=>setError(e.message));setEditing(null);setText('');return}try{await requestMessage(active.id,body)}catch(e:any){setError(e.message||'Unable to send message')}}
-  async function requestMessage(conversationId:string,body:string){const token=localStorage.getItem('gm_token');const r=await fetch(API+`/api/conversations/${encodeURIComponent(conversationId)}/messages`,{method:'POST',headers:{'content-type':'application/json',...(token?{authorization:`Bearer ${token}`}:{})},body:JSON.stringify({conversationId,body,type:'text',replyToId:reply?.id||null,clientId:crypto.randomUUID()})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.message||'Unable to send message');setText('');setReply(null);setEmoji(false);return d}
-  async function sendFile(f:File){if(!active)return;try{const u=await api.upload(f);await requestMessage(active.id, u.url || f.name)}catch(e:any){setError(e.message)}}
+  async function requestMessage(conversationId:string,body:string){const d=await api.sendMessage(conversationId,body,{metadata:{replyToId:reply?.id||null,clientId:crypto.randomUUID()}});setMessages(p=>p.some(x=>x.id===d.id)?p:[...p,d]);setText('');setReply(null);setEmoji(false);return d}
+  async function sendFile(f:File){if(!active)return;try{const u=await api.upload(f,undefined,undefined,active.id);const m=await api.sendMessage(active.id,f.name,{type:'file',metadata:{attachmentUrl:u.url,attachmentName:u.name,attachmentMime:u.mime,attachmentSize:u.size},attachment:{path:u.path,name:u.name,mime:u.mime,size:u.size}});setMessages(p=>[...p,m])}catch(e:any){setError(e.message)}}
   async function organize(kind:'favorite'|'archived',value:boolean){if(!active)return;try{await api.organization(active.id,{[kind]:value});setChats(p=>p.map(c=>c.id===active.id?{...c,[kind==='favorite'?'favorite':'archived']:value}:c));setActive(c=>c?{...c,[kind==='favorite'?'favorite':'archived']:value}:c);setMenu(false)}catch(e:any){setError(e.message)}}
-  async function logout(){try{await api.logout()}catch{}localStorage.removeItem('gm_token');localStorage.removeItem('gm_user');socket?.disconnect();setSocket(null);setUser(null);setChats([]);setActive(null);setMessages([])}
+  async function logout(){try{await auth.logout()}catch{}localStorage.removeItem('gm_token');localStorage.removeItem('gm_user');socket?.disconnect();setSocket(null);setUser(null);setChats([]);setActive(null);setMessages([])}
   async function react(m:Message,e:string){try{await api.react(m.id,e);setReaction(null)}catch(err:any){setError(err.message)}}
   async function del(m:Message){try{await api.deleteMessage(m.id);setMenu(false)}catch(e:any){setError(e.message)}}
 

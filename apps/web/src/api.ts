@@ -1,71 +1,223 @@
-// Cloudflare D1 API is the only production backend. Deployment: d1-only-2026-09-30
-const API_URL = (() => {
-  // Production always uses the Cloudflare Worker backed by D1.
-  const PRODUCTION_API = 'https://global-messenger-api.narsingbeesetti22.workers.dev';
-  if (typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.hostname)) {
-    return window.location.origin;
-  }
-  return PRODUCTION_API;
-})();
+import { getSupabase, SUPABASE_URL } from './supabase';
 
-async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('gm_token') : null;
-  const headers = new Headers(options.headers || {});
-  if (options.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
-  if (token) headers.set('authorization', `Bearer ${token}`);
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: options.credentials || 'omit' });
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(text || `Request failed: ${response.status}`);
-  }
-  const contentType = response.headers.get('content-type') || '';
-  return (contentType.includes('application/json') ? response.json() : response.text()) as Promise<T>;
+export const API = SUPABASE_URL;
+const profileCache = new Map<string, any>();
+const now = () => new Date().toISOString();
+const fail = (error: any): never => { throw new Error(error?.message || 'Supabase request failed'); };
+const userShape = (p: any) => ({ id:p.id, username:p.username, displayName:p.display_name, avatarUrl:p.avatar_url, lastSeenAt:p.last_seen_at });
+async function currentProfile() {
+  const sb = await getSupabase();
+  const { data:{ user }, error } = await sb.auth.getUser();
+  if (error || !user) throw new Error('Please sign in again.');
+  if (profileCache.has(user.id)) return profileCache.get(user.id);
+  const { data, error:e } = await sb.from('gm_profiles').select('*').eq('auth_user_id',user.id).single();
+  if (e || !data) fail(e || new Error('Your Messenger profile is not ready yet. Please refresh.'));
+  profileCache.set(user.id,data);
+  return data;
 }
-
-async function uploadWithProgress(file: File, onProgress?: (percent: number) => void, signal?: AbortSignal) {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('gm_token') : null;
-  const form = new FormData();
-  form.append('file', file);
-  return new Promise<any>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API_URL}/api/uploads`);
-    if (token) xhr.setRequestHeader('authorization', `Bearer ${token}`);
-    if (signal) signal.addEventListener('abort', () => xhr.abort(), { once: true });
-    xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100)); };
-    xhr.onload = () => {
-      try {
-        const data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
-        if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-        else reject(new Error(data?.message || `Upload failed: ${xhr.status}`));
-      } catch { reject(new Error(`Upload failed: ${xhr.status}`)); }
-    };
-    xhr.onerror = () => reject(new Error('Network error during upload'));
-    xhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
-    xhr.send(form);
-  });
+async function profileById(id:string) {
+  const sb=await getSupabase();
+  const {data,error}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').eq('id',id).maybeSingle();
+  if(error)fail(error);
+  return data;
 }
-
-const api = {
-  conversations:()=>request('/api/conversations'),
-  messages:(conversationId:string,limit=100)=>request(`/api/conversations/${encodeURIComponent(conversationId)}/messages?limit=${limit}`),
-  searchUsers:(q:string)=>request(`/api/users/search?q=${encodeURIComponent(q)}`),
-  direct:(userId:string)=>request('/api/conversations/direct',{method:'POST',body:JSON.stringify({userId})}),
-  group:(title:string,userIds:string[])=>request('/api/conversations/group',{method:'POST',body:JSON.stringify({title,userIds})}),
-  read:(conversationId:string)=>request(`/api/conversations/${encodeURIComponent(conversationId)}/read`,{method:'POST'}),
-  organization:(id:string,data:any)=>request(`/api/conversations/${encodeURIComponent(id)}/organization`,{method:'PATCH',body:JSON.stringify(data)}),
-  organized:(filter='all')=>request(`/api/conversations/organized?filter=${encodeURIComponent(filter)}`),
-  editMessage:(id:string,body:string)=>request(`/api/messages/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({body})}),
-  deleteMessage:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}`,{method:'DELETE'}),
-  upload:(file:File,onProgress?:any,signal?:AbortSignal)=>uploadWithProgress(file,onProgress,signal),
-  react:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reaction`,{method:'POST',body:JSON.stringify({emoji})}),
-  bookmark:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}/bookmark`,{method:'POST'}),
-  unbookmark:(id:string)=>request(`/api/messages/${encodeURIComponent(id)}/bookmark`,{method:'DELETE'}),
-  forwardMessage:(messageId:string,conversationId:string)=>request('/api/messages/forward',{method:'POST',body:JSON.stringify({messageId,conversationId})}),
-  pin:(conversationId:string,messageId:string)=>request(`/api/messages/${encodeURIComponent(messageId)}/pin`,{method:'POST',body:JSON.stringify({conversationId})}),
-  unpin:(conversationId:string,messageId:string)=>request(`/api/messages/${encodeURIComponent(messageId)}/pin`,{method:'DELETE',body:JSON.stringify({conversationId})}),
-  unreact:(id:string,emoji:string)=>request(`/api/messages/${encodeURIComponent(id)}/reaction`,{method:'DELETE',body:JSON.stringify({emoji})}),
-  media:(conversationId?:string,q?:string,limit=100)=>request(`/api/media?conversationId=${encodeURIComponent(conversationId||'')}&q=${encodeURIComponent(q||'')}&limit=${limit}`),
-  logout:()=>request('/api/auth/logout',{method:'POST'})
+function messageShape(m:any, sender?:any) {
+  const meta=m.metadata||{};
+  return { id:m.id, conversationId:m.conversation_id, senderId:m.sender_id, body:m.body, createdAt:m.created_at,
+    editedAt:m.edited_at, deletedAt:m.deleted_at, sender:sender?userShape(sender):undefined, type:m.type,
+    attachmentUrl:meta.attachmentUrl||null, attachmentName:meta.attachmentName||null,
+    attachmentMime:meta.attachmentMime||null, attachmentSize:meta.attachmentSize||null };
+}
+async function loadConversation(id:string) {
+  const sb=await getSupabase(), me=await currentProfile();
+  const {data:c,error}=await sb.from('gm_conversations').select('*').eq('id',id).single();
+  if(error)fail(error);
+  const {data:members,error:meErr}=await sb.from('gm_conversation_members').select('user_id,joined_at,last_read_at').eq('conversation_id',id);
+  if(meErr)fail(meErr);
+  const ids=(members||[]).map((m:any)=>m.user_id);
+  const {data:profiles,error:pErr}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);
+  if(pErr)fail(pErr);
+  const {data:prefs}=await sb.from('gm_conversation_preferences').select('*').eq('conversation_id',id).eq('user_id',me.id).maybeSingle();
+  const byId=new Map((profiles||[]).map((p:any)=>[p.id,p]));
+  return {id:c.id,isGroup:c.is_group,title:c.title,createdAt:c.created_at,updatedAt:c.updated_at,
+    favorite:!!prefs?.favorite,archived:!!prefs?.archived,
+    members:(members||[]).map((m:any)=>({user:userShape(byId.get(m.user_id)),joinedAt:m.joined_at,lastReadAt:m.last_read_at}))};
+}
+async function listConversations() {
+  const sb=await getSupabase(), me=await currentProfile();
+  const {data:members,error}=await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id);
+  if(error)fail(error);
+  const ids=(members||[]).map((x:any)=>x.conversation_id);
+  if(!ids.length)return [];
+  const {data:conversations,error:e}=await sb.from('gm_conversations').select('id,updated_at').in('id',ids).order('updated_at',{ascending:false});
+  if(e)fail(e);
+  const result=await Promise.all((conversations||[]).map((c:any)=>loadConversation(c.id)));
+  const {data:prefs}=await sb.from('gm_conversation_preferences').select('conversation_id,favorite,archived').eq('user_id',me.id);
+  const prefMap=new Map((prefs||[]).map((x:any)=>[x.conversation_id,x]));
+  return result.map((c:any)=>({...c,...(prefMap.get(c.id)||{})}));
+}
+async function listMessages(conversationId:string,limit=100) {
+  const sb=await getSupabase();
+  const {data,error}=await sb.from('gm_messages').select('*').eq('conversation_id',conversationId).order('created_at',{ascending:true}).limit(limit);
+  if(error)fail(error);
+  const ids=[...new Set((data||[]).map((m:any)=>m.sender_id))];
+  const {data:profiles}=await sb.from('gm_profiles').select('*').in('id',ids);
+  const byId=new Map((profiles||[]).map((p:any)=>[p.id,p]));
+  return (data||[]).map((m:any)=>messageShape(m,byId.get(m.sender_id)));
+}
+async function sendMessage(conversationId:string,body:string,extra:any={}) {
+  const sb=await getSupabase(),me=await currentProfile();
+  const meta=extra.metadata||{};
+  const {data,error}=await sb.from('gm_messages').insert({conversation_id:conversationId,sender_id:me.id,body,type:extra.type||'text',metadata:meta}).select('*').single();
+  if(error)fail(error);
+  if(extra.attachment) {
+    const a=extra.attachment;
+    const {error:ae}=await sb.from('gm_attachments').insert({conversation_id:conversationId,message_id:data.id,uploader_id:me.id,bucket_id:'gm-chat-media',object_path:a.path,file_name:a.name,mime_type:a.mime,size_bytes:a.size});
+    if(ae)fail(ae);
+  }
+  await sb.from('gm_conversations').update({updated_at:now()}).eq('id',conversationId);
+  return messageShape(data,me);
+}
+async function ensureDirect(userId:string) {
+  const sb=await getSupabase(),me=await currentProfile();
+  const {data:mine,error}=await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id);
+  if(error)fail(error);
+  const {data:theirs,error:e}=await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',userId);
+  if(e)fail(e);
+  const theirsSet=new Set((theirs||[]).map((x:any)=>x.conversation_id));
+  const shared=(mine||[]).map((x:any)=>x.conversation_id).filter((id:string)=>theirsSet.has(id));
+  if(shared.length){
+    const {data:found}=await sb.from('gm_conversations').select('id').in('id',shared).eq('is_group',false).limit(1).maybeSingle();
+    if(found)return loadConversation(found.id);
+  }
+  const {data:c,error:ce}=await sb.from('gm_conversations').insert({is_group:false,creator_id:me.id}).select('id').single();
+  if(ce)fail(ce);
+  const {error:ie}=await sb.from('gm_conversation_members').insert([{conversation_id:c.id,user_id:me.id},{conversation_id:c.id,user_id:userId}]);
+  if(ie)fail(ie);
+  return loadConversation(c.id);
+}
+export const auth = {
+  async register(input:{username:string;displayName:string;email:string;password:string}) {
+    const sb=await getSupabase();
+    const {data,error}=await sb.auth.signUp({email:input.email,password:input.password,options:{data:{app:'global-messenger',username:input.username,display_name:input.displayName}}});
+    if(error)fail(error);
+    if(!data.session)return {confirmationRequired:true};
+    profileCache.delete(data.user?.id||'');
+    const p=await currentProfile();
+    return {token:data.session.access_token,user:userShape(p)};
+  },
+  async login(email:string,password:string) {
+    const sb=await getSupabase();
+    const {data,error}=await sb.auth.signInWithPassword({email,password});
+    if(error)fail(error);
+    profileCache.delete(data.user.id);
+    const p=await currentProfile();
+    return {token:data.session.access_token,user:userShape(p)};
+  },
+  async logout(){const sb=await getSupabase();profileCache.clear();const {error}=await sb.auth.signOut();if(error)fail(error);}
 };
-const API = API_URL;
-export { request, api, API, API_URL };
+export async function request<T=any>(path:string,options:RequestInit={}):Promise<T>{
+  throw new Error('Legacy HTTP API routes have been removed. Use the Supabase-backed Messenger API instead.');
+}
+async function uploadWithProgress(file:File,onProgress?:(n:number)=>void,signal?:AbortSignal,conversationId?:string) {
+  if(signal?.aborted)throw new DOMException('Upload aborted','AbortError');
+  const sb=await getSupabase(),me=await currentProfile();
+  if(!conversationId)throw new Error('Choose a conversation before uploading.');
+  const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+  const path=conversationId+'/'+me.id+'/'+crypto.randomUUID()+'-'+safeName;
+  const {error}=await sb.storage.from('gm-chat-media').upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});
+  if(error)fail(error);
+  onProgress?.(100);
+  const {data:signed,error:se}=await sb.storage.from('gm-chat-media').createSignedUrl(path,3600);
+  if(se)fail(se);
+  return {url:signed.signedUrl,path,name:file.name,mime:file.type,size:file.size};
+}
+export const api = {
+  conversations:listConversations,
+  messages:listMessages,
+  async searchUsers(q:string) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const term=q.trim().replace(/[,%]/g,'');
+    if(term.length<2)return [];
+    const {data,error}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').neq('id',me.id).or('username.ilike.%'+term+'%,display_name.ilike.%'+term+'%').limit(20);
+    if(error)fail(error);
+    return (data||[]).map(userShape);
+  },
+  direct:ensureDirect,
+  async group(title:string,userIds:string[]) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {data:c,error}=await sb.from('gm_conversations').insert({title,is_group:true,creator_id:me.id}).select('id').single();
+    if(error)fail(error);
+    const ids=[...new Set([me.id,...userIds])];
+    const {error:e}=await sb.from('gm_conversation_members').insert(ids.map(user_id=>({conversation_id:c.id,user_id})));
+    if(e)fail(e);
+    return loadConversation(c.id);
+  },
+  async read(id:string) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {error}=await sb.from('gm_conversation_members').update({last_read_at:now()}).eq('conversation_id',id).eq('user_id',me.id);
+    if(error)fail(error);
+  },
+  async organization(id:string,data:any) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {error}=await sb.from('gm_conversation_preferences').upsert({conversation_id:id,user_id:me.id,...data,updated_at:now()},{onConflict:'conversation_id,user_id'});
+    if(error)fail(error);
+  },
+  async organized(filter='all'){return (await listConversations()).filter((c:any)=>filter==='archived'?c.archived:filter==='favorites'?c.favorite:true);},
+  async editMessage(id:string,body:string) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {error}=await sb.from('gm_messages').update({body,edited_at:now()}).eq('id',id).eq('sender_id',me.id);
+    if(error)fail(error);
+  },
+  async deleteMessage(id:string) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {error}=await sb.from('gm_messages').update({body:'',deleted_at:now()}).eq('id',id).eq('sender_id',me.id);
+    if(error)fail(error);
+  },
+  upload:(file:File,onProgress?:any,signal?:AbortSignal,conversationId?:string)=>uploadWithProgress(file,onProgress,signal,conversationId),
+  async sendMessage(id:string,body:string,extra?:any){return sendMessage(id,body,extra);},
+  async react(id:string,emoji:string) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {error}=await sb.from('gm_message_reactions').upsert({message_id:id,user_id:me.id,emoji},{onConflict:'message_id,user_id'});
+    if(error)fail(error);
+  },
+  async unreact(id:string) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {error}=await sb.from('gm_message_reactions').delete().eq('message_id',id).eq('user_id',me.id);
+    if(error)fail(error);
+  },
+  async bookmark(id:string) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {error}=await sb.from('gm_bookmarks').upsert({message_id:id,user_id:me.id},{onConflict:'user_id,message_id'});
+    if(error)fail(error);
+  },
+  async unbookmark(id:string) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {error}=await sb.from('gm_bookmarks').delete().eq('message_id',id).eq('user_id',me.id);
+    if(error)fail(error);
+  },
+  async forwardMessage(messageId:string,conversationId:string) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {data:m,error}=await sb.from('gm_messages').select('body,type,metadata').eq('id',messageId).single();
+    if(error)fail(error);
+    return sendMessage(conversationId,m.body,{type:m.type,metadata:{...(m.metadata||{}),forwarded:true}});
+  },
+  async pin(conversationId:string,messageId:string) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {error}=await sb.from('gm_pinned_messages').upsert({conversation_id:conversationId,message_id:messageId,user_id:me.id},{onConflict:'conversation_id,message_id,user_id'});
+    if(error)fail(error);
+  },
+  async unpin(conversationId:string,messageId:string) {
+    const sb=await getSupabase(),me=await currentProfile();
+    const {error}=await sb.from('gm_pinned_messages').delete().eq('conversation_id',conversationId).eq('message_id',messageId).eq('user_id',me.id);
+    if(error)fail(error);
+  },
+  async media(conversationId?:string,q?:string,limit=100) {
+    const sb=await getSupabase();
+    let query=sb.from('gm_attachments').select('*').order('created_at',{ascending:false}).limit(limit);
+    if(conversationId)query=query.eq('conversation_id',conversationId);
+    if(q)query=query.ilike('file_name','%'+q+'%');
+    const {data,error}=await query;if(error)fail(error);return data||[];
+  },
+  logout:auth.logout
+};
