@@ -451,3 +451,120 @@ FOR SELECT TO authenticated USING(auth_user_id=auth.uid() OR public.gm_is_profil
 CREATE POLICY "gm users update own read marker" ON public.gm_conversation_members
 FOR UPDATE TO authenticated USING(user_id=public.gm_current_profile_id())
 WITH CHECK(user_id=public.gm_current_profile_id());
+
+-- Support, entities, login history, notification center and WebRTC call signaling.
+CREATE TABLE IF NOT EXISTS public.gm_call_signals (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ conversation_id uuid NOT NULL REFERENCES public.gm_conversations(id) ON DELETE CASCADE,
+ sender_id uuid NOT NULL REFERENCES public.gm_profiles(id) ON DELETE CASCADE,
+ call_id text NOT NULL,payload jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.gm_call_signals ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "gm members read call signals" ON public.gm_call_signals FOR SELECT TO authenticated USING(public.gm_is_conversation_member(conversation_id));
+CREATE POLICY "gm members send own call signals" ON public.gm_call_signals FOR INSERT TO authenticated WITH CHECK(sender_id=public.gm_current_profile_id() AND public.gm_is_conversation_member(conversation_id));
+GRANT SELECT,INSERT ON public.gm_call_signals TO authenticated;
+CREATE INDEX IF NOT EXISTS gm_call_signals_conversation_created_idx ON public.gm_call_signals(conversation_id,created_at DESC);
+DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='gm_call_signals') THEN ALTER PUBLICATION supabase_realtime ADD TABLE public.gm_call_signals; END IF; END $$;
+
+CREATE TABLE IF NOT EXISTS public.gm_support_tickets (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid NOT NULL REFERENCES public.gm_profiles(id) ON DELETE CASCADE,
+ subject text NOT NULL CHECK(length(subject) BETWEEN 3 AND 160),category text NOT NULL DEFAULT 'general',
+ description text NOT NULL CHECK(length(description) BETWEEN 10 AND 10000),
+ status text NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),
+ created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.gm_support_tickets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "gm users create support tickets" ON public.gm_support_tickets FOR INSERT TO authenticated WITH CHECK(user_id=public.gm_current_profile_id());
+CREATE POLICY "gm users read own support tickets" ON public.gm_support_tickets FOR SELECT TO authenticated USING(user_id=public.gm_current_profile_id());
+GRANT SELECT,INSERT ON public.gm_support_tickets TO authenticated;
+
+CREATE TABLE IF NOT EXISTS public.gm_global_entities (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),owner_id uuid NOT NULL REFERENCES public.gm_profiles(id) ON DELETE CASCADE,
+ kind text NOT NULL CHECK(length(kind) BETWEEN 2 AND 48),title text NOT NULL CHECK(length(title) BETWEEN 1 AND 180),
+ payload jsonb NOT NULL DEFAULT '{}'::jsonb,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.gm_global_entities ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "gm users manage own global entities" ON public.gm_global_entities FOR ALL TO authenticated USING(owner_id=public.gm_current_profile_id()) WITH CHECK(owner_id=public.gm_current_profile_id());
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.gm_global_entities TO authenticated;
+
+CREATE TABLE IF NOT EXISTS public.gm_login_history (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid NOT NULL REFERENCES public.gm_profiles(id) ON DELETE CASCADE,
+ event text NOT NULL CHECK(event IN ('login','logout','password_changed')),user_agent text,created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.gm_login_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "gm users read own login history" ON public.gm_login_history FOR SELECT TO authenticated USING(user_id=public.gm_current_profile_id());
+CREATE POLICY "gm users insert own login history" ON public.gm_login_history FOR INSERT TO authenticated WITH CHECK(user_id=public.gm_current_profile_id());
+GRANT SELECT,INSERT ON public.gm_login_history TO authenticated;
+
+CREATE TABLE IF NOT EXISTS public.gm_notifications (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid NOT NULL REFERENCES public.gm_profiles(id) ON DELETE CASCADE,
+ actor_id uuid REFERENCES public.gm_profiles(id) ON DELETE SET NULL,conversation_id uuid REFERENCES public.gm_conversations(id) ON DELETE CASCADE,
+ message_id uuid REFERENCES public.gm_messages(id) ON DELETE CASCADE,type text NOT NULL DEFAULT 'message',
+ title text NOT NULL,body text NOT NULL DEFAULT '',read_at timestamptz,created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.gm_notifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "gm users read own notifications" ON public.gm_notifications FOR SELECT TO authenticated USING(user_id=public.gm_current_profile_id());
+CREATE POLICY "gm users update own notifications" ON public.gm_notifications FOR UPDATE TO authenticated USING(user_id=public.gm_current_profile_id()) WITH CHECK(user_id=public.gm_current_profile_id());
+GRANT SELECT,UPDATE ON public.gm_notifications TO authenticated;
+CREATE OR REPLACE FUNCTION public.gm_notify_conversation_message()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public
+AS $$
+BEGIN
+ INSERT INTO public.gm_notifications(user_id,actor_id,conversation_id,message_id,type,title,body)
+ SELECT cm.user_id,NEW.sender_id,NEW.conversation_id,NEW.id,
+   CASE WHEN NEW.type IN ('call-log','call-signal') THEN 'call' ELSE 'message' END,
+   CASE WHEN NEW.type='call-log' THEN 'Call activity' ELSE 'New message' END,left(coalesce(NEW.body,''),240)
+ FROM public.gm_conversation_members cm
+ WHERE cm.conversation_id=NEW.conversation_id AND cm.user_id<>NEW.sender_id
+ AND NOT EXISTS(SELECT 1 FROM public.gm_conversation_preferences cp WHERE cp.user_id=cm.user_id AND cp.conversation_id=NEW.conversation_id AND cp.muted_until>now());
+ RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.gm_notify_conversation_message() FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS gm_notify_message_insert ON public.gm_messages;
+CREATE TRIGGER gm_notify_message_insert AFTER INSERT ON public.gm_messages FOR EACH ROW EXECUTE FUNCTION public.gm_notify_conversation_message();
+
+-- Enforce user blocks in the database, not just the UI.
+CREATE POLICY "gm prevent membership creation across blocks" ON public.gm_conversation_members
+AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK (
+ NOT EXISTS(SELECT 1 FROM public.gm_user_blocks b WHERE
+  (b.blocker_id=public.gm_current_profile_id() AND b.blocked_id=gm_conversation_members.user_id)
+  OR (b.blocked_id=public.gm_current_profile_id() AND b.blocker_id=gm_conversation_members.user_id))
+);
+CREATE POLICY "gm prevent message send across blocks" ON public.gm_messages
+AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK (
+ NOT EXISTS(SELECT 1 FROM public.gm_conversation_members cm JOIN public.gm_user_blocks b
+  ON (b.blocker_id=cm.user_id AND b.blocked_id=public.gm_current_profile_id())
+  OR (b.blocked_id=cm.user_id AND b.blocker_id=public.gm_current_profile_id())
+  WHERE cm.conversation_id=gm_messages.conversation_id AND cm.user_id<>public.gm_current_profile_id())
+);
+CREATE POLICY "gm prevent message move outside own conversations" ON public.gm_messages
+AS RESTRICTIVE FOR UPDATE TO authenticated USING(public.gm_is_conversation_member(conversation_id))
+WITH CHECK(sender_id=public.gm_current_profile_id() AND public.gm_is_conversation_member(conversation_id));
+
+-- Scheduled messages are dispatched by Supabase Cron once per minute.
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+GRANT USAGE ON SCHEMA cron TO postgres;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA cron TO postgres;
+CREATE OR REPLACE FUNCTION public.gm_process_scheduled_messages()
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path=public
+AS $$
+DECLARE sent_count integer;
+BEGIN
+ WITH due AS MATERIALIZED (
+  SELECT id,conversation_id,sender_id,body,message_type FROM public.gm_scheduled_messages
+  WHERE scheduled_for<=now() AND sent_at IS NULL AND cancelled_at IS NULL
+  ORDER BY scheduled_for FOR UPDATE SKIP LOCKED LIMIT 100
+ ), inserted AS (
+  INSERT INTO public.gm_messages(conversation_id,sender_id,body,type,metadata)
+  SELECT conversation_id,sender_id,body,message_type,jsonb_build_object('scheduled',true) FROM due RETURNING id
+ )
+ UPDATE public.gm_scheduled_messages s SET sent_at=now() FROM due WHERE s.id=due.id;
+ GET DIAGNOSTICS sent_count=ROW_COUNT;
+ RETURN sent_count;
+END $$;
+REVOKE ALL ON FUNCTION public.gm_process_scheduled_messages() FROM PUBLIC,anon,authenticated;
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM cron.job WHERE jobname='gm-process-scheduled-messages') THEN
+  PERFORM cron.schedule('gm-process-scheduled-messages','* * * * *','select public.gm_process_scheduled_messages();');
+ END IF;
+END $$;
