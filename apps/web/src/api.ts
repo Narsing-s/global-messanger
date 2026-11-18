@@ -10,7 +10,7 @@ async function currentProfile() {
   const { data:{ user }, error } = await sb.auth.getUser();
   if (error || !user) throw new Error('Please sign in again.');
   if (profileCache.has(user.id)) return profileCache.get(user.id);
-  const { data, error:e } = await sb.from('gm_profiles').select('*').eq('auth_user_id',user.id).single();
+  const { data, error:e } = await sb.from('gm_profiles').select('id,auth_user_id,username,display_name,avatar_url,last_seen_at,created_at,updated_at').eq('auth_user_id',user.id).single();
   if (e || !data) fail(e || new Error('Your Messenger profile is not ready yet. Please refresh.'));
   profileCache.set(user.id,data);
   return data;
@@ -61,7 +61,7 @@ async function listMessages(conversationId:string,limit=100) {
   const {data,error}=await sb.from('gm_messages').select('*').eq('conversation_id',conversationId).order('created_at',{ascending:true}).limit(limit);
   if(error)fail(error);
   const ids=[...new Set((data||[]).map((m:any)=>m.sender_id))];
-  const {data:profiles}=await sb.from('gm_profiles').select('*').in('id',ids);
+  const {data:profiles}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);
   const byId=new Map((profiles||[]).map((p:any)=>[p.id,p]));
   return (data||[]).map((m:any)=>messageShape(m,byId.get(m.sender_id)));
 }
