@@ -1,0 +1,29 @@
+name: API connectivity smoke test
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/cloudflare/**'
+      - 'apps/web/src/api.ts'
+      - '.github/workflows/api-smoke-test.yml'
+jobs:
+  api-health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check production API health
+        run: |
+          set -euo pipefail
+          curl --fail --show-error --silent --max-time 20 \
+            https://global-messenger-api.narsingbeesetti006.workers.dev/api/health
+      - name: Check browser CORS preflight
+        run: |
+          set -euo pipefail
+          headers="$(curl --fail --show-error --silent --max-time 20 -D - -o /dev/null \
+            -X OPTIONS \
+            -H 'Origin: https://global-messanger-web-git-feature-supa-f744b6-narsing-s-projects.vercel.app' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type' \
+            https://global-messenger-api.narsingbeesetti006.workers.dev/api/auth/register)"
+          printf '%s\n' "$headers"
+          printf '%s' "$headers" | grep -qi '^access-control-allow-origin: https://global-messanger-web-git-feature-supa-f744b6-narsing-s-projects.vercel.app'
+          printf '%s' "$headers" | grep -qi '^access-control-allow-methods:.*POST'
