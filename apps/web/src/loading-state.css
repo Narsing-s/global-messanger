@@ -1,0 +1,28 @@
+.gm-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.gm-loading-spinner {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: gm-spin 0.7s linear infinite;
+}
+
+@keyframes gm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gm-loading-spinner {
+    animation-duration: 2s;
+  }
+}
