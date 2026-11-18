@@ -88,6 +88,7 @@ async function sendMessage(conversationId:string,body:string,extra:any={}) {
 }
 async function ensureDirect(userId:string) {
   const sb=await getSupabase(),me=await currentProfile();
+  const {data:isBlocked,error:blockError}=await sb.rpc('gm_is_blocked_user',{target_user:userId});if(blockError)fail(blockError);if(isBlocked)throw new Error('This conversation cannot be started because one of the accounts has blocked the other.');
   const {data:mine,error}=await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id);
   if(error)fail(error);
   const {data:theirs,error:e}=await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',userId);
@@ -223,6 +224,7 @@ export const api = {
   direct:ensureDirect,
   async group(title:string,userIds:string[]) {
     const sb=await getSupabase(),me=await currentProfile();
+    for(const id of [...new Set(userIds)]){const {data:isBlocked,error}=await sb.rpc('gm_is_blocked_user',{target_user:id});if(error)fail(error);if(isBlocked)throw new Error('A blocked account cannot be added to this group.');}
     const {data:c,error}=await sb.from('gm_conversations').insert({title,is_group:true,creator_id:me.id}).select('id').single();
     if(error)fail(error);
     const ids=[...new Set([me.id,...userIds])];
@@ -303,13 +305,15 @@ export const api = {
     const sb=await getSupabase(),me=await currentProfile();const {data,error}=await sb.from('gm_bookmarks').select('message_id,created_at').eq('user_id',me.id).order('created_at',{ascending:false}).limit(100);if(error)fail(error);
     const ids=(data||[]).map((x:any)=>x.message_id);if(!ids.length)return [];
     const {data:messages,error:e}=await sb.from('gm_messages').select('*').in('id',ids);if(e)fail(e);
-    const byId=new Map((messages||[]).map((m:any)=>[m.id,m]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:messageShape(byId.get(x.message_id),undefined)})).filter((x:any)=>x.message);
+    const senderIds=[...new Set((messages||[]).map((m:any)=>m.sender_id))];const {data:people,error:pe}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',senderIds);if(pe)fail(pe);
+    const senders=new Map((people||[]).map((p:any)=>[p.id,p]));const byId=new Map((messages||[]).map((m:any)=>[m.id,messageShape(m,senders.get(m.sender_id))]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:byId.get(x.message_id)})).filter((x:any)=>x.message);
   },
   async pins(conversationId:string){
     const sb=await getSupabase();const {data,error}=await sb.from('gm_pinned_messages').select('message_id,created_at').eq('conversation_id',conversationId).order('created_at',{ascending:false});if(error)fail(error);
     const ids=(data||[]).map((x:any)=>x.message_id);if(!ids.length)return [];
     const {data:messages,error:e}=await sb.from('gm_messages').select('*').in('id',ids);if(e)fail(e);
-    const byId=new Map((messages||[]).map((m:any)=>[m.id,m]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:messageShape(byId.get(x.message_id),undefined)})).filter((x:any)=>x.message);
+    const senderIds=[...new Set((messages||[]).map((m:any)=>m.sender_id))];const {data:people,error:pe}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',senderIds);if(pe)fail(pe);
+    const senders=new Map((people||[]).map((p:any)=>[p.id,p]));const byId=new Map((messages||[]).map((m:any)=>[m.id,messageShape(m,senders.get(m.sender_id))]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:byId.get(x.message_id)})).filter((x:any)=>x.message);
   },
   async mute(id:string,minutes:number){
     const sb=await getSupabase(),me=await currentProfile();const muted_until=minutes?new Date(Date.now()+minutes*60000).toISOString():null;
