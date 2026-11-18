@@ -1,78 +1,52 @@
-# Supabase migration plan
+# Global Messenger — Supabase cutover
 
-## Current state
+## Supabase project
 
-The production branch currently runs the Cloudflare Worker against Cloudflare D1 and uses a custom password/JWT flow. The web client points at the Worker URL. This is **not yet a Supabase-backed runtime**. Do not remove the D1 binding or change production API routing until the application adapter has been migrated and tested.
+The selected project is **Online-cloth-store** (wozvcabjepdjkcuasqko, region eu-west-1). It is shared with other apps. Messenger objects are isolated under the gm_* table prefix and gm-chat-media / gm-avatars buckets. Do not rename, truncate, or alter existing store / WorldConnect tables, triggers, or policies.
 
-## Target
+The applied migration is 20261118134618_global_messenger_isolated_schema. The matching SQL file is supabase/migrations/20261118134618_global_messenger_isolated_schema.sql.
 
-- Supabase PostgreSQL: durable relational source of truth.
-- Supabase Auth: registration, login, password recovery and access tokens.
-- Supabase Storage: private chat-media bucket.
-- Supabase Realtime: selected message/presence events.
-- Cloudflare Worker + Durable Objects: API boundary, validation, rate limits and transient room fan-out.
-- Existing React/Capacitor web and Android clients: retained.
+## Migrated to Supabase
 
-## Apply the database foundation
+- **Auth:** email/password signup, login, logout and password reset use Supabase Auth. New signups tag user metadata with app=global-messenger; the profile trigger ignores all other apps.
+- **Database:** profiles, conversations, memberships, messages, reactions, bookmarks, pins, devices, preferences, attachments, scheduled messages, polls, blocks and reports use isolated gm_* tables with RLS.
+- **Storage:** private conversation files use gm-chat-media; profile avatars use gm-avatars.
+- **Realtime:** message inserts/updates/deletes and typing/presence use Supabase Realtime.
+- **E2EE key exchange:** device public keys are stored in gm_user_devices and readable only by authenticated users who share a conversation. Private keys remain on the user's device.
 
-1. Create a Supabase project in the region closest to the majority of users.
-2. Install the Supabase CLI and authenticate.
-3. From the repository root run `supabase link --project-ref YOUR_PROJECT_REF`.
-4. Apply migrations with `supabase db push`.
-5. In Supabase Authentication, enable email/password and configure the site URL plus allowed redirect URLs for the web app and Capacitor app.
-6. In Database > Replication, enable Realtime for `messages`, `conversation_members`, `message_reactions`, `polls` and `poll_votes` only when the client subscribes to them.
-7. Confirm the private `chat-media` bucket exists. The migration creates it with a 50 MiB limit and restrictive MIME allowlist.
+The browser uses only the Supabase URL and publishable key. Never place a Supabase secret/service-role key in Vite, a mobile bundle, GitHub Actions artifacts, or local storage.
 
-## Environment variables
+## Required Supabase Auth settings
 
-Worker secrets (set with `wrangler secret put`, never commit values):
+In Supabase Dashboard → Authentication → URL Configuration:
 
-- `SUPABASE_URL`: project URL.
-- `SUPABASE_ANON_KEY`: publishable/anon key used only where an end-user token is required.
-- `SUPABASE_SERVICE_ROLE_KEY`: server-only key. Never expose to Vite, Android, logs, or GitHub artifacts.
-- `JWT_SECRET`: keep a separate high-entropy secret until custom JWT verification is fully removed.
+1. Set Site URL to the deployed Vercel URL.
+2. Add the Vercel production URL and local development URL to Redirect URLs.
+3. Keep email/password enabled and email confirmation enabled.
+4. The default email sender is rate-limited and best-effort; configure SMTP before relying on high-volume production signups or password resets.
 
-Web build variables (only after the client auth adapter is migrated):
+The client currently loads @supabase/supabase-js from the browser ESM CDN at esm.sh to avoid introducing a package-lock mismatch. If you later add it as a local dependency, regenerate and commit the root lockfile in a normal npm environment.
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+## Current cutover limits
 
-The service-role key must never use a `VITE_` prefix.
+This is a staged migration, not yet a complete replacement of every legacy endpoint.
 
-## Existing D1 data and accounts
+- The primary React app's account, chat, group, message, upload, presence, typing, E2EE-key, privacy settings, device-session and password-reset flows use Supabase.
+- Legacy add-on modules still contain Worker endpoints for support tickets, AI assist, global entities and some call/SFU control APIs. Those routes need their own Supabase tables / Edge Functions before those add-on screens can be considered migrated.
+- Supabase is not a media SFU. Live audio/video still needs a separate WebRTC SFU/TURN service; the media transport endpoints cannot be replaced by a Postgres table or Realtime channel.
+- Existing Cloudflare D1 records and PBKDF2 password hashes have not been imported. Existing accounts must be claimed or recreated through a verified reset flow before their old chat history can be retained.
 
-The schema deliberately keeps UUID primary keys for profiles, conversations and messages so D1 records can retain their identities. Export and import data in this order:
+Do not delete the Cloudflare Worker/D1 resources until those remaining modules are migrated and a D1 data export/import has been reconciled.
 
-1. profiles (map legacy user IDs to profile IDs; do not import password hashes);
-2. conversations;
-3. conversation_members;
-4. messages;
-5. message_reactions, bookmarks and pinned_messages;
-6. device tokens and other optional data only after reviewing consent and token validity.
+## Test plan
 
-The old PBKDF2 password hashes are not Supabase Auth credentials. Do not copy them into auth tables or claim password migration is complete. Existing users must complete a secure password-reset / account-claim flow. The auth trigger links a newly registered Supabase identity to an unclaimed legacy profile with the same username, preserving its profile ID and chat history. Before enabling public signups, verify username-claim collision handling and add rate limiting / email verification.
+1. Deploy the feature branch to a preview URL.
+2. Register a new test account using a unique email and confirm the email if prompted.
+3. Log in, search for another test account, create a direct chat and send messages in both directions.
+4. Create a group and verify only members can read it.
+5. Test reactions, edits, deletes, typing and presence with two separate browser sessions.
+6. Upload an image and a PDF; verify chat files are private and avatar URLs render.
+7. Test password reset from the deployed domain.
+8. Confirm non-members cannot query another conversation's messages or storage objects.
 
-## Required application cutover (not performed by this schema migration)
-
-The current Worker uses D1 prepared statements throughout `apps/cloudflare/src/index.ts`. The current browser client stores a custom `gm_token` and calls that Worker. A safe cutover must replace those together:
-
-- Supabase Auth sign-up/sign-in/sign-out and refresh-token lifecycle.
-- Worker token validation through Supabase Auth (never trust decoded JWT claims alone).
-- A typed Postgres data-access layer replacing every D1 query and batch.
-- Authorization/RLS tests for every route and destructive operation.
-- Private Storage upload/download flows with signed URLs and resumable upload handling.
-- Realtime subscription auth and conversation-scoped event delivery.
-- Android Capacitor redirect/deep-link and push-token registration.
-- Backfill/import verification, rollback plan and staged cutover.
-
-Do not point production traffic at Supabase until all existing API routes pass integration tests against the new adapter. Keep D1 read-only backup until reconciliation is complete.
-
-## Security checklist
-
-- Keep service-role credentials in Cloudflare Worker secrets only.
-- Enable email confirmation and configure password reset redirects.
-- Add rate limits for auth, search, message send, uploads and reports.
-- Use private media storage and short-lived signed URLs.
-- Verify RLS with two test accounts (member and non-member) for every table and Storage path.
-- Never log access tokens, password-reset links, private message bodies or storage secrets.
-- Turn on automated Supabase backups and periodically test restoration.
+No live user signup or message test has been run yet. The Supabase schema and policies were applied and checked, but the branch still needs a Vercel/GitHub build and two-account browser test before production cutover.

@@ -10,7 +10,7 @@ async function currentProfile() {
   const { data:{ user }, error } = await sb.auth.getUser();
   if (error || !user) throw new Error('Please sign in again.');
   if (profileCache.has(user.id)) return profileCache.get(user.id);
-  const { data, error:e } = await sb.from('gm_profiles').select('*').eq('auth_user_id',user.id).single();
+  const { data, error:e } = await sb.from('gm_profiles').select('id,auth_user_id,username,display_name,avatar_url,last_seen_at,created_at,updated_at').eq('auth_user_id',user.id).single();
   if (e || !data) fail(e || new Error('Your Messenger profile is not ready yet. Please refresh.'));
   profileCache.set(user.id,data);
   return data;
@@ -61,9 +61,17 @@ async function listMessages(conversationId:string,limit=100) {
   const {data,error}=await sb.from('gm_messages').select('*').eq('conversation_id',conversationId).order('created_at',{ascending:true}).limit(limit);
   if(error)fail(error);
   const ids=[...new Set((data||[]).map((m:any)=>m.sender_id))];
-  const {data:profiles}=await sb.from('gm_profiles').select('*').in('id',ids);
+  const messageIds=(data||[]).map((m:any)=>m.id);
+  const {data:profiles}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);
   const byId=new Map((profiles||[]).map((p:any)=>[p.id,p]));
-  return (data||[]).map((m:any)=>messageShape(m,byId.get(m.sender_id)));
+  const {data:attachments,error:attachmentError}=await sb.from('gm_attachments').select('message_id,bucket_id,object_path,file_name,mime_type,size_bytes').in('message_id',messageIds);
+  if(attachmentError)fail(attachmentError);
+  const attachmentMap=new Map<string,any>();
+  await Promise.all((attachments||[]).map(async (a:any)=>{
+    const {data:signed,error:signError}=await sb.storage.from(a.bucket_id).createSignedUrl(a.object_path,3600);
+    if(!signError&&signed)attachmentMap.set(a.message_id,{attachmentUrl:signed.signedUrl,attachmentName:a.file_name,attachmentMime:a.mime_type,attachmentSize:a.size_bytes});
+  }));
+  return (data||[]).map((m:any)=>messageShape({...m,metadata:{...(m.metadata||{}),...(attachmentMap.get(m.id)||{})}},byId.get(m.sender_id)));
 }
 async function sendMessage(conversationId:string,body:string,extra:any={}) {
   const sb=await getSupabase(),me=await currentProfile();
@@ -122,15 +130,16 @@ export async function request<T=any>(path:string,options:RequestInit={}):Promise
 async function uploadWithProgress(file:File,onProgress?:(n:number)=>void,signal?:AbortSignal,conversationId?:string) {
   if(signal?.aborted)throw new DOMException('Upload aborted','AbortError');
   const sb=await getSupabase(),me=await currentProfile();
-  if(!conversationId)throw new Error('Choose a conversation before uploading.');
   const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-  const path=conversationId+'/'+me.id+'/'+crypto.randomUUID()+'-'+safeName;
-  const {error}=await sb.storage.from('gm-chat-media').upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});
+  const bucket=conversationId?'gm-chat-media':'gm-avatars';
+  const path=conversationId?conversationId+'/'+me.id+'/'+crypto.randomUUID()+'-'+safeName:me.id+'/'+crypto.randomUUID()+'-'+safeName;
+  const {error}=await sb.storage.from(bucket).upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});
   if(error)fail(error);
   onProgress?.(100);
-  const {data:signed,error:se}=await sb.storage.from('gm-chat-media').createSignedUrl(path,3600);
+  if(bucket==='gm-avatars'){const {data}=sb.storage.from(bucket).getPublicUrl(path);return {url:data.publicUrl,path,bucket,name:file.name,mime:file.type,size:file.size};}
+  const {data:signed,error:se}=await sb.storage.from(bucket).createSignedUrl(path,3600);
   if(se)fail(se);
-  return {url:signed.signedUrl,path,name:file.name,mime:file.type,size:file.size};
+  return {url:signed.signedUrl,path,bucket,name:file.name,mime:file.type,size:file.size};
 }
 export const api = {
   conversations:listConversations,
@@ -153,6 +162,7 @@ export const api = {
     if(e)fail(e);
     return loadConversation(c.id);
   },
+  async updateProfile(patch:Record<string,unknown>){const sb=await getSupabase(),me=await currentProfile();const {error}=await sb.from('gm_profiles').update(patch).eq('id',me.id);if(error)fail(error);profileCache.delete(me.auth_user_id);},
   async read(id:string) {
     const sb=await getSupabase(),me=await currentProfile();
     const {error}=await sb.from('gm_conversation_members').update({last_read_at:now()}).eq('conversation_id',id).eq('user_id',me.id);
