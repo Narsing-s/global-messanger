@@ -128,6 +128,7 @@ async function uploadWithProgress(file:File,onProgress?:(n:number)=>void,signal?
   const {error}=await sb.storage.from(bucket).upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});
   if(error)fail(error);
   onProgress?.(100);
+  if(bucket==='gm-avatars'){const {data}=sb.storage.from(bucket).getPublicUrl(path);return {url:data.publicUrl,path,bucket,name:file.name,mime:file.type,size:file.size};}
   const {data:signed,error:se}=await sb.storage.from(bucket).createSignedUrl(path,3600);
   if(se)fail(se);
   return {url:signed.signedUrl,path,bucket,name:file.name,mime:file.type,size:file.size};
@@ -153,6 +154,7 @@ export const api = {
     if(e)fail(e);
     return loadConversation(c.id);
   },
+  async updateProfile(patch:Record<string,unknown>){const sb=await getSupabase(),me=await currentProfile();const {error}=await sb.from('gm_profiles').update(patch).eq('id',me.id);if(error)fail(error);profileCache.delete(me.auth_user_id);},
   async read(id:string) {
     const sb=await getSupabase(),me=await currentProfile();
     const {error}=await sb.from('gm_conversation_members').update({last_read_at:now()}).eq('conversation_id',id).eq('user_id',me.id);
