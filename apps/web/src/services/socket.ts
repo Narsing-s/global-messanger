@@ -8,6 +8,7 @@ class MessengerSocket {
   private channels=new Map<string,any>();
   private presence:any=null;
   private profileId:string|null=null;
+  private privacy:any={online_status:true,typing_indicators:true};
   constructor(_token:string) { void this.connect(); }
   on(event:string,fn:Handler){if(!this.handlers.has(event))this.handlers.set(event,new Set());this.handlers.get(event)!.add(fn);return this;}
   once(event:string,fn:Handler){const wrap:Handler=(...a)=>{this.off(event,wrap);fn(...a)};return this.on(event,wrap);}
@@ -17,19 +18,19 @@ class MessengerSocket {
     try{
       const sb=await getSupabase();
       const {data:{user}}=await sb.auth.getUser();
-      if(user){const {data:profile}=await sb.from('gm_profiles').select('id').eq('auth_user_id',user.id).single();this.profileId=profile?.id||null;}else this.profileId=null;
-      const channel=sb.channel('gm-presence',{config:{presence:{key:user?.id||crypto.randomUUID()}}});
+      if(user){const {data:profile}=await sb.from('gm_profiles').select('id').eq('auth_user_id',user.id).single();this.profileId=profile?.id||null;if(this.profileId){const {data:privacy}=await sb.from('gm_privacy_settings').select('online_status,typing_indicators').eq('user_id',this.profileId).maybeSingle();this.privacy={online_status:privacy?.online_status!==false,typing_indicators:privacy?.typing_indicators!==false};}}else this.profileId=null;
+      const channel=sb.channel('gm-presence',{config:{presence:{key:this.profileId||crypto.randomUUID()}}});
       this.presence=channel;
       channel.on('presence',{event:'sync'},()=>{
         const state=channel.presenceState();
-        for(const [key,entries] of Object.entries(state))this.emitLocal('presence:update',{userId:key,online:Array.isArray(entries)&&entries.length>0});
+        void Promise.all(Object.entries(state).map(async([key,entries])=>{const {data:visible}=await sb.rpc('gm_online_visible',{target_user:key});if(visible!==false)this.emitLocal('presence:update',{userId:key,online:Array.isArray(entries)&&entries.length>0});}));
       });
       channel.subscribe((status:string)=>{
         if(status==='SUBSCRIBED'){this.connected=true;this.emitLocal('connect');}
         else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){this.connected=false;this.emitLocal('connect_error',new Error('Supabase Realtime connection failed'));}
         else if(status==='CLOSED'){this.connected=false;this.emitLocal('disconnect');}
       });
-      if(user)await channel.track({userId:user.id,online:true,lastSeenAt:new Date().toISOString()});
+      if(user&&this.profileId&&this.privacy.online_status)await channel.track({userId:this.profileId,online:true,lastSeenAt:new Date().toISOString()});
     }catch(e:any){this.emitLocal('connect_error',e);}
     return this;
   }
@@ -39,10 +40,16 @@ class MessengerSocket {
     this.channels.clear();this.presence=null;this.connected=false;
   }
   emit(event:string,data?:any,ack?:(v?:any)=>void){
-    if(event==='message:send'&&data?.conversationId){void api.sendMessage(data.conversationId,String(data.body||''),{type:data.type||'text',metadata:{clientId:data.clientId||null}}).then((m:any)=>{this.emitLocal('message:new',m);ack?.({ok:true,message:m});}).catch((e:any)=>{this.emitLocal('connect_error',e);ack?.({ok:false,error:e.message});});return this;}
+    if(event==='message:send'&&data?.conversationId){
+      if(data.type==='call-signal'){
+        void (async()=>{const sb=await getSupabase();const {data:{user}}=await sb.auth.getUser();if(!user)throw new Error('Please sign in again.');const {data:profile}=await sb.from('gm_profiles').select('id').eq('auth_user_id',user.id).single();if(!profile)throw new Error('Messenger profile unavailable.');const body=String(data.body||'');const prefix='__GM_CALL__';if(!body.startsWith(prefix))throw new Error('Invalid call signal.');const payload=JSON.parse(body.slice(prefix.length));const {error}=await sb.from('gm_call_signals').insert({conversation_id:data.conversationId,sender_id:profile.id,call_id:String(payload.callId||''),payload});if(error)throw error;ack?.({ok:true});})().catch((e:any)=>{this.emitLocal('connect_error',e);ack?.({ok:false,error:e.message});});
+        return this;
+      }
+      void api.sendMessage(data.conversationId,String(data.body||''),{type:data.type||'text',metadata:{clientId:data.clientId||null}}).then((m:any)=>{this.emitLocal('message:new',m);ack?.({ok:true,message:m});}).catch((e:any)=>{this.emitLocal('connect_error',e);ack?.({ok:false,error:e.message});});return this;
+    }
     if(event==='conversation:join'&&typeof data==='string'){void this.join(data);ack?.({ok:true});return this;}
     if(event==='conversation:leave'&&typeof data==='string'){void this.leave(data);ack?.({ok:true});return this;}
-    if(event==='typing'&&data?.conversationId){const ch=this.channels.get(data.conversationId);ch?.send({type:'broadcast',event:'typing',payload:{userId:this.profileId,typing:!!data.typing}});ack?.({ok:true});return this;}
+    if(event==='typing'&&data?.conversationId){const ch=this.channels.get(data.conversationId);if(this.privacy.typing_indicators)void ch?.send({type:'broadcast',event:'typing',payload:{userId:this.profileId,typing:!!data.typing}});ack?.({ok:true});return this;}
     return this;
   }
   private async join(id:string){
@@ -55,12 +62,13 @@ class MessengerSocket {
     ch.on('postgres_changes',{event:'UPDATE',schema:'public',table:'gm_messages',filter:'conversation_id=eq.'+id},(p:any)=>{
       const m=p.new;this.emitLocal(m.deleted_at?'message:deleted':'message:updated',m.deleted_at?{id:m.id,deletedAt:m.deleted_at}: {id:m.id,conversationId:m.conversation_id,senderId:m.sender_id,body:m.body,createdAt:m.created_at,editedAt:m.edited_at,type:m.type,...(m.metadata||{})});
     });
+    ch.on('postgres_changes',{event:'INSERT',schema:'public',table:'gm_call_signals',filter:'conversation_id=eq.'+id},(p:any)=>{const row=p.new;if(row.sender_id!==this.profileId)this.emitLocal('call:signal',{conversationId:id,senderId:row.sender_id,payload:row.payload});});
     ch.on('broadcast',{event:'typing'},(p:any)=>{if(p.payload?.userId!==this.profileId)this.emitLocal('typing',p.payload);});
     ch.on('presence',{event:'sync'},()=>{
       const state=ch.presenceState();
-      for(const [key,entries] of Object.entries(state))this.emitLocal('presence:update',{userId:key,online:Array.isArray(entries)&&entries.length>0});
+      void Promise.all(Object.entries(state).map(async([key,entries])=>{const {data:visible}=await sb.rpc('gm_online_visible',{target_user:key});if(visible!==false)this.emitLocal('presence:update',{userId:key,online:Array.isArray(entries)&&entries.length>0});}));
     });
-    ch.subscribe((status:string)=>{if(status==='SUBSCRIBED'&&this.profileId)void ch.track({userId:this.profileId,online:true});});
+    ch.subscribe((status:string)=>{if(status==='SUBSCRIBED'&&this.profileId&&this.privacy.online_status)void ch.track({userId:this.profileId,online:true});});
     this.channels.set(id,ch);
   }
   private async leave(id:string){const ch=this.channels.get(id);if(!ch)return;const sb=await getSupabase();await sb.removeChannel(ch);this.channels.delete(id);}
