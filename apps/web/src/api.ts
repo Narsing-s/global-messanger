@@ -222,6 +222,32 @@ export const api = {
     const {error}=await sb.from('gm_pinned_messages').delete().eq('conversation_id',conversationId).eq('message_id',messageId).eq('user_id',me.id);
     if(error)fail(error);
   },
+  async searchMessages(q:string,limit=50){
+    const sb=await getSupabase();const term=q.trim();if(term.length<2)return [];
+    const {data,error}=await sb.from('gm_messages').select('*').ilike('body','%'+term.replace(/[,%]/g,'')+'%').order('created_at',{ascending:false}).limit(limit);
+    if(error)fail(error);const ids=[...new Set((data||[]).map((m:any)=>m.sender_id))];
+    const {data:profiles,error:pe}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);if(pe)fail(pe);
+    const map=new Map((profiles||[]).map((p:any)=>[p.id,p]));return (data||[]).map((m:any)=>messageShape(m,map.get(m.sender_id)));
+  },
+  async bookmarks(){
+    const sb=await getSupabase(),me=await currentProfile();const {data,error}=await sb.from('gm_bookmarks').select('message_id,created_at').eq('user_id',me.id).order('created_at',{ascending:false}).limit(100);if(error)fail(error);
+    const ids=(data||[]).map((x:any)=>x.message_id);if(!ids.length)return [];
+    const {data:messages,error:e}=await sb.from('gm_messages').select('*').in('id',ids);if(e)fail(e);
+    const byId=new Map((messages||[]).map((m:any)=>[m.id,m]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:messageShape(byId.get(x.message_id),undefined)})).filter((x:any)=>x.message);
+  },
+  async pins(conversationId:string){
+    const sb=await getSupabase();const {data,error}=await sb.from('gm_pinned_messages').select('message_id,created_at').eq('conversation_id',conversationId).order('created_at',{ascending:false});if(error)fail(error);
+    const ids=(data||[]).map((x:any)=>x.message_id);if(!ids.length)return [];
+    const {data:messages,error:e}=await sb.from('gm_messages').select('*').in('id',ids);if(e)fail(e);
+    const byId=new Map((messages||[]).map((m:any)=>[m.id,m]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:messageShape(byId.get(x.message_id),undefined)})).filter((x:any)=>x.message);
+  },
+  async mute(id:string,minutes:number){
+    const sb=await getSupabase(),me=await currentProfile();const muted_until=minutes?new Date(Date.now()+minutes*60000).toISOString():null;
+    const {error}=await sb.from('gm_conversation_preferences').upsert({conversation_id:id,user_id:me.id,muted_until,updated_at:now()},{onConflict:'conversation_id,user_id'});if(error)fail(error);
+  },
+  async blockUser(userId:string){
+    const sb=await getSupabase(),me=await currentProfile();const {error}=await sb.from('gm_user_blocks').upsert({blocker_id:me.id,blocked_id:userId},{onConflict:'blocker_id,blocked_id'});if(error)fail(error);
+  },
   async media(conversationId?:string,q?:string,limit=100) {
     const sb=await getSupabase();
     let query=sb.from('gm_attachments').select('*').order('created_at',{ascending:false}).limit(limit);
