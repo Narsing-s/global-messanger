@@ -1,0 +1,43 @@
+/* Global Messenger UI polish: visual-only layer; existing API and chat behavior stay intact. */
+:root{--gm-accent:#5b63e8;--gm-accent-soft:#eef0ff;--gm-surface:#fff;--gm-canvas:#f3f5fb;--gm-ink:#19243a;--gm-muted:#8290a6;--gm-border:#e5e9f2;--gm-elev:0 18px 50px rgba(30,43,78,.09)}
+html,body,#root{min-height:100%;background:var(--gm-canvas)}
+body{color:var(--gm-ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+.messenger{padding:16px;gap:12px;background:radial-gradient(ellipse at 8% 0%,#e8ebff 0,transparent 35%),linear-gradient(135deg,#f6f7fc,#edf1f9)}
+.rail,.chat-list-pane,.conversation{background:rgba(255,255,255,.94);border:1px solid rgba(222,228,240,.9);box-shadow:var(--gm-elev);backdrop-filter:blur(18px)}
+.rail{border-radius:24px;padding:18px 9px}.chat-list-pane,.conversation{border-radius:24px}
+.brand-mark,.primary,.composer .send{background:linear-gradient(135deg,#6875f5,#535bd6);box-shadow:0 7px 18px rgba(83,91,214,.2)}
+.rail nav button{font-size:10px}.rail nav button.active,.rail nav button:hover,.folders button.selected{background:var(--gm-accent-soft);color:var(--gm-accent)}
+.list-header{padding:18px 18px}.brand b{font-size:13px;letter-spacing:-.2px}.brand small{font-size:9px}
+.me-row{padding:14px 17px}.me-row b{font-size:12px}.search{height:42px;margin:12px 14px 8px;border-radius:13px;background:#f7f8fc;border-color:#e7eaf2}.search input{font-size:11px}
+.folders{padding:4px 12px 10px}.folders button{font-size:9px;padding:7px 10px}.chat-list{padding:7px 8px}.chat{padding:11px 9px;border-radius:14px}.chat strong{font-size:11px}.chat p{font-size:9px}
+.conversation-head{height:72px;min-height:72px;padding:0 19px}.conversation-head b{font-size:12px}.conversation-head small{font-size:9px}
+.messages{padding:22px clamp(18px,5vw,68px);background:radial-gradient(circle at 10% 0,#edf0ff,transparent 32%),#fafbfe}
+.bubble{padding:10px 13px;box-shadow:0 5px 15px rgba(32,45,80,.045);border:1px solid #e9edf5}.bubble p{font-size:11px;line-height:1.55}.bubble-row.own .bubble{background:linear-gradient(135deg,#6875f5,#535bd6);box-shadow:0 7px 18px rgba(83,91,214,.16)}
+.composer-area{padding:12px 16px 14px;background:rgba(255,255,255,.88)}.composer{height:50px;border-radius:15px;background:#fff;border-color:#e4e8f1}.composer:focus-within{border-color:#aeb5fa;box-shadow:0 0 0 3px rgba(91,99,232,.09)}.composer input{font-size:11px}
+.auth-page{background:radial-gradient(circle at 15% 10%,#e4e9ff,transparent 34%),linear-gradient(135deg,#f7f8fc,#edf1fa)}.auth-card{border-radius:26px;box-shadow:0 24px 70px rgba(31,43,78,.13)}.auth-card h1{letter-spacing:-.7px}
+.modal{border:1px solid #e6eaf2;border-radius:22px}.setting{width:100%;align-items:center;background:#fff;color:inherit;text-decoration:none}.theme-setting{cursor:pointer;text-align:left}.theme-setting>span:nth-child(2){flex:1}.theme-setting>strong{font-size:9px;color:var(--gm-accent);white-space:nowrap}.setting-icon{width:28px;height:28px;display:grid;place-items:center;background:#eef0ff;border-radius:9px;color:var(--gm-accent)}.setting-icon svg{width:16px}
+:focus-visible{outline:3px solid rgba(91,99,232,.35);outline-offset:2px}
+html[data-gm-theme="dark"],html[data-gm-theme="dark"] body,html[data-gm-theme="dark"] #root{background:#0b1020;color:#e8edf8}
+html[data-gm-theme="dark"] .messenger{background:radial-gradient(ellipse at 8% 0%,#1a2041 0,transparent 38%),linear-gradient(135deg,#0c1223,#111a2d)}
+html[data-gm-theme="dark"] .rail,html[data-gm-theme="dark"] .chat-list-pane,html[data-gm-theme="dark"] .conversation{background:rgba(19,27,46,.96);border-color:#28334a;box-shadow:0 18px 50px rgba(0,0,0,.24)}
+html[data-gm-theme="dark"] .list-header,html[data-gm-theme="dark"] .me-row,html[data-gm-theme="dark"] .folders,html[data-gm-theme="dark"] .conversation-head,html[data-gm-theme="dark"] .composer-area{border-color:#28334a}
+html[data-gm-theme="dark"] .brand b,html[data-gm-theme="dark"] .me-row b,html[data-gm-theme="dark"] .chat strong,html[data-gm-theme="dark"] .conversation-head b{color:#edf1fb}
+html[data-gm-theme="dark"] .brand small,html[data-gm-theme="dark"] .me-row small,html[data-gm-theme="dark"] .chat p,html[data-gm-theme="dark"] .chat time,html[data-gm-theme="dark"] .conversation-head small{color:#98a6bf}
+html[data-gm-theme="dark"] .search,html[data-gm-theme="dark"] .composer{background:#101a2e;border-color:#2b3851}
+html[data-gm-theme="dark"] .search input,html[data-gm-theme="dark"] .composer input{color:#edf1fb}
+html[data-gm-theme="dark"] .chat:hover,html[data-gm-theme="dark"] .chat.selected,html[data-gm-theme="dark"] .rail nav button.active,html[data-gm-theme="dark"] .rail nav button:hover,html[data-gm-theme="dark"] .folders button.selected{background:#252d50;color:#cbd1ff}
+html[data-gm-theme="dark"] .messages{background:radial-gradient(circle at 10% 0,#1b2342,transparent 32%),#10182a}
+html[data-gm-theme="dark"] .bubble{background:#1c2940;color:#e8edf8;border-color:#2a3953}
+html[data-gm-theme="dark"] .bubble-row.own .bubble{background:linear-gradient(135deg,#626ce6,#4c55bf);color:#fff}
+html[data-gm-theme="dark"] .welcome h1{color:#edf1fb}
+html[data-gm-theme="dark"] .modal,html[data-gm-theme="dark"] .chat-menu,html[data-gm-theme="dark"] .people,html[data-gm-theme="dark"] .emoji,html[data-gm-theme="dark"] .reaction{background:#172239;color:#e8edf8;border-color:#2a3953}
+html[data-gm-theme="dark"] .setting,html[data-gm-theme="dark"] .group-search input,html[data-gm-theme="dark"] .modal-body input{background:#111c31;color:#e8edf8;border-color:#2a3953}
+html[data-gm-theme="dark"] .setting small,html[data-gm-theme="dark"] .modal-body>p{color:#98a6bf}
+html[data-gm-theme="dark"] .auth-page{background:radial-gradient(circle at 15% 10%,#1b2344,transparent 34%),#0d1425}
+html[data-gm-theme="dark"] .auth-card{background:#172239;border-color:#2a3953}
+html[data-gm-theme="dark"] .auth-card h1,html[data-gm-theme="dark"] .auth-card .brand b{color:#edf1fb}
+html[data-gm-theme="dark"] .auth-card>p,html[data-gm-theme="dark"] .auth-card .security-note{color:#9ba9c0}
+html[data-gm-theme="dark"] .auth-card>input{background:#101a2e;color:#edf1fb;border-color:#2a3953}
+html[data-gm-theme="dark"] .security-note{background:#111c31}
+@media(max-width:700px){.messenger{padding:0;gap:0}.chat-list-pane,.conversation{border-radius:0}.messages{padding:14px 12px}.composer-area{padding:9px 10px calc(10px + env(safe-area-inset-bottom))}}
+@media(prefers-reduced-motion:no-preference){.chat,.rail nav button,.primary,.composer button{transition:background .18s ease,transform .18s ease,box-shadow .18s ease}.chat:hover{transform:translateX(2px)}}
