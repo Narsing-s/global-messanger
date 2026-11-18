@@ -104,6 +104,15 @@ async function ensureDirect(userId:string) {
   if(ie)fail(ie);
   return loadConversation(c.id);
 }
+async function recordLogin(sb:any,profile:any,event:'login'|'logout'|'password_changed'){
+  const ua=typeof navigator!=='undefined'?navigator.userAgent.slice(0,500):null;
+  const {error}=await sb.from('gm_login_history').insert({user_id:profile.id,event,user_agent:ua});
+  if(error)console.warn('Unable to record login history',error.message);
+  if(event==='login'){
+    const {error:deviceError}=await sb.from('gm_user_devices').upsert({user_id:profile.id,device_name:'browser',platform:'web',trusted:true,last_seen_at:now()},{onConflict:'user_id,device_name'});
+    if(deviceError)console.warn('Unable to refresh device record',deviceError.message);
+  }
+}
 export const auth = {
   async register(input:{username:string;displayName:string;email:string;password:string}) {
     const sb=await getSupabase();
@@ -112,6 +121,7 @@ export const auth = {
     if(!data.session)return {confirmationRequired:true};
     profileCache.delete(data.user?.id||'');
     const p=await currentProfile();
+    await recordLogin(sb,p,'login');
     return {token:data.session.access_token,user:userShape(p)};
   },
   async login(email:string,password:string) {
@@ -120,9 +130,10 @@ export const auth = {
     if(error)fail(error);
     profileCache.delete(data.user.id);
     const p=await currentProfile();
+    await recordLogin(sb,p,'login');
     return {token:data.session.access_token,user:userShape(p)};
   },
-  async logout(){const sb=await getSupabase();profileCache.clear();const {error}=await sb.auth.signOut();if(error)fail(error);}
+  async logout(){const sb=await getSupabase();try{const p=await currentProfile();await recordLogin(sb,p,'logout')}catch{}profileCache.clear();const {error}=await sb.auth.signOut();if(error)fail(error);}
 };
 export async function request<T=any>(path:string,options:RequestInit={}):Promise<T>{
   throw new Error('Legacy HTTP API routes have been removed. Use the Supabase-backed Messenger API instead.');
