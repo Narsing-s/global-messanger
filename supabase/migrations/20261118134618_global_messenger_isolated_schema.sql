@@ -205,6 +205,66 @@ drop trigger if exists gm_conversations_touch_updated_at on public.gm_conversati
 create trigger gm_conversations_touch_updated_at before update on public.gm_conversations
 for each row execute function public.gm_touch_updated_at();
 
+
+-- Safe profile recovery for users created before/without the auth trigger.
+-- Returns one JSON object (never a zero-row .single() response).
+CREATE OR REPLACE FUNCTION public.gm_ensure_current_profile()
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+DECLARE
+  v_auth auth.users%ROWTYPE;
+  v_profile public.gm_profiles%ROWTYPE;
+  v_username text;
+  v_display_name text;
+BEGIN
+  SELECT * INTO v_auth FROM auth.users WHERE id = auth.uid();
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  SELECT * INTO v_profile FROM public.gm_profiles WHERE auth_user_id = v_auth.id;
+  IF NOT FOUND THEN
+    v_username := coalesce(nullif(v_auth.raw_user_meta_data->>'username',''), split_part(coalesce(v_auth.email,''),'@',1));
+    IF v_username !~ '^[A-Za-z0-9_.-]{3,24}$'
+       OR EXISTS (SELECT 1 FROM public.gm_profiles p WHERE lower(p.username)=lower(v_username) AND p.auth_user_id IS DISTINCT FROM v_auth.id) THEN
+      v_username := 'user_' || substr(replace(v_auth.id::text,'-',''),1,12);
+    END IF;
+    v_display_name := coalesce(nullif(v_auth.raw_user_meta_data->>'display_name',''), v_username);
+
+    UPDATE public.gm_profiles
+       SET auth_user_id = v_auth.id,
+           email = coalesce(v_auth.email, email),
+           display_name = v_display_name
+     WHERE lower(username)=lower(v_username) AND auth_user_id IS NULL
+     RETURNING * INTO v_profile;
+
+    IF NOT FOUND THEN
+      INSERT INTO public.gm_profiles(auth_user_id,username,email,display_name)
+      VALUES(v_auth.id,v_username,v_auth.email,v_display_name)
+      ON CONFLICT (auth_user_id) DO UPDATE
+        SET email=coalesce(EXCLUDED.email,public.gm_profiles.email)
+      RETURNING * INTO v_profile;
+    END IF;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'id',v_profile.id,
+    'auth_user_id',v_profile.auth_user_id,
+    'username',v_profile.username,
+    'display_name',v_profile.display_name,
+    'avatar_url',v_profile.avatar_url,
+    'last_seen_at',v_profile.last_seen_at,
+    'created_at',v_profile.created_at,
+    'updated_at',v_profile.updated_at
+  );
+END;
+$$;
+REVOKE ALL ON FUNCTION public.gm_ensure_current_profile() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.gm_ensure_current_profile() TO authenticated;
+
 -- Attach a newly authenticated Supabase identity to a legacy profile by username,
 -- preserving the existing profile/conversation/message UUIDs after D1 import.
 create or replace function public.gm_handle_new_auth_user()
