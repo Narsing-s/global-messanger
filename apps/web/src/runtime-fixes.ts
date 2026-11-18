@@ -78,7 +78,7 @@ function installApiFixes() {
   const originalUnreact = api.unreact;
   if (!(api as any).__gmFastUnreact) {
     (api as any).__gmFastUnreact = true;
-    api.unreact = async (id: string, emoji: string) => {
+    api.unreact = async (id: string) => {
       const result = await originalUnreact(id);
       const cache = jsonStore(REACTION_KEY);
       delete cache[id];
@@ -95,7 +95,13 @@ function installApiFixes() {
       const conversation = await currentConversation();
       if (!conversation?.id) return originalEdit(id, body);
       const encryptedBody = await encryptMessage(String(conversation.id), body);
-      return originalEdit(id, encryptedBody);
+      const response = await fetch(`${API}/api/messages/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ body: encryptedBody })
+      });
+      const contentType = response.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await response.json() : {};
+      if (!response.ok) throw new Error(data?.message || `Request failed (${response.status})`);
+      return data;
     };
   }
 }
@@ -120,7 +126,10 @@ async function deleteCurrentChat() {
   const conversation = await currentConversation();
   if (!conversation?.id) throw new Error('Open a conversation first.');
   if (!confirm('Delete this chat from your account? Your other chats and messages will not be affected.')) return;
-  // Hide this conversation only on this browser. The shared conversation and other members' history remain intact.
+  const response = await fetch(`${API}/api/conversations/${encodeURIComponent(conversation.id)}/permanent`, { method: 'DELETE', headers: authHeaders() });
+  const contentType = response.headers.get('content-type') || '';
+  const data = contentType.includes('application/json') ? await response.json() : {};
+  if (!response.ok) throw new Error(data?.message || `Unable to delete chat (${response.status})`);
   let deleted: string[] = [];
   try { deleted = JSON.parse(localStorage.getItem(DELETED_CHAT_KEY) || '[]'); } catch {}
   if (!deleted.includes(String(conversation.id))) deleted.push(String(conversation.id));
