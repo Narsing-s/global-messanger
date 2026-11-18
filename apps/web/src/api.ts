@@ -231,6 +231,8 @@ export const api = {
   async updateProfile(patch:Record<string,unknown>){const sb=await getSupabase(),me=await currentProfile();const {error}=await sb.from('gm_profiles').update(patch).eq('id',me.id);if(error)fail(error);profileCache.delete(me.auth_user_id);},
   async read(id:string) {
     const sb=await getSupabase(),me=await currentProfile();
+    const {data:privacy}=await sb.from('gm_privacy_settings').select('read_receipts').eq('user_id',me.id).maybeSingle();
+    if(privacy?.read_receipts===false)return;
     const {error}=await sb.from('gm_conversation_members').update({last_read_at:now()}).eq('conversation_id',id).eq('user_id',me.id);
     if(error)fail(error);
   },
