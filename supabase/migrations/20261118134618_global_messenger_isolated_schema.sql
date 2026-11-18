@@ -568,3 +568,179 @@ DO $$ BEGIN
   PERFORM cron.schedule('gm-process-scheduled-messages','* * * * *','select public.gm_process_scheduled_messages();');
  END IF;
 END $$;
+
+-- Per-browser session registry; Supabase Auth remains the authority for session revocation.
+CREATE TABLE IF NOT EXISTS public.gm_session_devices(
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid NOT NULL REFERENCES public.gm_profiles(id) ON DELETE CASCADE,
+ device_id text NOT NULL,device_name text NOT NULL DEFAULT 'Browser',platform text NOT NULL DEFAULT 'web',
+ user_agent text,last_seen_at timestamptz NOT NULL DEFAULT now(),created_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(user_id,device_id)
+);
+ALTER TABLE public.gm_session_devices ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "gm users manage own session devices" ON public.gm_session_devices
+FOR ALL TO authenticated USING(user_id=public.gm_current_profile_id()) WITH CHECK(user_id=public.gm_current_profile_id());
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.gm_session_devices TO authenticated;
+
+-- Keep SECURITY DEFINER helpers in the non-exposed private schema; public wrappers are invoker functions.
+CREATE SCHEMA IF NOT EXISTS private;
+REVOKE ALL ON SCHEMA private FROM PUBLIC,anon;
+GRANT USAGE ON SCHEMA private TO authenticated;
+CREATE OR REPLACE FUNCTION private.gm_current_profile_id()
+RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
+AS $$ SELECT id FROM public.gm_profiles WHERE auth_user_id=auth.uid() LIMIT 1 $$;
+CREATE OR REPLACE FUNCTION private.gm_is_conversation_member(target_conversation uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
+AS $$ SELECT EXISTS(SELECT 1 FROM public.gm_conversation_members WHERE conversation_id=target_conversation AND user_id=private.gm_current_profile_id()) $$;
+CREATE OR REPLACE FUNCTION private.gm_is_profile_visible(target_user uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
+AS $$ SELECT coalesce((SELECT profile_visibility FROM public.gm_privacy_settings WHERE user_id=target_user),true) $$;
+CREATE OR REPLACE FUNCTION private.gm_is_online_visible(target_user uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
+AS $$ SELECT coalesce((SELECT online_status FROM public.gm_privacy_settings WHERE user_id=target_user),true) $$;
+CREATE OR REPLACE FUNCTION private.gm_is_last_seen_visible(target_user uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
+AS $$ SELECT target_user=private.gm_current_profile_id() OR coalesce((SELECT last_seen_visibility FROM public.gm_privacy_settings WHERE user_id=target_user),true) $$;
+CREATE OR REPLACE FUNCTION private.gm_is_blocked(target_user uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
+AS $$ SELECT auth.uid() IS NOT NULL AND EXISTS(SELECT 1 FROM public.gm_user_blocks b WHERE
+ (b.blocker_id=private.gm_current_profile_id() AND b.blocked_id=target_user)
+ OR (b.blocker_id=target_user AND b.blocked_id=private.gm_current_profile_id())) $$;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA private FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION private.gm_current_profile_id() TO authenticated;
+GRANT EXECUTE ON FUNCTION private.gm_is_conversation_member(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.gm_is_profile_visible(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.gm_is_online_visible(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.gm_is_last_seen_visible(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.gm_is_blocked(uuid) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.gm_current_profile_id()
+RETURNS uuid LANGUAGE sql STABLE SECURITY INVOKER SET search_path=private,public AS $$ SELECT private.gm_current_profile_id() $$;
+CREATE OR REPLACE FUNCTION public.gm_is_conversation_member(target_conversation uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER SET search_path=private,public AS $$ SELECT private.gm_is_conversation_member(target_conversation) $$;
+CREATE OR REPLACE FUNCTION public.gm_is_profile_visible(target_user uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER SET search_path=private,public AS $$ SELECT private.gm_is_profile_visible(target_user) $$;
+CREATE OR REPLACE FUNCTION public.gm_online_visible(target_user uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER SET search_path=private,public AS $$ SELECT private.gm_is_online_visible(target_user) $$;
+CREATE OR REPLACE FUNCTION public.gm_last_seen_visible(target_user uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER SET search_path=private,public AS $$ SELECT private.gm_is_last_seen_visible(target_user) $$;
+CREATE OR REPLACE FUNCTION public.gm_is_blocked_user(target_user uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER SET search_path=private,public AS $$ SELECT private.gm_is_blocked(target_user) $$;
+REVOKE ALL ON FUNCTION public.gm_current_profile_id() FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.gm_is_conversation_member(uuid) FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.gm_is_profile_visible(uuid) FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.gm_online_visible(uuid) FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.gm_last_seen_visible(uuid) FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.gm_is_blocked_user(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.gm_current_profile_id() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.gm_is_conversation_member(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.gm_is_profile_visible(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.gm_online_visible(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.gm_last_seen_visible(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.gm_is_blocked_user(uuid) TO authenticated;
+
+-- Do not create duplicate permissive policies for poll writes or device keys.
+DROP POLICY IF EXISTS "gm poll creators manage options" ON public.gm_poll_options;
+CREATE POLICY "gm poll members or creators read options" ON public.gm_poll_options FOR SELECT TO authenticated USING(
+ EXISTS(SELECT 1 FROM public.gm_polls p WHERE p.id=poll_id AND (public.gm_is_conversation_member(p.conversation_id) OR p.creator_id=public.gm_current_profile_id())));
+CREATE POLICY "gm poll creators insert options" ON public.gm_poll_options FOR INSERT TO authenticated WITH CHECK(EXISTS(SELECT 1 FROM public.gm_polls p WHERE p.id=poll_id AND p.creator_id=public.gm_current_profile_id()));
+CREATE POLICY "gm poll creators update options" ON public.gm_poll_options FOR UPDATE TO authenticated USING(EXISTS(SELECT 1 FROM public.gm_polls p WHERE p.id=poll_id AND p.creator_id=public.gm_current_profile_id())) WITH CHECK(EXISTS(SELECT 1 FROM public.gm_polls p WHERE p.id=poll_id AND p.creator_id=public.gm_current_profile_id()));
+CREATE POLICY "gm poll creators delete options" ON public.gm_poll_options FOR DELETE TO authenticated USING(EXISTS(SELECT 1 FROM public.gm_polls p WHERE p.id=poll_id AND p.creator_id=public.gm_current_profile_id()));
+DROP POLICY IF EXISTS "gm users manage own poll votes" ON public.gm_poll_votes;
+CREATE POLICY "gm users insert own poll votes" ON public.gm_poll_votes FOR INSERT TO authenticated WITH CHECK(user_id=public.gm_current_profile_id());
+CREATE POLICY "gm users update own poll votes" ON public.gm_poll_votes FOR UPDATE TO authenticated USING(user_id=public.gm_current_profile_id()) WITH CHECK(user_id=public.gm_current_profile_id());
+CREATE POLICY "gm users delete own poll votes" ON public.gm_poll_votes FOR DELETE TO authenticated USING(user_id=public.gm_current_profile_id());
+DROP POLICY IF EXISTS "gm conversation members can read device public keys" ON public.gm_user_devices;
+DROP POLICY IF EXISTS "gm users manage own devices" ON public.gm_user_devices;
+CREATE POLICY "gm users and conversation peers read device keys" ON public.gm_user_devices FOR SELECT TO authenticated USING(
+ user_id=public.gm_current_profile_id() OR EXISTS(SELECT 1 FROM public.gm_conversation_members m WHERE m.user_id=gm_user_devices.user_id AND public.gm_is_conversation_member(m.conversation_id)));
+CREATE POLICY "gm users insert own devices" ON public.gm_user_devices FOR INSERT TO authenticated WITH CHECK(user_id=public.gm_current_profile_id());
+CREATE POLICY "gm users update own devices" ON public.gm_user_devices FOR UPDATE TO authenticated USING(user_id=public.gm_current_profile_id()) WITH CHECK(user_id=public.gm_current_profile_id());
+CREATE POLICY "gm users delete own devices" ON public.gm_user_devices FOR DELETE TO authenticated USING(user_id=public.gm_current_profile_id());
+
+DROP POLICY IF EXISTS "gm prevent membership creation across blocks" ON public.gm_conversation_members;
+CREATE POLICY "gm prevent membership creation across blocks" ON public.gm_conversation_members AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK(NOT private.gm_is_blocked(user_id));
+DROP POLICY IF EXISTS "gm prevent message send across blocks" ON public.gm_messages;
+CREATE POLICY "gm prevent message send across blocks" ON public.gm_messages AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK(
+ NOT EXISTS(SELECT 1 FROM public.gm_conversation_members cm WHERE cm.conversation_id=gm_messages.conversation_id AND cm.user_id<>public.gm_current_profile_id() AND private.gm_is_blocked(cm.user_id)));
+
+CREATE INDEX IF NOT EXISTS "idx_gm_attachments_uploader_id" ON public."gm_attachments" ("uploader_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_attachments_conversation_id" ON public."gm_attachments" ("conversation_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_attachments_message_id" ON public."gm_attachments" ("message_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_bookmarks_user_id" ON public."gm_bookmarks" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_bookmarks_message_id" ON public."gm_bookmarks" ("message_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_call_signals_sender_id" ON public."gm_call_signals" ("sender_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_call_signals_conversation_id" ON public."gm_call_signals" ("conversation_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_conversation_members_user_id" ON public."gm_conversation_members" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_conversation_members_conversation_id" ON public."gm_conversation_members" ("conversation_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_conversation_preferences_user_id" ON public."gm_conversation_preferences" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_conversation_preferences_conversation_id" ON public."gm_conversation_preferences" ("conversation_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_conversations_creator_id" ON public."gm_conversations" ("creator_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_device_tokens_user_id" ON public."gm_device_tokens" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_global_entities_owner_id" ON public."gm_global_entities" ("owner_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_login_history_user_id" ON public."gm_login_history" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_message_reactions_message_id" ON public."gm_message_reactions" ("message_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_message_reactions_user_id" ON public."gm_message_reactions" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_messages_sender_id" ON public."gm_messages" ("sender_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_messages_conversation_id" ON public."gm_messages" ("conversation_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_notifications_user_id" ON public."gm_notifications" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_notifications_message_id" ON public."gm_notifications" ("message_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_notifications_conversation_id" ON public."gm_notifications" ("conversation_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_notifications_actor_id" ON public."gm_notifications" ("actor_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_pinned_messages_user_id" ON public."gm_pinned_messages" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_pinned_messages_message_id" ON public."gm_pinned_messages" ("message_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_pinned_messages_conversation_id" ON public."gm_pinned_messages" ("conversation_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_poll_options_poll_id" ON public."gm_poll_options" ("poll_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_poll_votes_poll_option_id" ON public."gm_poll_votes" ("poll_option_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_poll_votes_user_id" ON public."gm_poll_votes" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_polls_message_id" ON public."gm_polls" ("message_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_polls_conversation_id" ON public."gm_polls" ("conversation_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_polls_creator_id" ON public."gm_polls" ("creator_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_privacy_settings_user_id" ON public."gm_privacy_settings" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_profiles_auth_user_id" ON public."gm_profiles" ("auth_user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_scheduled_messages_conversation_id" ON public."gm_scheduled_messages" ("conversation_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_scheduled_messages_sender_id" ON public."gm_scheduled_messages" ("sender_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_session_devices_user_id" ON public."gm_session_devices" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_support_tickets_user_id" ON public."gm_support_tickets" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_user_blocks_blocker_id" ON public."gm_user_blocks" ("blocker_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_user_blocks_blocked_id" ON public."gm_user_blocks" ("blocked_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_user_devices_user_id" ON public."gm_user_devices" ("user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_user_reports_reporter_id" ON public."gm_user_reports" ("reporter_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_user_reports_reported_user_id" ON public."gm_user_reports" ("reported_user_id");
+CREATE INDEX IF NOT EXISTS "idx_gm_user_reports_message_id" ON public."gm_user_reports" ("message_id");
+DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM cron.job WHERE jobname='gm-prune-call-signals') THEN PERFORM cron.schedule('gm-prune-call-signals','17 * * * *','delete from public.gm_call_signals where created_at < now() - interval ''24 hours'';'); END IF; END $$;
+
+DROP POLICY IF EXISTS "gm members read poll options" ON public.gm_poll_options;
+DROP POLICY IF EXISTS "gm poll members or creators read options" ON public.gm_poll_options;
+CREATE POLICY "gm poll members or creators read options" ON public.gm_poll_options FOR SELECT TO authenticated USING(
+ EXISTS(SELECT 1 FROM public.gm_polls p WHERE p.id=poll_id AND (public.gm_is_conversation_member(p.conversation_id) OR p.creator_id=public.gm_current_profile_id())));
+DROP POLICY IF EXISTS "gm users manage own pins" ON public.gm_pinned_messages;
+CREATE POLICY "gm users insert own pins" ON public.gm_pinned_messages FOR INSERT TO authenticated WITH CHECK(user_id=public.gm_current_profile_id() AND public.gm_is_conversation_member(conversation_id));
+CREATE POLICY "gm users delete own pins" ON public.gm_pinned_messages FOR DELETE TO authenticated USING(user_id=public.gm_current_profile_id());
+DROP POLICY IF EXISTS "gm users manage own reactions" ON public.gm_message_reactions;
+CREATE POLICY "gm users insert own reactions" ON public.gm_message_reactions FOR INSERT TO authenticated WITH CHECK(user_id=public.gm_current_profile_id() AND EXISTS(SELECT 1 FROM public.gm_messages m WHERE m.id=message_id AND public.gm_is_conversation_member(m.conversation_id)));
+CREATE POLICY "gm users update own reactions" ON public.gm_message_reactions FOR UPDATE TO authenticated USING(user_id=public.gm_current_profile_id()) WITH CHECK(user_id=public.gm_current_profile_id());
+CREATE POLICY "gm users delete own reactions" ON public.gm_message_reactions FOR DELETE TO authenticated USING(user_id=public.gm_current_profile_id());
+
+DROP POLICY IF EXISTS "gm users insert own poll votes" ON public.gm_poll_votes;
+CREATE POLICY "gm users insert own poll votes" ON public.gm_poll_votes FOR INSERT TO authenticated
+WITH CHECK(user_id=public.gm_current_profile_id() AND EXISTS(SELECT 1 FROM public.gm_poll_options o JOIN public.gm_polls p ON p.id=o.poll_id WHERE o.id=poll_option_id AND public.gm_is_conversation_member(p.conversation_id)));
+DROP POLICY IF EXISTS "gm users update own poll votes" ON public.gm_poll_votes;
+CREATE POLICY "gm users update own poll votes" ON public.gm_poll_votes FOR UPDATE TO authenticated
+USING(user_id=public.gm_current_profile_id()) WITH CHECK(user_id=public.gm_current_profile_id() AND EXISTS(SELECT 1 FROM public.gm_poll_options o JOIN public.gm_polls p ON p.id=o.poll_id WHERE o.id=poll_option_id AND public.gm_is_conversation_member(p.conversation_id)));
+CREATE POLICY "gm bookmarks require source conversation membership" ON public.gm_bookmarks AS RESTRICTIVE FOR ALL TO authenticated
+USING(user_id=public.gm_current_profile_id() AND EXISTS(SELECT 1 FROM public.gm_messages m WHERE m.id=message_id AND public.gm_is_conversation_member(m.conversation_id)))
+WITH CHECK(user_id=public.gm_current_profile_id() AND EXISTS(SELECT 1 FROM public.gm_messages m WHERE m.id=message_id AND public.gm_is_conversation_member(m.conversation_id)));
+CREATE POLICY "gm scheduled messages require conversation membership" ON public.gm_scheduled_messages AS RESTRICTIVE FOR ALL TO authenticated
+USING(public.gm_is_conversation_member(conversation_id))
+WITH CHECK(sender_id=public.gm_current_profile_id() AND public.gm_is_conversation_member(conversation_id));
+REVOKE UPDATE ON public.gm_notifications FROM authenticated;
+GRANT UPDATE(read_at) ON public.gm_notifications TO authenticated;
+
+DROP INDEX IF EXISTS public.idx_gm_conversation_members_user_id;
+DROP INDEX IF EXISTS public.idx_gm_message_reactions_message_id;
+DROP POLICY IF EXISTS "gm profile owner updates own profile" ON public.gm_profiles;
+CREATE POLICY "gm profile owner updates own profile" ON public.gm_profiles FOR UPDATE TO authenticated
+USING(auth_user_id=(SELECT auth.uid())) WITH CHECK(auth_user_id=(SELECT auth.uid()));
+DROP POLICY IF EXISTS "gm profile visibility controls discovery" ON public.gm_profiles;
+CREATE POLICY "gm profile visibility controls discovery" ON public.gm_profiles FOR SELECT TO authenticated
+USING(auth_user_id=(SELECT auth.uid()) OR public.gm_is_profile_visible(id));

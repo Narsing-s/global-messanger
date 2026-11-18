@@ -4,8 +4,8 @@
 
 [![Open Source](https://img.shields.io/badge/open--source-yes-success)](https://github.com/Narsing-s/global-messanger)
 [![Web](https://img.shields.io/badge/web-React%20%2B%20Vite-blue)](https://github.com/Narsing-s/global-messanger)
-[![Backend](https://img.shields.io/badge/backend-Fastify%20%2B%20Socket.IO-orange)](https://github.com/Narsing-s/global-messanger)
-[![Database](https://img.shields.io/badge/database-SQLite-informational)](https://github.com/Narsing-s/global-messanger)
+[![Backend](https://img.shields.io/badge/backend-Supabase%20Auth%20%2B%20Realtime-3ecf8e)](https://supabase.com)
+[![Database](https://img.shields.io/badge/database-Postgres%20%2B%20Storage-blue)](https://supabase.com)
 [![Mobile](https://img.shields.io/badge/mobile-Capacitor%20%2B%20Android-brightgreen)](https://github.com/Narsing-s/global-messanger)
 
 ## 🚀 What is Global Messenger?
@@ -21,7 +21,7 @@ The product is intentionally being developed as a **communication workspace**, n
 ### 💬 Messaging
 
 - One-to-one and group conversations
-- Realtime Socket.IO messaging
+- Supabase Realtime messaging
 - Presence and typing indicators
 - Delivery/read states where supported
 - Replies and quoted replies
@@ -85,8 +85,8 @@ The product is intentionally being developed as a **communication workspace**, n
 
 ### 📞 Calls & Notifications
 
-- Voice/video call UI foundation
-- Socket.IO signalling foundation
+- One-to-one peer-to-peer WebRTC voice/video calls
+- Supabase Realtime call signaling
 - Incoming/outgoing call states
 - Mute, speaker and camera controls
 - Call history/missed calls
@@ -106,36 +106,29 @@ The product is intentionally being developed as a **communication workspace**, n
 ## 🏗️ Architecture
 
 ```text
-                         ┌──────────────────────┐
-                         │  Web / Android User  │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                    ┌────────────────────────────┐
-                    │ Docker Web / Nginx :8080   │
-                    │ React + Vite production UI │
-                    └─────────────┬──────────────┘
-                                  │ same-origin routes
-                     ┌────────────┼─────────────┐
-                     ▼            ▼             ▼
-                  /api/*    /socket.io/*    /uploads/*
-                     │            │             │
-                     └────────────┼─────────────┘
-                                  ▼
-                    ┌────────────────────────────┐
-                    │ Fastify + Socket.IO :4000  │
-                    │ Auth / API / realtime      │
-                    └─────────────┬──────────────┘
-                                  │
-                                  ▼
-                    ┌────────────────────────────┐
-                    │ SQLite + Prisma            │
-                    │ Users / chats / messages   │
-                    │ sessions / media / groups  │
-                    └────────────────────────────┘
+                 ┌────────────────────────────┐
+                 │       Web / Android        │
+                 │       React + Vite         │
+                 └─────────────┬──────────────┘
+                               │ HTTPS + Supabase SDK
+             ┌─────────────────┼─────────────────────┐
+             ▼                 ▼                     ▼
+     ┌──────────────┐  ┌─────────────────┐  ┌──────────────────┐
+     │ Supabase Auth│  │ Supabase Postgres│  │ Supabase Storage │
+     │ Email / MFA  │  │ RLS + gm_* data │  │ Private media    │
+     └──────────────┘  └────────┬────────┘  └──────────────────┘
+                                │
+                         ┌──────▼────────┐
+                         │ Supabase      │
+                         │ Realtime      │
+                         │ + Edge AI     │
+                         └───────────────┘
+
+        WebRTC peer-to-peer media for 1:1 calls
+        (TURN relay and group-call SFU not configured)
 ```
 
-Production can run without Docker. Deploy the Node.js/Fastify backend on a persistent cloud VM/service and serve the built Vite frontend from the same public origin, or set VITE_API_URL for a separate API domain. Socket.IO, SQLite and uploads require persistent cloud storage.
+Vercel hosts the frontend. Supabase provides Auth, Postgres, RLS, Storage, Realtime, Cron and Edge Functions. The old Cloudflare Worker/D1 resources are retained temporarily only for legacy data export; normal application requests no longer target that Worker. See [the Supabase migration guide](docs/SUPABASE_MIGRATION.md).
 
 ## 🔒 Message Security & Rendering
 
@@ -225,29 +218,14 @@ E2EE behavior
 
 ### Production backend smoke test
 
-The configured production backend exposes a health endpoint:
-
-```text
-https://api.example.com/health
-```
-
-Run:
-
-```bash
-curl -i https://global-messanger-backend.onrender.com/health
-```
-
-Expected: HTTP `200` with an `ok: true` health response.
+Check Supabase Auth health using the project URL and public publishable key, then test account registration and message exchange from two separate browsers.
 
 ### Android / Capacitor CORS
 
 Native Android requests use the Capacitor origin `capacitor://localhost`. Verify production CORS before debugging application features:
 
 ```bash
-curl -i -X OPTIONS "https://api.example.com/api/auth/login-email" \
-  -H "Origin: capacitor://localhost" \
-  -H "Access-Control-Request-Method: POST" \
-  -H "Access-Control-Request-Headers: content-type,authorization"
+Use Supabase Auth's configured redirect URLs and verify that the app can reach `https://<project-ref>.supabase.co`.
 ```
 
 ### Android diagnostics
@@ -339,13 +317,10 @@ npm run smoke
 
 ## 🗄️ Database
 
-The server uses SQLite through Prisma. The database is a single persistent file, with WAL enabled for better concurrent Messenger read/write behavior.
+Supabase Postgres is the application database. Messenger tables use the isolated `gm_*` prefix with Row Level Security. Supabase Storage holds private chat files and profile avatars; Realtime carries chat events and WebRTC signaling.
 
 ```bash
-npm run db:generate
-npm run db:migrate
-npm run db:deploy
-npm run db:backup
+Use Supabase Dashboard migrations and the SQL in `supabase/migrations/`. Scheduled-message delivery and call-signal cleanup run through Supabase Cron.
 ```
 
 Docker stores the database and uploads in the persistent `/data` volume. PostgreSQL is not required.
@@ -357,15 +332,12 @@ Never commit production database credentials.
 Typical server configuration includes:
 
 ```text
-DATABASE_URL
-JWT_SECRET
-WEB_ORIGIN
-PASSWORD_RESET_WEB_ORIGIN
-UPLOAD_DIR
-CRON_SECRET
+SUPABASE_URL
+SUPABASE_PUBLISHABLE_KEY
+GROQ_API_KEY (Supabase Edge Function secret only)
 ```
 
-Optional email/push integrations use environment-provided credentials.
+Optional email SMTP and TURN relay configuration are separate integrations. Never expose service-role keys or AI provider keys in client builds.
 
 **Never commit passwords, JWT secrets, Firebase private keys, API tokens, production database URLs or Android signing keys.**
 
