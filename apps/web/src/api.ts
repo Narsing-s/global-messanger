@@ -122,15 +122,15 @@ export async function request<T=any>(path:string,options:RequestInit={}):Promise
 async function uploadWithProgress(file:File,onProgress?:(n:number)=>void,signal?:AbortSignal,conversationId?:string) {
   if(signal?.aborted)throw new DOMException('Upload aborted','AbortError');
   const sb=await getSupabase(),me=await currentProfile();
-  if(!conversationId)throw new Error('Choose a conversation before uploading.');
   const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-  const path=conversationId+'/'+me.id+'/'+crypto.randomUUID()+'-'+safeName;
-  const {error}=await sb.storage.from('gm-chat-media').upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});
+  const bucket=conversationId?'gm-chat-media':'gm-avatars';
+  const path=conversationId?conversationId+'/'+me.id+'/'+crypto.randomUUID()+'-'+safeName:me.id+'/'+crypto.randomUUID()+'-'+safeName;
+  const {error}=await sb.storage.from(bucket).upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});
   if(error)fail(error);
   onProgress?.(100);
-  const {data:signed,error:se}=await sb.storage.from('gm-chat-media').createSignedUrl(path,3600);
+  const {data:signed,error:se}=await sb.storage.from(bucket).createSignedUrl(path,3600);
   if(se)fail(se);
-  return {url:signed.signedUrl,path,name:file.name,mime:file.type,size:file.size};
+  return {url:signed.signedUrl,path,bucket,name:file.name,mime:file.type,size:file.size};
 }
 export const api = {
   conversations:listConversations,
