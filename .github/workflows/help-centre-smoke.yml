@@ -9,7 +9,7 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     env:
-      API_URL: https://global-messenger-api.narsingbeesetti006.workers.dev
+      API_URL: https://global-messenger-api.narsingbeesetti22.workers.dev
       HELP_URL: https://global-messenger-help-centre.onrender.com
     steps:
       - name: Check production API edge health
