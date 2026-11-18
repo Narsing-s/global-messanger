@@ -10,8 +10,13 @@ async function currentProfile() {
   const { data:{ user }, error } = await sb.auth.getUser();
   if (error || !user) throw new Error('Please sign in again.');
   if (profileCache.has(user.id)) return profileCache.get(user.id);
-  const { data, error:e } = await sb.from('gm_profiles').select('id,auth_user_id,username,display_name,avatar_url,last_seen_at,created_at,updated_at').eq('auth_user_id',user.id).single();
-  if (e || !data) fail(e || new Error('Your Messenger profile is not ready yet. Please refresh.'));
+  // Ensure the profile exists for both new and previously-created Auth users.
+  // The RPC handles the zero-row case safely and returns one profile object.
+  const { data, error:e } = await sb.rpc('gm_ensure_current_profile');
+  if (e) fail(e);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Your Messenger profile could not be loaded. Please sign in again.');
+  }
   profileCache.set(user.id,data);
   return data;
 }
