@@ -15,10 +15,14 @@ async function currentProfile() {
   profileCache.set(user.id,data);
   return data;
 }
+async function hidePrivateLastSeen(sb:any,profiles:any[]){
+  return await Promise.all((profiles||[]).map(async(p:any)=>{const {data:visible}=await sb.rpc('gm_last_seen_visible',{target_user:p.id});return visible===false?{...p,last_seen_at:null}:p;}));
+}
 async function profileById(id:string) {
   const sb=await getSupabase();
   const {data,error}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').eq('id',id).maybeSingle();
   if(error)fail(error);
+  if(data){const [safe]=await hidePrivateLastSeen(sb,[data]);return safe;}
   return data;
 }
 function messageShape(m:any, sender?:any) {
@@ -37,8 +41,9 @@ async function loadConversation(id:string) {
   const ids=(members||[]).map((m:any)=>m.user_id);
   const {data:profiles,error:pErr}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);
   if(pErr)fail(pErr);
+  const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);
   const {data:prefs}=await sb.from('gm_conversation_preferences').select('*').eq('conversation_id',id).eq('user_id',me.id).maybeSingle();
-  const byId=new Map((profiles||[]).map((p:any)=>[p.id,p]));
+  const byId=new Map(safeProfiles.map((p:any)=>[p.id,p]));
   return {id:c.id,isGroup:c.is_group,title:c.title,createdAt:c.created_at,updatedAt:c.updated_at,
     favorite:!!prefs?.favorite,archived:!!prefs?.archived,
     members:(members||[]).map((m:any)=>({user:userShape(byId.get(m.user_id)),joinedAt:m.joined_at,lastReadAt:m.last_read_at}))};
@@ -63,7 +68,8 @@ async function listMessages(conversationId:string,limit=100) {
   const ids=[...new Set((data||[]).map((m:any)=>m.sender_id))];
   const messageIds=(data||[]).map((m:any)=>m.id);
   const {data:profiles}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);
-  const byId=new Map((profiles||[]).map((p:any)=>[p.id,p]));
+  const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);
+  const byId=new Map(safeProfiles.map((p:any)=>[p.id,p]));
   const {data:attachments,error:attachmentError}=await sb.from('gm_attachments').select('message_id,bucket_id,object_path,file_name,mime_type,size_bytes').in('message_id',messageIds);
   if(attachmentError)fail(attachmentError);
   const attachmentMap=new Map<string,any>();
@@ -219,7 +225,8 @@ export const api = {
     if(term.length<2)return [];
     const {data,error}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').neq('id',me.id).or('username.ilike.%'+term+'%,display_name.ilike.%'+term+'%').limit(20);
     if(error)fail(error);
-    return (data||[]).map(userShape);
+    const safe=await hidePrivateLastSeen(sb,data||[]);
+    return safe.map(userShape);
   },
   direct:ensureDirect,
   async group(title:string,userIds:string[]) {
