@@ -78,8 +78,8 @@ function installApiFixes() {
   const originalUnreact = api.unreact;
   if (!(api as any).__gmFastUnreact) {
     (api as any).__gmFastUnreact = true;
-    api.unreact = async (id: string, emoji: string) => {
-      const result = await originalUnreact(id, emoji);
+    api.unreact = async (id: string) => {
+      const result = await originalUnreact(id);
       const cache = jsonStore(REACTION_KEY);
       delete cache[id];
       localStorage.setItem(REACTION_KEY, JSON.stringify(cache));
