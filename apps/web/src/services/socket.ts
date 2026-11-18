@@ -1,4 +1,5 @@
 import { getSupabase } from '../supabase';
+import { api } from '../api';
 
 type Handler=(...args:any[])=>void;
 class MessengerSocket {
@@ -38,6 +39,7 @@ class MessengerSocket {
     this.channels.clear();this.presence=null;this.connected=false;
   }
   emit(event:string,data?:any,ack?:(v?:any)=>void){
+    if(event==='message:send'&&data?.conversationId){void api.sendMessage(data.conversationId,String(data.body||''),{type:data.type||'text',metadata:{clientId:data.clientId||null}}).then((m:any)=>{this.emitLocal('message:new',m);ack?.({ok:true,message:m});}).catch((e:any)=>{this.emitLocal('connect_error',e);ack?.({ok:false,error:e.message});});return this;}
     if(event==='conversation:join'&&typeof data==='string'){void this.join(data);ack?.({ok:true});return this;}
     if(event==='conversation:leave'&&typeof data==='string'){void this.leave(data);ack?.({ok:true});return this;}
     if(event==='typing'&&data?.conversationId){const ch=this.channels.get(data.conversationId);ch?.send({type:'broadcast',event:'typing',payload:{userId:this.profileId,typing:!!data.typing}});ack?.({ok:true});return this;}
