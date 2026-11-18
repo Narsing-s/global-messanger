@@ -16,7 +16,7 @@ class MessengerSocket {
     try{
       const sb=await getSupabase();
       const {data:{user}}=await sb.auth.getUser();
-      this.profileId=user?.id||null;
+      if(user){const {data:profile}=await sb.from('gm_profiles').select('id').eq('auth_user_id',user.id).single();this.profileId=profile?.id||null;}else this.profileId=null;
       const channel=sb.channel('gm-presence',{config:{presence:{key:user?.id||crypto.randomUUID()}}});
       this.presence=channel;
       channel.on('presence',{event:'sync'},()=>{
