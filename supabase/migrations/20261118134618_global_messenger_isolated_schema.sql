@@ -399,3 +399,27 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.gm_conversation_members;
   END IF;
 END $$;
+
+-- E2EE public keys are discoverable only between users who share a conversation.
+CREATE UNIQUE INDEX IF NOT EXISTS gm_user_devices_user_device_unique ON public.gm_user_devices(user_id,device_name);
+CREATE POLICY "gm conversation members can read device public keys" ON public.gm_user_devices
+FOR SELECT TO authenticated USING (
+  EXISTS (
+    SELECT 1 FROM public.gm_conversation_members m
+    WHERE m.user_id = gm_user_devices.user_id
+      AND public.gm_is_conversation_member(m.conversation_id)
+  )
+);
+GRANT SELECT (user_id,device_name,public_key,platform,last_seen_at) ON public.gm_user_devices TO authenticated;
+
+-- Public profile avatars are separate from private conversation media.
+INSERT INTO storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+VALUES('gm-avatars','gm-avatars',true,5242880,ARRAY['image/jpeg','image/png','image/webp','image/gif'])
+ON CONFLICT(id) DO UPDATE SET public=true,file_size_limit=5242880,allowed_mime_types=ARRAY['image/jpeg','image/png','image/webp','image/gif'];
+CREATE POLICY "gm users upload own avatars" ON storage.objects
+FOR INSERT TO authenticated WITH CHECK(bucket_id='gm-avatars' AND (storage.foldername(name))[1]=public.gm_current_profile_id()::text);
+CREATE POLICY "gm users update own avatars" ON storage.objects
+FOR UPDATE TO authenticated USING(bucket_id='gm-avatars' AND (storage.foldername(name))[1]=public.gm_current_profile_id()::text)
+WITH CHECK(bucket_id='gm-avatars' AND (storage.foldername(name))[1]=public.gm_current_profile_id()::text);
+CREATE POLICY "gm users delete own avatars" ON storage.objects
+FOR DELETE TO authenticated USING(bucket_id='gm-avatars' AND (storage.foldername(name))[1]=public.gm_current_profile_id()::text);
