@@ -467,3 +467,12 @@ FOR SELECT TO authenticated USING (
  auth_user_id=auth.uid()
  OR coalesce((SELECT ps.profile_visibility FROM public.gm_privacy_settings ps WHERE ps.user_id=gm_profiles.id),true)
 );
+
+CREATE OR REPLACE FUNCTION public.gm_is_profile_visible(target_user uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public
+AS $$ SELECT coalesce((SELECT profile_visibility FROM public.gm_privacy_settings WHERE user_id=target_user),true) $$;
+REVOKE ALL ON FUNCTION public.gm_is_profile_visible(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.gm_is_profile_visible(uuid) TO authenticated;
+DROP POLICY IF EXISTS "gm_profiles readable by authenticated users" ON public.gm_profiles;
+CREATE POLICY "gm profile visibility controls discovery" ON public.gm_profiles
+FOR SELECT TO authenticated USING(auth_user_id=auth.uid() OR public.gm_is_profile_visible(id));
