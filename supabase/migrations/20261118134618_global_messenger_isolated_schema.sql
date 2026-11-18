@@ -720,3 +720,18 @@ DROP POLICY IF EXISTS "gm users manage own reactions" ON public.gm_message_react
 CREATE POLICY "gm users insert own reactions" ON public.gm_message_reactions FOR INSERT TO authenticated WITH CHECK(user_id=public.gm_current_profile_id() AND EXISTS(SELECT 1 FROM public.gm_messages m WHERE m.id=message_id AND public.gm_is_conversation_member(m.conversation_id)));
 CREATE POLICY "gm users update own reactions" ON public.gm_message_reactions FOR UPDATE TO authenticated USING(user_id=public.gm_current_profile_id()) WITH CHECK(user_id=public.gm_current_profile_id());
 CREATE POLICY "gm users delete own reactions" ON public.gm_message_reactions FOR DELETE TO authenticated USING(user_id=public.gm_current_profile_id());
+
+DROP POLICY IF EXISTS "gm users insert own poll votes" ON public.gm_poll_votes;
+CREATE POLICY "gm users insert own poll votes" ON public.gm_poll_votes FOR INSERT TO authenticated
+WITH CHECK(user_id=public.gm_current_profile_id() AND EXISTS(SELECT 1 FROM public.gm_poll_options o JOIN public.gm_polls p ON p.id=o.poll_id WHERE o.id=poll_option_id AND public.gm_is_conversation_member(p.conversation_id)));
+DROP POLICY IF EXISTS "gm users update own poll votes" ON public.gm_poll_votes;
+CREATE POLICY "gm users update own poll votes" ON public.gm_poll_votes FOR UPDATE TO authenticated
+USING(user_id=public.gm_current_profile_id()) WITH CHECK(user_id=public.gm_current_profile_id() AND EXISTS(SELECT 1 FROM public.gm_poll_options o JOIN public.gm_polls p ON p.id=o.poll_id WHERE o.id=poll_option_id AND public.gm_is_conversation_member(p.conversation_id)));
+CREATE POLICY "gm bookmarks require source conversation membership" ON public.gm_bookmarks AS RESTRICTIVE FOR ALL TO authenticated
+USING(user_id=public.gm_current_profile_id() AND EXISTS(SELECT 1 FROM public.gm_messages m WHERE m.id=message_id AND public.gm_is_conversation_member(m.conversation_id)))
+WITH CHECK(user_id=public.gm_current_profile_id() AND EXISTS(SELECT 1 FROM public.gm_messages m WHERE m.id=message_id AND public.gm_is_conversation_member(m.conversation_id)));
+CREATE POLICY "gm scheduled messages require conversation membership" ON public.gm_scheduled_messages AS RESTRICTIVE FOR ALL TO authenticated
+USING(public.gm_is_conversation_member(conversation_id))
+WITH CHECK(sender_id=public.gm_current_profile_id() AND public.gm_is_conversation_member(conversation_id));
+REVOKE UPDATE ON public.gm_notifications FROM authenticated;
+GRANT UPDATE(read_at) ON public.gm_notifications TO authenticated;
