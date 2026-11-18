@@ -40,7 +40,13 @@ class MessengerSocket {
     this.channels.clear();this.presence=null;this.connected=false;
   }
   emit(event:string,data?:any,ack?:(v?:any)=>void){
-    if(event==='message:send'&&data?.conversationId){void api.sendMessage(data.conversationId,String(data.body||''),{type:data.type||'text',metadata:{clientId:data.clientId||null}}).then((m:any)=>{this.emitLocal('message:new',m);ack?.({ok:true,message:m});}).catch((e:any)=>{this.emitLocal('connect_error',e);ack?.({ok:false,error:e.message});});return this;}
+    if(event==='message:send'&&data?.conversationId){
+      if(data.type==='call-signal'){
+        void (async()=>{const sb=await getSupabase();const {data:{user}}=await sb.auth.getUser();if(!user)throw new Error('Please sign in again.');const {data:profile}=await sb.from('gm_profiles').select('id').eq('auth_user_id',user.id).single();if(!profile)throw new Error('Messenger profile unavailable.');const body=String(data.body||'');const prefix='__GM_CALL__';if(!body.startsWith(prefix))throw new Error('Invalid call signal.');const payload=JSON.parse(body.slice(prefix.length));const {error}=await sb.from('gm_call_signals').insert({conversation_id:data.conversationId,sender_id:profile.id,call_id:String(payload.callId||''),payload});if(error)throw error;ack?.({ok:true});})().catch((e:any)=>{this.emitLocal('connect_error',e);ack?.({ok:false,error:e.message});});
+        return this;
+      }
+      void api.sendMessage(data.conversationId,String(data.body||''),{type:data.type||'text',metadata:{clientId:data.clientId||null}}).then((m:any)=>{this.emitLocal('message:new',m);ack?.({ok:true,message:m});}).catch((e:any)=>{this.emitLocal('connect_error',e);ack?.({ok:false,error:e.message});});return this;
+    }
     if(event==='conversation:join'&&typeof data==='string'){void this.join(data);ack?.({ok:true});return this;}
     if(event==='conversation:leave'&&typeof data==='string'){void this.leave(data);ack?.({ok:true});return this;}
     if(event==='typing'&&data?.conversationId){const ch=this.channels.get(data.conversationId);if(this.privacy.typing_indicators)void ch?.send({type:'broadcast',event:'typing',payload:{userId:this.profileId,typing:!!data.typing}});ack?.({ok:true});return this;}
@@ -56,6 +62,7 @@ class MessengerSocket {
     ch.on('postgres_changes',{event:'UPDATE',schema:'public',table:'gm_messages',filter:'conversation_id=eq.'+id},(p:any)=>{
       const m=p.new;this.emitLocal(m.deleted_at?'message:deleted':'message:updated',m.deleted_at?{id:m.id,deletedAt:m.deleted_at}: {id:m.id,conversationId:m.conversation_id,senderId:m.sender_id,body:m.body,createdAt:m.created_at,editedAt:m.edited_at,type:m.type,...(m.metadata||{})});
     });
+    ch.on('postgres_changes',{event:'INSERT',schema:'public',table:'gm_call_signals',filter:'conversation_id=eq.'+id},(p:any)=>{const row=p.new;if(row.sender_id!==this.profileId)this.emitLocal('call:signal',{conversationId:id,senderId:row.sender_id,payload:row.payload});});
     ch.on('broadcast',{event:'typing'},(p:any)=>{if(p.payload?.userId!==this.profileId)this.emitLocal('typing',p.payload);});
     ch.on('presence',{event:'sync'},()=>{
       const state=ch.presenceState();
