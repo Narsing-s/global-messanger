@@ -4,10 +4,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMessengerSocket, type Socket } from './services/socket';
+import ProductCenter from './components/ProductCenter';
+import './features';
 import { LoadingState } from './LoadingState';
 import {
   Archive, Bell, CheckCheck, ChevronLeft, Copy, Heart, LogIn, LogOut,
-  MessageCircle, MoreVertical, Paperclip, Plus, Search, Send, Settings,
+  MessageCircle, MoreVertical, Paperclip, Plus, Search, Send, Settings, Phone, Video, LayoutGrid,
   ShieldCheck, Smile, Star, Sun, Moon, Trash2, UserPlus, Users, X
 } from 'lucide-react';
 import { api, auth } from './api';
@@ -70,7 +72,7 @@ function App(){
   const [theme,setTheme]=useState<'light'|'dark'>(()=>localStorage.getItem('gm_theme')==='dark'?'dark':'light');
   useEffect(()=>{document.documentElement.dataset.gmTheme=theme;localStorage.setItem('gm_theme',theme)},[theme]);
   const [groupOpen,setGroupOpen]=useState(false),[groupTitle,setGroupTitle]=useState(''),[groupUsers,setGroupUsers]=useState<User[]>([]);
-  const [menu,setMenu]=useState(false),[profileOpen,setProfileOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false);
+  const [menu,setMenu]=useState(false),[profileOpen,setProfileOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[productOpen,setProductOpen]=useState(false);
   const [emoji,setEmoji]=useState(false),[reaction,setReaction]=useState<string|null>(null),[reply,setReply]=useState<Message|null>(null);
   const [editing,setEditing]=useState<Message|null>(null),[presence,setPresence]=useState<Record<string,boolean>>({});
   const fileRef=useRef<HTMLInputElement>(null),typingTimer=useRef<number | undefined>(undefined);
@@ -79,6 +81,8 @@ function App(){
   useEffect(()=>{if(!user)return; let alive=true;
     api.conversations().then((d:any)=>alive&&setChats(Array.isArray(d)?d.map(normalizeChat):[])).catch(e=>setError(e.message));
     const s=createMessengerSocket(localStorage.getItem('gm_token')||'');
+    (window as any).__gmMessengerSocket=s;
+    s.on('call:signal',(signal:any)=>window.dispatchEvent(new CustomEvent('gm:call-signal',{detail:signal})));
     s.on('connect',()=>setError(''));s.on('connect_error',(e:any)=>setError(e.message||'Realtime connection failed'));
     s.on('presence:update',(d:any)=>d?.userId&&setPresence(p=>({...p,[d.userId]:!!d.online})));
     s.on('typing',(d:any)=>d?.userId!==user.id&&setTyping(!!d.typing));
@@ -86,7 +90,7 @@ function App(){
     s.on('message:updated',(m:Message)=>setMessages(p=>p.map(x=>x.id===m.id?m:x)));
     s.on('message:deleted',(d:any)=>setMessages(p=>p.map(x=>x.id===d.id?{...x,body:'',deletedAt:d.deletedAt}:x)));
     s.on('reaction:update',()=>{if(active)setActive({...active})});
-    setSocket(s);return()=>{alive=false;s.disconnect()};
+    setSocket(s);return()=>{alive=false;if((window as any).__gmMessengerSocket===s)delete (window as any).__gmMessengerSocket;s.disconnect()};
   },[user?.id]);
   useEffect(()=>{if(!active)return;setTyping(false);socket?.emit('conversation:join',active.id);api.messages(active.id,100).then((d:any)=>setMessages(Array.isArray(d)?d:[])).catch(e=>setError(e.message));api.read(active.id).catch(()=>{});setChats(p=>p.map(c=>c.id===active.id?{...c,unreadCount:0}:c));return()=>{socket?.emit('conversation:leave',active.id)}},[active?.id,socket]);
 
@@ -107,7 +111,7 @@ function App(){
   const activeMessages=messages.filter(m=>m.conversationId===active?.id);
   return <div className={'messenger '+(mobile?'mobile-open':'')}>
     <aside className="rail"><div className="rail-avatar"><Avatar user={user} size="lg"/></div>
-      <nav><button className="active"><MessageCircle/><span>Chats</span></button><button onClick={()=>setGroupOpen(true)}><Users/><span>Groups</span></button><button onClick={()=>setFolder('favorites')}><Star/><span>Favorites</span></button><button onClick={()=>setFolder('archived')}><Archive/><span>Archive</span></button></nav>
+      <nav><button className="active"><MessageCircle/><span>Chats</span></button><button onClick={()=>setGroupOpen(true)}><Users/><span>Groups</span></button><button onClick={()=>setFolder('favorites')}><Star/><span>Favorites</span></button><button onClick={()=>setFolder('archived')}><Archive/><span>Archive</span></button><button onClick={()=>setProductOpen(true)}><LayoutGrid/><span>Product Center</span></button></nav>
       <div className="rail-bottom"><button onClick={()=>setSettingsOpen(true)}><Settings/></button><button onClick={logout}><LogOut/></button></div>
     </aside>
     <section className="chat-list-pane">
@@ -121,7 +125,7 @@ function App(){
     </section>
     <main className="conversation">
       {!active?<div className="welcome"><MessageCircle/><h1>Your messages</h1><p>Private and group conversations in one place.</p><div><button className="primary" onClick={()=>document.querySelector<HTMLInputElement>('.search input')?.focus()}><Search/> Find people</button><button onClick={()=>setGroupOpen(true)}><Users/> Create group</button></div></div>:
-      <><header className="conversation-head"><button className="back" onClick={()=>setMobile(false)}><ChevronLeft/></button><Avatar user={activeOther} name={nameOf(active,user.id)}/><div><b>{nameOf(active,user.id)}</b><small>{active.isGroup?active.members.length+' members':activeOther&&presence[activeOther.id]?'Online':'Offline'}</small></div><span className="head-actions"><button onClick={()=>setMenu(!menu)}><MoreVertical/></button></span></header>
+      <><header className="conversation-head"><button className="back" onClick={()=>setMobile(false)}><ChevronLeft/></button><Avatar user={activeOther} name={nameOf(active,user.id)}/><div><b>{nameOf(active,user.id)}</b><small>{active.isGroup?active.members.length+' members':activeOther&&presence[activeOther.id]?'Online':'Offline'}</small></div><span className="head-actions">{!active.isGroup&&<><button title="Voice call" onClick={()=>window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:'audio'}}))}><Phone/></button><button title="Video call" onClick={()=>window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:'video'}}))}><Video/></button></>}<button title="Product Center" onClick={()=>setProductOpen(true)}><LayoutGrid/></button><button onClick={()=>setMenu(!menu)}><MoreVertical/></button></span></header>
       {menu&&<div className="chat-menu"><button onClick={()=>organize('favorite',!active.favorite)}><Star/> {active.favorite?'Remove favorite':'Add to favorites'}</button><button onClick={()=>organize('archived',!active.archived)}><Archive/> {active.archived?'Unarchive chat':'Archive chat'}</button><button onClick={()=>navigator.clipboard?.writeText(location.href)}><Copy/> Copy chat link</button></div>}
       <div className="messages">{activeMessages.length===0?<div className="empty-conversation"><MessageCircle/><span>No messages yet. Say hello!</span></div>:activeMessages.map(m=><Bubble key={m.id} m={m} own={m.senderId===user.id} onReply={()=>setReply(m)} onEdit={()=>{setEditing(m);setText(m.body)}} onDelete={()=>del(m)} reaction={reaction===m.id} onReact={()=>setReaction(reaction===m.id?null:m.id)} onEmoji={e=>react(m,e)}/>)}</div>
       <div className="composer-area">{reply&&<div className="context">Replying to {reply.sender?.displayName||'message'}<button onClick={()=>setReply(null)}><X/></button></div>}{editing&&<div className="context">Editing message<button onClick={()=>{setEditing(null);setText('')}}><X/></button></div>}
@@ -132,6 +136,7 @@ function App(){
     </main>
     {profileOpen&&<Modal title="My profile" onClose={()=>setProfileOpen(false)}><Avatar user={user} size="xl"/><h2>{user.displayName}</h2><p>@{user.username}</p><button className="primary" onClick={logout}><LogOut/> Logout</button></Modal>}
     {settingsOpen&&<Modal title="Settings" onClose={()=>setSettingsOpen(false)}><button type="button" className="setting theme-setting" onClick={()=>setTheme(theme==='dark'?'light':'dark')}><span className="setting-icon">{theme==='dark'?<Sun/>:<Moon/>}</span><span><b>Appearance · {theme==='dark'?'Dark':'Light'}</b><small>Switch between light and dark themes. Your choice is saved on this device.</small></span><strong>{theme==='dark'?'Light mode':'Dark mode'}</strong></button><div className="setting"><Bell/><div><b>Notifications</b><small>Realtime message notifications are enabled when supported.</small></div></div><div className="setting"><ShieldCheck/><div><b>Account security</b><small>Use a strong password and sign out of shared devices.</small></div></div><button className="danger big" onClick={logout}><LogOut/> Log out</button></Modal>}
+    {productOpen&&<ProductCenter onClose={()=>setProductOpen(false)} user={user} chats={chats} activeChat={active}/>}
     {groupOpen&&<GroupModal title={groupTitle} setTitle={setGroupTitle} users={groupUsers} setUsers={setGroupUsers} onCreate={createGroup} onClose={()=>setGroupOpen(false)}/>}
   </div>
 }

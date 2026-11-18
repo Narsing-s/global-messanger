@@ -1,29 +1,42 @@
-# Vercel web preview
+# Vercel frontend + Supabase backend
 
-Global Messenger can host its Vite/React web client on Vercel while the existing Cloudflare Worker remains the API and realtime backend.
+Global Messenger's current application runtime uses **Vercel for the React/Vite frontend** and **Supabase for authentication, Postgres, private storage, Realtime and Edge Functions**. The Cloudflare Worker is no longer the app's API endpoint. Its D1 database is retained only until legacy data has been exported and reconciled.
 
-## Project settings
+## Vercel project settings
 
-- Framework preset: Vite
-- Root directory: `apps/web` (matches the existing Vercel project integration)
+- Framework: Vite
+- Root directory: `apps/web`
 - Build command: `npm run build`
 - Output directory: `dist`
-- Vercel reads `apps/web/vercel.json`; the repository-root config is for root-based deployments
-- Production API: `https://global-messenger-api.narsingbeesetti006.workers.dev` (configured in `apps/web/src/api.ts`)
-- No service-role key or server secret belongs in Vercel client environment variables.
+- Do not set `VITE_API_URL` to a Cloudflare Worker.
+- The browser Supabase URL and publishable key are configured in the app. Never add a Supabase secret/service-role key to Vercel client variables.
 
-The Vercel frontend is a preview/deployment target only. It does not host the Cloudflare Worker, D1 database, Durable Objects, or WebSocket service. Do not move or delete those services as part of the frontend deployment.
+## Supabase Auth URL settings
+
+In Supabase Dashboard → Authentication → URL Configuration:
+
+1. Set Site URL to the Vercel production URL.
+2. Add the Vercel production URL and preview domain(s) to Redirect URLs.
+3. Add `http://localhost:5173/**` for local development.
+4. Enable email/password authentication and confirm-email behavior as required.
+
+## AI Edge Function
+
+The authenticated `gm-ai-assist` Edge Function is deployed. To enable AI summaries, document analysis and smart-notification prioritization, add `GROQ_API_KEY` under Supabase Dashboard → Edge Functions → Secrets. Optional: add `GROQ_MODEL`; the default is `llama-3.3-70b-versatile`.
+
+The Groq key must stay in Supabase Edge Function secrets. Do not place it in Vite, Android assets, GitHub files, or browser storage.
 
 ## Testing checklist
 
-1. Open the Vercel preview URL in a desktop browser and a mobile browser.
-2. Register two separate test accounts using different email addresses.
-3. Sign in as account A in one browser/profile and account B in another.
-4. Search for the other account, open a direct conversation, and exchange messages.
-5. Verify realtime delivery, typing, online status, reactions, edit/delete, group creation, and attachment upload.
-6. Refresh both browsers and confirm chats/messages still load from the API.
-7. Switch light/dark appearance in Settings; refresh and verify the selected theme persists.
-8. Check DevTools Network and Console. API requests should target the Cloudflare Worker and return successful CORS responses. WebSocket should connect to the Worker `/ws` endpoint.
-9. Repeat at mobile width (360–430 px) and desktop width (1280 px+).
+1. Open a Vercel preview on desktop and mobile.
+2. Register two different test accounts; confirm email if enabled.
+3. Sign in in two separate browser profiles.
+4. Search for the other account, create a direct chat and exchange messages.
+5. Test group creation, reactions, edit/delete, bookmarks, pins, mute, read receipts and typing.
+6. Upload an image and a document; verify private chat attachment access and public avatar rendering.
+7. Test voice/video in a direct chat. Peer-to-peer media requires suitable network conditions; group calling and TURN relay are not configured.
+8. Test scheduled messages and confirm the Supabase Cron job dispatches them.
+9. Test password recovery, 2FA setup and logout-other-sessions.
+10. Test the AI actions after adding the Edge Function secret.
 
-Use test accounts only. This frontend deployment continues to use the existing D1-backed API until the Supabase runtime migration has been completed and verified separately.
+Use test accounts only. Existing Cloudflare D1 records and custom PBKDF2 password hashes have not been imported. Do not delete the old D1 database until the data migration is reconciled.

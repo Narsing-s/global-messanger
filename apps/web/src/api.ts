@@ -20,10 +20,14 @@ async function currentProfile() {
   profileCache.set(user.id,data);
   return data;
 }
+async function hidePrivateLastSeen(sb:any,profiles:any[]){
+  return await Promise.all((profiles||[]).map(async(p:any)=>{const {data:visible}=await sb.rpc('gm_last_seen_visible',{target_user:p.id});return visible===false?{...p,last_seen_at:null}:p;}));
+}
 async function profileById(id:string) {
   const sb=await getSupabase();
   const {data,error}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').eq('id',id).maybeSingle();
   if(error)fail(error);
+  if(data){const [safe]=await hidePrivateLastSeen(sb,[data]);return safe;}
   return data;
 }
 function messageShape(m:any, sender?:any) {
@@ -42,8 +46,9 @@ async function loadConversation(id:string) {
   const ids=(members||[]).map((m:any)=>m.user_id);
   const {data:profiles,error:pErr}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);
   if(pErr)fail(pErr);
+  const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);
   const {data:prefs}=await sb.from('gm_conversation_preferences').select('*').eq('conversation_id',id).eq('user_id',me.id).maybeSingle();
-  const byId=new Map((profiles||[]).map((p:any)=>[p.id,p]));
+  const byId=new Map(safeProfiles.map((p:any)=>[p.id,p]));
   return {id:c.id,isGroup:c.is_group,title:c.title,createdAt:c.created_at,updatedAt:c.updated_at,
     favorite:!!prefs?.favorite,archived:!!prefs?.archived,
     members:(members||[]).map((m:any)=>({user:userShape(byId.get(m.user_id)),joinedAt:m.joined_at,lastReadAt:m.last_read_at}))};
@@ -68,7 +73,8 @@ async function listMessages(conversationId:string,limit=100) {
   const ids=[...new Set((data||[]).map((m:any)=>m.sender_id))];
   const messageIds=(data||[]).map((m:any)=>m.id);
   const {data:profiles}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);
-  const byId=new Map((profiles||[]).map((p:any)=>[p.id,p]));
+  const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);
+  const byId=new Map(safeProfiles.map((p:any)=>[p.id,p]));
   const {data:attachments,error:attachmentError}=await sb.from('gm_attachments').select('message_id,bucket_id,object_path,file_name,mime_type,size_bytes').in('message_id',messageIds);
   if(attachmentError)fail(attachmentError);
   const attachmentMap=new Map<string,any>();
@@ -93,6 +99,7 @@ async function sendMessage(conversationId:string,body:string,extra:any={}) {
 }
 async function ensureDirect(userId:string) {
   const sb=await getSupabase(),me=await currentProfile();
+  const {data:isBlocked,error:blockError}=await sb.rpc('gm_is_blocked_user',{target_user:userId});if(blockError)fail(blockError);if(isBlocked)throw new Error('This conversation cannot be started because one of the accounts has blocked the other.');
   const {data:mine,error}=await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id);
   if(error)fail(error);
   const {data:theirs,error:e}=await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',userId);
@@ -109,6 +116,17 @@ async function ensureDirect(userId:string) {
   if(ie)fail(ie);
   return loadConversation(c.id);
 }
+async function recordLogin(sb:any,profile:any,event:'login'|'logout'|'password_changed'){
+  const ua=typeof navigator!=='undefined'?navigator.userAgent.slice(0,500):null;
+  const {error}=await sb.from('gm_login_history').insert({user_id:profile.id,event,user_agent:ua});
+  if(error)console.warn('Unable to record login history',error.message);
+  if(event==='login'){
+    let deviceId=localStorage.getItem('gm_device_id');if(!deviceId){deviceId=crypto.randomUUID();localStorage.setItem('gm_device_id',deviceId);}
+    const deviceName=(navigator.platform||'Browser').slice(0,80);
+    const {error:deviceError}=await sb.from('gm_session_devices').upsert({user_id:profile.id,device_id:deviceId,device_name:deviceName,platform:'web',user_agent:ua,last_seen_at:now()},{onConflict:'user_id,device_id'});
+    if(deviceError)console.warn('Unable to refresh session device record',deviceError.message);
+  }
+}
 export const auth = {
   async register(input:{username:string;displayName:string;email:string;password:string}) {
     const sb=await getSupabase();
@@ -117,6 +135,7 @@ export const auth = {
     if(!data.session)return {confirmationRequired:true};
     profileCache.delete(data.user?.id||'');
     const p=await currentProfile();
+    await recordLogin(sb,p,'login');
     return {token:data.session.access_token,user:userShape(p)};
   },
   async login(email:string,password:string) {
@@ -125,12 +144,68 @@ export const auth = {
     if(error)fail(error);
     profileCache.delete(data.user.id);
     const p=await currentProfile();
+    await recordLogin(sb,p,'login');
     return {token:data.session.access_token,user:userShape(p)};
   },
-  async logout(){const sb=await getSupabase();profileCache.clear();const {error}=await sb.auth.signOut();if(error)fail(error);}
+  async logout(){const sb=await getSupabase();try{const p=await currentProfile();await recordLogin(sb,p,'logout')}catch{}profileCache.clear();const {error}=await sb.auth.signOut();if(error)fail(error);}
 };
 export async function request<T=any>(path:string,options:RequestInit={}):Promise<T>{
-  throw new Error('Legacy HTTP API routes have been removed. Use the Supabase-backed Messenger API instead.');
+  const method=(options.method||'GET').toUpperCase();
+  let body:any={};try{body=typeof options.body==='string'?JSON.parse(options.body):options.body||{}}catch{}
+  const {securityApi,profileApi,organizationApi,messagingApi,aiApi,supportApi,entitiesApi,notificationsApi}=await import('./services/advanced-api');
+  if(path==='/api/conversations'&&method==='GET')return await api.conversations() as T;
+  if(path==='/api/messages/bulk-delete'&&method==='POST')return await api.bulkDelete(body.messageIds||[]) as T;
+  if(path==='/api/messages/bulk-forward'&&method==='POST')return await messagingApi.bulkForward(body.messageIds||[],body.conversationId) as T;
+  if(path==='/api/bookmarks'&&method==='GET')return await api.bookmarks() as T;
+  if(path==='/api/notifications'||path==='/api/notifications/center')return await notificationsApi.list() as T;
+  if(path==='/api/notifications/center/read'&&method==='POST')return await notificationsApi.markRead() as T;
+  if(path==='/api/notifications/preferences'||(path==='/api/privacy/settings'&&method==='GET'))return await profileApi.privacy() as T;
+  if(path==='/api/privacy/settings'&&method==='PATCH')return await profileApi.updatePrivacy(body) as T;
+  if(path==='/api/account/sessions'&&method==='GET')return await securityApi.devices() as T;
+  if(path==='/api/security/login-history')return await securityApi.loginHistory() as T;
+  if(path==='/api/security/status')return await securityApi.securityStatus() as T;
+  if(path==='/api/security/2fa/status')return await securityApi.twoFactorStatus() as T;
+  if(path==='/api/security/2fa/setup'&&method==='POST')return await securityApi.setupTwoFactor() as T;
+  if(path==='/api/security/2fa/verify'&&method==='POST')return await securityApi.verifyTwoFactor(body.code,body.factorId) as T;
+  if(path==='/api/security/2fa/enable'&&method==='POST')return await securityApi.enableTwoFactor(body.secret,body.code) as T;
+  if(path==='/api/security/2fa/disable'&&method==='POST')return await securityApi.disableTwoFactor(body.code) as T;
+  if(path==='/api/product/features')return {features:{messaging:true,groups:true,media:true,realtime:true,e2ee:true,support:true,scheduledMessages:true,notifications:true}} as T;
+  if(path==='/api/account/export')return await exportAccountData() as T;
+  if(path==='/api/media/export')return await api.media(undefined,undefined,1000) as T;
+  if(path==='/api/reports'&&method==='POST')return await createUserReport(body) as T;
+  if(path==='/api/global/entities'&&method==='POST')return await entitiesApi.create(String(body.kind||'general'),String(body.title||''),body.payload||{}) as T;
+  if(path==='/api/global/entities'&&method==='GET')return await entitiesApi.list() as T;
+  if(path==='/api/support/tickets'&&method==='POST')return await supportApi.create(String(body.subject||''),String(body.category||'general'),String(body.description||'')) as T;
+  if(path==='/api/support/tickets'&&method==='GET')return await supportApi.list() as T;
+  const mute=path.match(/^\/api\/conversations\/([^/]+)\/mute$/);
+  if(mute&&method==='POST')return await api.mute(decodeURIComponent(mute[1]),Number(body.minutes||0)) as T;
+  const pins=path.match(/^\/api\/conversations\/([^/]+)\/pins$/);
+  if(pins&&method==='GET')return await api.pins(decodeURIComponent(pins[1])) as T;
+  const read=path.match(/^\/api\/conversations\/([^/]+)\/read$/);
+  if(read&&method==='POST'){await api.read(decodeURIComponent(read[1]));return {success:true} as T;}
+  const blocked=path.match(/^\/api\/users\/([^/]+)\/block$/);
+  if(blocked&&method==='POST'){await api.blockUser(decodeURIComponent(blocked[1]));return {success:true} as T;}
+  if(blocked&&method==='DELETE'){await securityApi.unblock(decodeURIComponent(blocked[1]));return {success:true} as T;}
+  const message=path.match(/^\/api\/messages\/([^/]+)$/);
+  if(message&&method==='PATCH'){await api.editMessage(decodeURIComponent(message[1]),String(body.body||''));return {success:true} as T;}
+  if(path.startsWith('/api/messages/search')){const q=new URLSearchParams(path.split('?')[1]||'').get('q')||'';return await api.searchMessages(q) as T;}
+  if(path.startsWith('/api/search/universal')){const q=new URLSearchParams(path.split('?')[1]||'').get('q')||'';return await organizationApi.universalSearch(q) as T;}
+  if(path.startsWith('/api/media')){const query=new URLSearchParams(path.split('?')[1]||'');return await api.media(query.get('conversationId')||undefined,query.get('q')||undefined,Number(query.get('limit')||100)) as T;}
+  if(path==='/api/ai/assist'||path.startsWith('/api/ai/'))throw new Error('AI is not configured yet. Add an AI provider key to a Supabase Edge Function secret.');
+  throw new Error('This operation is not yet available in the Supabase backend: '+method+' '+path);
+}
+async function exportAccountData(){
+ const sb=await getSupabase(),me=await currentProfile();
+ const names=['gm_profiles','gm_conversation_members','gm_conversations','gm_messages','gm_bookmarks','gm_pinned_messages','gm_conversation_preferences','gm_user_devices','gm_privacy_settings','gm_notifications'];
+ const data:any={exportedAt:now(),profile:userShape(me),tables:{}};
+ for(const table of names){const q=table==='gm_profiles'?sb.from(table).select('id,username,display_name,avatar_url,last_seen_at').eq('id',me.id):table==='gm_conversation_members'?sb.from(table).select('*').eq('user_id',me.id):table==='gm_conversations'?sb.from(table).select('*').in('id',(await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id)).data?.map((x:any)=>x.conversation_id)||[]):table==='gm_messages'?sb.from(table).select('*').in('conversation_id',(await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id)).data?.map((x:any)=>x.conversation_id)||[]):sb.from(table).select('*').eq('user_id',me.id);const {data:rows,error}=await q;if(error)fail(error);data.tables[table]=rows||[];}
+ return data;
+}
+async function createUserReport(body:any){
+ const sb=await getSupabase(),me=await currentProfile();
+ const row:any={reporter_id:me.id,reason:String(body.reason||'other'),details:String(body.description||body.details||'').slice(0,4000)};
+ if(body.targetId&&String(body.targetId).includes('-'))row.reported_user_id=body.targetId;
+ const {data,error}=await sb.from('gm_user_reports').insert(row).select('*').single();if(error)fail(error);return data;
 }
 async function uploadWithProgress(file:File,onProgress?:(n:number)=>void,signal?:AbortSignal,conversationId?:string) {
   if(signal?.aborted)throw new DOMException('Upload aborted','AbortError');
@@ -155,11 +230,13 @@ export const api = {
     if(term.length<2)return [];
     const {data,error}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').neq('id',me.id).or('username.ilike.%'+term+'%,display_name.ilike.%'+term+'%').limit(20);
     if(error)fail(error);
-    return (data||[]).map(userShape);
+    const safe=await hidePrivateLastSeen(sb,data||[]);
+    return safe.map(userShape);
   },
   direct:ensureDirect,
   async group(title:string,userIds:string[]) {
     const sb=await getSupabase(),me=await currentProfile();
+    for(const id of [...new Set(userIds)]){const {data:isBlocked,error}=await sb.rpc('gm_is_blocked_user',{target_user:id});if(error)fail(error);if(isBlocked)throw new Error('A blocked account cannot be added to this group.');}
     const {data:c,error}=await sb.from('gm_conversations').insert({title,is_group:true,creator_id:me.id}).select('id').single();
     if(error)fail(error);
     const ids=[...new Set([me.id,...userIds])];
@@ -170,6 +247,8 @@ export const api = {
   async updateProfile(patch:Record<string,unknown>){const sb=await getSupabase(),me=await currentProfile();const {error}=await sb.from('gm_profiles').update(patch).eq('id',me.id);if(error)fail(error);profileCache.delete(me.auth_user_id);},
   async read(id:string) {
     const sb=await getSupabase(),me=await currentProfile();
+    const {data:privacy}=await sb.from('gm_privacy_settings').select('read_receipts').eq('user_id',me.id).maybeSingle();
+    if(privacy?.read_receipts===false)return;
     const {error}=await sb.from('gm_conversation_members').update({last_read_at:now()}).eq('conversation_id',id).eq('user_id',me.id);
     if(error)fail(error);
   },
@@ -226,6 +305,38 @@ export const api = {
     const sb=await getSupabase(),me=await currentProfile();
     const {error}=await sb.from('gm_pinned_messages').delete().eq('conversation_id',conversationId).eq('message_id',messageId).eq('user_id',me.id);
     if(error)fail(error);
+  },
+  async searchMessages(q:string,limit=50){
+    const sb=await getSupabase();const term=q.trim();if(term.length<2)return [];
+    const {data,error}=await sb.from('gm_messages').select('*').ilike('body','%'+term.replace(/[,%]/g,'')+'%').order('created_at',{ascending:false}).limit(limit);
+    if(error)fail(error);const ids=[...new Set((data||[]).map((m:any)=>m.sender_id))];
+    const {data:profiles,error:pe}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);if(pe)fail(pe);
+    const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);const map=new Map(safeProfiles.map((p:any)=>[p.id,p]));return (data||[]).map((m:any)=>messageShape(m,map.get(m.sender_id)));
+  },
+  async bookmarks(){
+    const sb=await getSupabase(),me=await currentProfile();const {data,error}=await sb.from('gm_bookmarks').select('message_id,created_at').eq('user_id',me.id).order('created_at',{ascending:false}).limit(100);if(error)fail(error);
+    const ids=(data||[]).map((x:any)=>x.message_id);if(!ids.length)return [];
+    const {data:messages,error:e}=await sb.from('gm_messages').select('*').in('id',ids);if(e)fail(e);
+    const senderIds=[...new Set((messages||[]).map((m:any)=>m.sender_id))];const {data:people,error:pe}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',senderIds);if(pe)fail(pe);
+    const safePeople=await hidePrivateLastSeen(sb,people||[]);const senders=new Map(safePeople.map((p:any)=>[p.id,p]));const byId=new Map((messages||[]).map((m:any)=>[m.id,messageShape(m,senders.get(m.sender_id))]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:byId.get(x.message_id)})).filter((x:any)=>x.message);
+  },
+  async pins(conversationId:string){
+    const sb=await getSupabase();const {data,error}=await sb.from('gm_pinned_messages').select('message_id,created_at').eq('conversation_id',conversationId).order('created_at',{ascending:false});if(error)fail(error);
+    const ids=(data||[]).map((x:any)=>x.message_id);if(!ids.length)return [];
+    const {data:messages,error:e}=await sb.from('gm_messages').select('*').in('id',ids);if(e)fail(e);
+    const senderIds=[...new Set((messages||[]).map((m:any)=>m.sender_id))];const {data:people,error:pe}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',senderIds);if(pe)fail(pe);
+    const safePeople=await hidePrivateLastSeen(sb,people||[]);const senders=new Map(safePeople.map((p:any)=>[p.id,p]));const byId=new Map((messages||[]).map((m:any)=>[m.id,messageShape(m,senders.get(m.sender_id))]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:byId.get(x.message_id)})).filter((x:any)=>x.message);
+  },
+  async mute(id:string,minutes:number){
+    const sb=await getSupabase(),me=await currentProfile();const muted_until=minutes?new Date(Date.now()+minutes*60000).toISOString():null;
+    const {error}=await sb.from('gm_conversation_preferences').upsert({conversation_id:id,user_id:me.id,muted_until,updated_at:now()},{onConflict:'conversation_id,user_id'});if(error)fail(error);
+  },
+  async blockUser(userId:string){
+    const sb=await getSupabase(),me=await currentProfile();const {error}=await sb.from('gm_user_blocks').upsert({blocker_id:me.id,blocked_id:userId},{onConflict:'blocker_id,blocked_id'});if(error)fail(error);
+  },
+  async bulkDelete(ids:string[]){
+    const sb=await getSupabase(),me=await currentProfile();const unique=[...new Set(ids.map(String))];if(!unique.length)return {success:true,deleted:0};
+    const {data,error}=await sb.from('gm_messages').update({body:'',deleted_at:now()}).in('id',unique).eq('sender_id',me.id).select('id');if(error)fail(error);return {success:true,deleted:data?.length||0};
   },
   async media(conversationId?:string,q?:string,limit=100) {
     const sb=await getSupabase();
