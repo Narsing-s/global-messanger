@@ -423,3 +423,25 @@ FOR UPDATE TO authenticated USING(bucket_id='gm-avatars' AND (storage.foldername
 WITH CHECK(bucket_id='gm-avatars' AND (storage.foldername(name))[1]=public.gm_current_profile_id()::text);
 CREATE POLICY "gm users delete own avatars" ON storage.objects
 FOR DELETE TO authenticated USING(bucket_id='gm-avatars' AND (storage.foldername(name))[1]=public.gm_current_profile_id()::text);
+
+CREATE TABLE IF NOT EXISTS public.gm_privacy_settings(
+ user_id uuid PRIMARY KEY REFERENCES public.gm_profiles(id) ON DELETE CASCADE,
+ profile_visibility boolean NOT NULL DEFAULT true,
+ read_receipts boolean NOT NULL DEFAULT true,
+ online_status boolean NOT NULL DEFAULT true,
+ last_seen_visibility boolean NOT NULL DEFAULT true,
+ typing_indicators boolean NOT NULL DEFAULT true,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.gm_privacy_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "gm users manage own privacy settings" ON public.gm_privacy_settings
+FOR ALL TO authenticated USING(user_id=public.gm_current_profile_id())
+WITH CHECK(user_id=public.gm_current_profile_id());
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.gm_privacy_settings TO authenticated;
+
+DROP POLICY IF EXISTS "gm_profiles readable by authenticated users" ON public.gm_profiles;
+CREATE POLICY "gm profile visibility controls discovery" ON public.gm_profiles
+FOR SELECT TO authenticated USING (
+ auth_user_id=auth.uid()
+ OR coalesce((SELECT ps.profile_visibility FROM public.gm_privacy_settings ps WHERE ps.user_id=gm_profiles.id),true)
+);
