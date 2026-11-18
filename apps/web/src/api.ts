@@ -1,7 +1,7 @@
 // Cloudflare D1 API is the only production backend. Deployment: d1-only-2026-09-30
 const API_URL = (() => {
   // Production always uses the Cloudflare Worker backed by D1.
-  const PRODUCTION_API = 'https://global-messenger-api.narsingbeesetti006.workers.dev';
+  const PRODUCTION_API = 'https://global-messenger-api.narsingbeesetti22.workers.dev';
   if (typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.hostname)) {
     return window.location.origin;
   }
