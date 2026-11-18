@@ -30,7 +30,7 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Build web app against Cloudflare D1 API
         env:
-          VITE_API_URL: https://global-messenger-api.narsingbeesetti006.workers.dev
+          VITE_API_URL: https://global-messenger-api.narsingbeesetti22.workers.dev
         run: npm run build
       - name: Deploy static web Worker
         shell: bash
