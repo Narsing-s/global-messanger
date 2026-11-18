@@ -177,16 +177,16 @@ export async function request<T=any>(path:string,options:RequestInit={}):Promise
   if(path==='/api/global/entities'&&method==='GET')return await entitiesApi.list() as T;
   if(path==='/api/support/tickets'&&method==='POST')return await supportApi.create(String(body.subject||''),String(body.category||'general'),String(body.description||'')) as T;
   if(path==='/api/support/tickets'&&method==='GET')return await supportApi.list() as T;
-  const mute=path.match(/^\\/api\\/conversations\\/([^/]+)\\/mute$/);
+  const mute=path.match(/^\/api\/conversations\/([^/]+)\/mute$/);
   if(mute&&method==='POST')return await api.mute(decodeURIComponent(mute[1]),Number(body.minutes||0)) as T;
-  const pins=path.match(/^\\/api\\/conversations\\/([^/]+)\\/pins$/);
+  const pins=path.match(/^\/api\/conversations\/([^/]+)\/pins$/);
   if(pins&&method==='GET')return await api.pins(decodeURIComponent(pins[1])) as T;
-  const read=path.match(/^\\/api\\/conversations\\/([^/]+)\\/read$/);
+  const read=path.match(/^\/api\/conversations\/([^/]+)\/read$/);
   if(read&&method==='POST'){await api.read(decodeURIComponent(read[1]));return {success:true} as T;}
-  const blocked=path.match(/^\\/api\\/users\\/([^/]+)\\/block$/);
+  const blocked=path.match(/^\/api\/users\/([^/]+)\/block$/);
   if(blocked&&method==='POST'){await api.blockUser(decodeURIComponent(blocked[1]));return {success:true} as T;}
   if(blocked&&method==='DELETE'){await securityApi.unblock(decodeURIComponent(blocked[1]));return {success:true} as T;}
-  const message=path.match(/^\\/api\\/messages\\/([^/]+)$/);
+  const message=path.match(/^\/api\/messages\/([^/]+)$/);
   if(message&&method==='PATCH'){await api.editMessage(decodeURIComponent(message[1]),String(body.body||''));return {success:true} as T;}
   if(path.startsWith('/api/messages/search')){const q=new URLSearchParams(path.split('?')[1]||'').get('q')||'';return await api.searchMessages(q) as T;}
   if(path.startsWith('/api/search/universal')){const q=new URLSearchParams(path.split('?')[1]||'').get('q')||'';return await organizationApi.universalSearch(q) as T;}
