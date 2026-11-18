@@ -1,6 +1,6 @@
 {
   "framework": "vite",
-  "installCommand": "npm ci",
+  "installCommand": "npm install --include=dev --no-audit --no-fund",
   "buildCommand": "npm run build -w apps/web",
   "outputDirectory": "apps/web/dist",
   "trailingSlash": false
