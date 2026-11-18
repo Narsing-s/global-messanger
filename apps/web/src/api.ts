@@ -130,8 +130,19 @@ async function recordLogin(sb:any,profile:any,event:'login'|'logout'|'password_c
 export const auth = {
   async register(input:{username:string;displayName:string;email:string;password:string}) {
     const sb=await getSupabase();
-    const {data,error}=await sb.auth.signUp({email:input.email,password:input.password,options:{data:{app:'global-messenger',username:input.username,display_name:input.displayName}}});
-    if(error)fail(error);
+    let data:any;
+    const signup=await sb.auth.signUp({email:input.email,password:input.password,options:{data:{app:'global-messenger',username:input.username,display_name:input.displayName}}});
+    if(signup.error){
+      const message=String(signup.error.message||'').toLowerCase();
+      const alreadyRegistered=message.includes('already registered')||message.includes('user already exists')||message.includes('already been registered');
+      if(!alreadyRegistered)fail(signup.error);
+      // A retry from an existing account should behave like login, not create a duplicate.
+      const login=await sb.auth.signInWithPassword({email:input.email,password:input.password});
+      if(login.error)throw new Error('An account with this email already exists. Sign in with its password or use password reset.');
+      data=login.data;
+    }else{
+      data=signup.data;
+    }
     if(!data.session)return {confirmationRequired:true};
     profileCache.delete(data.user?.id||'');
     const p=await currentProfile();
