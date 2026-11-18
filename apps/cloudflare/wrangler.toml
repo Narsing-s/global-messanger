@@ -17,3 +17,5 @@ class_name = "ChatRoom"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ChatRoom"]
+
+# Redeploy trigger: 2026-11-18 - re-publish the current D1-backed API routes.
