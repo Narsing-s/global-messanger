@@ -708,3 +708,15 @@ CREATE INDEX IF NOT EXISTS "idx_gm_user_reports_reporter_id" ON public."gm_user_
 CREATE INDEX IF NOT EXISTS "idx_gm_user_reports_reported_user_id" ON public."gm_user_reports" ("reported_user_id");
 CREATE INDEX IF NOT EXISTS "idx_gm_user_reports_message_id" ON public."gm_user_reports" ("message_id");
 DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM cron.job WHERE jobname='gm-prune-call-signals') THEN PERFORM cron.schedule('gm-prune-call-signals','17 * * * *','delete from public.gm_call_signals where created_at < now() - interval ''24 hours'';'); END IF; END $$;
+
+DROP POLICY IF EXISTS "gm members read poll options" ON public.gm_poll_options;
+DROP POLICY IF EXISTS "gm poll members or creators read options" ON public.gm_poll_options;
+CREATE POLICY "gm poll members or creators read options" ON public.gm_poll_options FOR SELECT TO authenticated USING(
+ EXISTS(SELECT 1 FROM public.gm_polls p WHERE p.id=poll_id AND (public.gm_is_conversation_member(p.conversation_id) OR p.creator_id=public.gm_current_profile_id())));
+DROP POLICY IF EXISTS "gm users manage own pins" ON public.gm_pinned_messages;
+CREATE POLICY "gm users insert own pins" ON public.gm_pinned_messages FOR INSERT TO authenticated WITH CHECK(user_id=public.gm_current_profile_id() AND public.gm_is_conversation_member(conversation_id));
+CREATE POLICY "gm users delete own pins" ON public.gm_pinned_messages FOR DELETE TO authenticated USING(user_id=public.gm_current_profile_id());
+DROP POLICY IF EXISTS "gm users manage own reactions" ON public.gm_message_reactions;
+CREATE POLICY "gm users insert own reactions" ON public.gm_message_reactions FOR INSERT TO authenticated WITH CHECK(user_id=public.gm_current_profile_id() AND EXISTS(SELECT 1 FROM public.gm_messages m WHERE m.id=message_id AND public.gm_is_conversation_member(m.conversation_id)));
+CREATE POLICY "gm users update own reactions" ON public.gm_message_reactions FOR UPDATE TO authenticated USING(user_id=public.gm_current_profile_id()) WITH CHECK(user_id=public.gm_current_profile_id());
+CREATE POLICY "gm users delete own reactions" ON public.gm_message_reactions FOR DELETE TO authenticated USING(user_id=public.gm_current_profile_id());
