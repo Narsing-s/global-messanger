@@ -109,8 +109,10 @@ async function recordLogin(sb:any,profile:any,event:'login'|'logout'|'password_c
   const {error}=await sb.from('gm_login_history').insert({user_id:profile.id,event,user_agent:ua});
   if(error)console.warn('Unable to record login history',error.message);
   if(event==='login'){
-    const {error:deviceError}=await sb.from('gm_user_devices').upsert({user_id:profile.id,device_name:'browser',platform:'web',trusted:true,last_seen_at:now()},{onConflict:'user_id,device_name'});
-    if(deviceError)console.warn('Unable to refresh device record',deviceError.message);
+    let deviceId=localStorage.getItem('gm_device_id');if(!deviceId){deviceId=crypto.randomUUID();localStorage.setItem('gm_device_id',deviceId);}
+    const deviceName=(navigator.platform||'Browser').slice(0,80);
+    const {error:deviceError}=await sb.from('gm_session_devices').upsert({user_id:profile.id,device_id:deviceId,device_name:deviceName,platform:'web',user_agent:ua,last_seen_at:now()},{onConflict:'user_id,device_id'});
+    if(deviceError)console.warn('Unable to refresh session device record',deviceError.message);
   }
 }
 export const auth = {
