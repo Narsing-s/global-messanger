@@ -447,3 +447,7 @@ GRANT EXECUTE ON FUNCTION public.gm_is_profile_visible(uuid) TO authenticated;
 DROP POLICY IF EXISTS "gm_profiles readable by authenticated users" ON public.gm_profiles;
 CREATE POLICY "gm profile visibility controls discovery" ON public.gm_profiles
 FOR SELECT TO authenticated USING(auth_user_id=auth.uid() OR public.gm_is_profile_visible(id));
+
+CREATE POLICY "gm users update own read marker" ON public.gm_conversation_members
+FOR UPDATE TO authenticated USING(user_id=public.gm_current_profile_id())
+WITH CHECK(user_id=public.gm_current_profile_id());
