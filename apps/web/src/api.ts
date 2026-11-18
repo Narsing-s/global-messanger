@@ -13,7 +13,7 @@ async function request<T = any>(path: string, options: RequestInit = {}): Promis
   const headers = new Headers(options.headers || {});
   if (options.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
   if (token) headers.set('authorization', `Bearer ${token}`);
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: options.credentials || 'include' });
+  const response = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: options.credentials || 'omit' });
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     throw new Error(text || `Request failed: ${response.status}`);
