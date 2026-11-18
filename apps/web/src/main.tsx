@@ -79,6 +79,8 @@ function App(){
   useEffect(()=>{if(!user)return; let alive=true;
     api.conversations().then((d:any)=>alive&&setChats(Array.isArray(d)?d.map(normalizeChat):[])).catch(e=>setError(e.message));
     const s=createMessengerSocket(localStorage.getItem('gm_token')||'');
+    (window as any).__gmMessengerSocket=s;
+    s.on('call:signal',(signal:any)=>window.dispatchEvent(new CustomEvent('gm:call-signal',{detail:signal})));
     s.on('connect',()=>setError(''));s.on('connect_error',(e:any)=>setError(e.message||'Realtime connection failed'));
     s.on('presence:update',(d:any)=>d?.userId&&setPresence(p=>({...p,[d.userId]:!!d.online})));
     s.on('typing',(d:any)=>d?.userId!==user.id&&setTyping(!!d.typing));
@@ -86,7 +88,7 @@ function App(){
     s.on('message:updated',(m:Message)=>setMessages(p=>p.map(x=>x.id===m.id?m:x)));
     s.on('message:deleted',(d:any)=>setMessages(p=>p.map(x=>x.id===d.id?{...x,body:'',deletedAt:d.deletedAt}:x)));
     s.on('reaction:update',()=>{if(active)setActive({...active})});
-    setSocket(s);return()=>{alive=false;s.disconnect()};
+    setSocket(s);return()=>{alive=false;if((window as any).__gmMessengerSocket===s)delete (window as any).__gmMessengerSocket;s.disconnect()};
   },[user?.id]);
   useEffect(()=>{if(!active)return;setTyping(false);socket?.emit('conversation:join',active.id);api.messages(active.id,100).then((d:any)=>setMessages(Array.isArray(d)?d:[])).catch(e=>setError(e.message));api.read(active.id).catch(()=>{});setChats(p=>p.map(c=>c.id===active.id?{...c,unreadCount:0}:c));return()=>{socket?.emit('conversation:leave',active.id)}},[active?.id,socket]);
 
