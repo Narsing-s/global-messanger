@@ -145,7 +145,7 @@ export async function request<T=any>(path:string,options:RequestInit={}):Promise
   if(path==='/api/bookmarks'&&method==='GET')return await api.bookmarks() as T;
   if(path==='/api/notifications'||path==='/api/notifications/center')return await notificationsApi.list() as T;
   if(path==='/api/notifications/center/read'&&method==='POST')return await notificationsApi.markRead() as T;
-  if(path==='/api/notifications/preferences'||path==='/api/privacy/settings')return await profileApi.privacy() as T;
+  if(path==='/api/notifications/preferences'||(path==='/api/privacy/settings'&&method==='GET'))return await profileApi.privacy() as T;
   if(path==='/api/privacy/settings'&&method==='PATCH')return await profileApi.updatePrivacy(body) as T;
   if(path==='/api/account/sessions'&&method==='GET')return await securityApi.devices() as T;
   if(path==='/api/security/login-history')return await securityApi.loginHistory() as T;
