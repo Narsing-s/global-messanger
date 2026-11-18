@@ -50,10 +50,15 @@ export const messagingApi={
  async bulkForward(messageIds:string[],conversationId:string){const {sb}=await ctx();const {data,error}=await sb.from('gm_messages').select('body,type,metadata').in('id',messageIds);if(error)fail(error);const out=[];for(const m of data||[])out.push(await api.sendMessage(conversationId,m.body,{type:m.type,metadata:{...(m.metadata||{}),forwarded:true}}));return out;},
  async info(messageId:string){const {sb}=await ctx();const {data,error}=await sb.from('gm_messages').select('id,conversation_id,sender_id,created_at,edited_at,deleted_at').eq('id',messageId).single();if(error)fail(error);const {data:reads,error:re}=await sb.from('gm_conversation_members').select('user_id,last_read_at').eq('conversation_id',data.conversation_id);if(re)fail(re);return {...data,readBy:reads||[]};}
 };
+async function invokeAi(body:Record<string,unknown>){
+ const {sb}=await ctx();const {data,error}=await sb.functions.invoke('gm-ai-assist',{body});
+ if(error)fail(error);if(data?.error)throw new Error(data.error);return data;
+}
 export const aiApi={
- async conversationSummary(_conversationId:string):Promise<never>{throw new Error('AI is not configured yet. Add a provider key to a Supabase Edge Function secret before enabling AI summaries.');},
- async documentUnderstanding(_text:string,_filename='document'):Promise<never>{throw new Error('AI is not configured yet. Add a provider key to a Supabase Edge Function secret before enabling document AI.');},
- async smartNotifications():Promise<never>{throw new Error('AI smart notifications are not configured yet.');}
+ conversationSummary:(conversationId:string)=>invokeAi({action:'summarize',conversationId}),
+ documentUnderstanding:(text:string,filename='document')=>invokeAi({action:'document',text,filename}),
+ smartNotifications:()=>invokeAi({action:'smart-notifications'}),
+ assist:(prompt:string,context='')=>invokeAi({action:'assist',prompt,context})
 };
 export const supportApi={
  async create(subject:string,category:string,description:string){const {sb,profile}=await ctx();const {data,error}=await sb.from('gm_support_tickets').insert({user_id:profile.id,subject,category,description}).select('*').single();if(error)fail(error);return data;},
