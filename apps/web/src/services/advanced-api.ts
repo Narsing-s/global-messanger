@@ -2,7 +2,7 @@ import { getSupabase } from '../supabase';
 import { api, auth } from '../api';
 export type ApiOptions = RequestInit & { json?: unknown };
 const fail=(e:any):never=>{throw new Error(e?.message||'Supabase request failed')};
-async function ctx(){const sb=await getSupabase();const {data:{user},error}=await sb.auth.getUser();if(error||!user)throw new Error('Please sign in again.');const {data:profile,error:e}=await sb.from('gm_profiles').select('id,auth_user_id,username,display_name,avatar_url,last_seen_at').eq('auth_user_id',user.id).single();if(e||!profile)fail(e||new Error('Messenger profile unavailable'));return {sb,user,profile};}
+async function ctx(){const sb=await getSupabase();const {data:{user},error}=await sb.auth.getUser();if(error||!user)throw new Error('Please sign in again.');const {data:profile,error:e}=await sb.rpc('gm_ensure_current_profile');if(e||!profile||typeof profile!=='object'||Array.isArray(profile))fail(e||new Error('Messenger profile unavailable'));return {sb,user,profile};}
 const profileShape=(p:any)=>({id:p.id,username:p.username,displayName:p.display_name,avatarUrl:p.avatar_url,lastSeenAt:p.last_seen_at});
 export const securityApi={
  async twoFactorStatus(){const {sb}=await ctx();const {data,error}=await sb.auth.mfa.listFactors();if(error)fail(error);return {enabled:(data.totp||[]).some((x:any)=>x.status==='verified'),factors:data.totp||[]};},
