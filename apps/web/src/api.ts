@@ -320,7 +320,7 @@ export const api = {
     const ids=(data||[]).map((x:any)=>x.message_id);if(!ids.length)return [];
     const {data:messages,error:e}=await sb.from('gm_messages').select('*').in('id',ids);if(e)fail(e);
     const senderIds=[...new Set((messages||[]).map((m:any)=>m.sender_id))];const {data:people,error:pe}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',senderIds);if(pe)fail(pe);
-    const senders=new Map((people||[]).map((p:any)=>[p.id,p]));const byId=new Map((messages||[]).map((m:any)=>[m.id,messageShape(m,senders.get(m.sender_id))]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:byId.get(x.message_id)})).filter((x:any)=>x.message);
+    const safePeople=await hidePrivateLastSeen(sb,people||[]);const senders=new Map(safePeople.map((p:any)=>[p.id,p]));const byId=new Map((messages||[]).map((m:any)=>[m.id,messageShape(m,senders.get(m.sender_id))]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:byId.get(x.message_id)})).filter((x:any)=>x.message);
   },
   async mute(id:string,minutes:number){
     const sb=await getSupabase(),me=await currentProfile();const muted_until=minutes?new Date(Date.now()+minutes*60000).toISOString():null;
