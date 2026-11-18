@@ -7,10 +7,11 @@ import { createMessengerSocket, type Socket } from './services/socket';
 import {
   Archive, Bell, CheckCheck, ChevronLeft, Copy, Heart, LogIn, LogOut,
   MessageCircle, MoreVertical, Paperclip, Plus, Search, Send, Settings,
-  ShieldCheck, Smile, Star, Trash2, UserPlus, Users, X
+  ShieldCheck, Smile, Star, Sun, Moon, Trash2, UserPlus, Users, X
 } from 'lucide-react';
 import { api, API } from './api';
 import './styles.css';
+import './ui-polish.css';
 
 type User={id:string;username:string;displayName:string;avatarUrl?:string|null;lastSeenAt?:string};
 type Member={user:User;favoriteAt?:string|null;archivedAt?:string|null};
@@ -68,6 +69,8 @@ function App(){
   const [messages,setMessages]=useState<Message[]>([]),[query,setQuery]=useState(''),[people,setPeople]=useState<User[]>([]);
   const [text,setText]=useState(''),[folder,setFolder]=useState<Folder>('all'),[socket,setSocket]=useState<Socket|null>(null);
   const [error,setError]=useState(''),[typing,setTyping]=useState(false),[mobile,setMobile]=useState(false);
+  const [theme,setTheme]=useState<'light'|'dark'>(()=>localStorage.getItem('gm_theme')==='dark'?'dark':'light');
+  useEffect(()=>{document.documentElement.dataset.gmTheme=theme;localStorage.setItem('gm_theme',theme)},[theme]);
   const [groupOpen,setGroupOpen]=useState(false),[groupTitle,setGroupTitle]=useState(''),[groupUsers,setGroupUsers]=useState<User[]>([]);
   const [menu,setMenu]=useState(false),[profileOpen,setProfileOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false);
   const [emoji,setEmoji]=useState(false),[reaction,setReaction]=useState<string|null>(null),[reply,setReply]=useState<Message|null>(null);
@@ -130,7 +133,7 @@ function App(){
       </div></>}
     </main>
     {profileOpen&&<Modal title="My profile" onClose={()=>setProfileOpen(false)}><Avatar user={user} size="xl"/><h2>{user.displayName}</h2><p>@{user.username}</p><button className="primary" onClick={logout}><LogOut/> Logout</button></Modal>}
-    {settingsOpen&&<Modal title="Settings" onClose={()=>setSettingsOpen(false)}><div className="setting"><Bell/><div><b>Notifications</b><small>Realtime message notifications are enabled when supported.</small></div></div><div className="setting"><ShieldCheck/><div><b>Account security</b><small>Use a strong password and sign out of shared devices.</small></div></div><button className="danger big" onClick={logout}><LogOut/> Log out</button></Modal>}
+    {settingsOpen&&<Modal title="Settings" onClose={()=>setSettingsOpen(false)}><button type="button" className="setting theme-setting" onClick={()=>setTheme(theme==='dark'?'light':'dark')}><span className="setting-icon">{theme==='dark'?<Sun/>:<Moon/>}</span><span><b>Appearance · {theme==='dark'?'Dark':'Light'}</b><small>Switch between light and dark themes. Your choice is saved on this device.</small></span><strong>{theme==='dark'?'Light mode':'Dark mode'}</strong></button><div className="setting"><Bell/><div><b>Notifications</b><small>Realtime message notifications are enabled when supported.</small></div></div><div className="setting"><ShieldCheck/><div><b>Account security</b><small>Use a strong password and sign out of shared devices.</small></div></div><button className="danger big" onClick={logout}><LogOut/> Log out</button></Modal>}
     {groupOpen&&<GroupModal title={groupTitle} setTitle={setGroupTitle} users={groupUsers} setUsers={setGroupUsers} onCreate={createGroup} onClose={()=>setGroupOpen(false)}/>}
   </div>
 }
