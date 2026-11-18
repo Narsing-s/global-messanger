@@ -2,7 +2,7 @@ const PREFIX = 'gm:e2ee:v1:';
 
 const configuredApi = (window as any).__GM_CONFIG__?.API_URL || (import.meta as any).env?.VITE_API_URL || localStorage.getItem('gm_api_url');
 const native = ['capacitor:', 'ionic:', 'file:', 'null'].includes(window.location.protocol);
-const API = native && configuredApi ? String(configuredApi).replace(/\/$/, '') : window.location.origin;
+const API = ''; // Encryption keys are stored in Supabase, not the legacy Worker.
 
 type Identity = { publicKey: JsonWebKey; privateKey: JsonWebKey; version: 1 };
 type KeyBundle = { userId: string; publicKey: JsonWebKey | null };
@@ -74,11 +74,30 @@ function getLocalIdentityCandidates(): Identity[] {
 }
 
 async function authFetch(path: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('gm_token');
-  return fetch(`${API}${path}`, {
-    ...options,
-    headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) }
-  });
+  const { getSupabase } = await import('./supabase');
+  const sb = await getSupabase();
+  const me = JSON.parse(localStorage.getItem('gm_user') || 'null');
+  const userId = String(me?.id || '');
+  if (path === '/api/crypto/identity' && options.method === 'PUT') {
+    const body = JSON.parse(String(options.body || '{}'));
+    const { error } = await sb.from('gm_user_devices').upsert({
+      user_id:userId, device_name:'browser', platform:'web',
+      public_key:JSON.stringify(body.publicKey), trusted:true, last_seen_at:new Date().toISOString()
+    }, { onConflict:'user_id,device_name' });
+    if (error) throw error;
+    return new Response(null,{status:204});
+  }
+  const match = path.match(/^\/api\/conversations\/([^/]+)\/crypto-keys$/);
+  if (match) {
+    const conversationId=decodeURIComponent(match[1]);
+    const {data:members,error}=await sb.from('gm_conversation_members').select('user_id').eq('conversation_id',conversationId);
+    if(error)throw error;
+    const ids=(members||[]).map((m:any)=>m.user_id);
+    const {data:keys,error:keyError}=await sb.from('gm_user_devices').select('user_id,public_key').in('user_id',ids);
+    if(keyError)throw keyError;
+    return new Response(JSON.stringify({keys:(keys||[]).map((k:any)=>({userId:k.user_id,publicKey:typeof k.public_key==='string'?JSON.parse(k.public_key):k.public_key}))}),{status:200,headers:{'Content-Type':'application/json'}});
+  }
+  throw new Error('Unsupported encryption endpoint');
 }
 
 async function registerIdentity() {
