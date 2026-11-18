@@ -237,14 +237,16 @@ export const api = {
   },
   direct:ensureDirect,
   async group(title:string,userIds:string[]) {
-    const sb=await getSupabase(),me=await currentProfile();
-    for(const id of [...new Set(userIds)]){const {data:isBlocked,error}=await sb.rpc('gm_is_blocked_user',{target_user:id});if(error)fail(error);if(isBlocked)throw new Error('A blocked account cannot be added to this group.');}
-    const {data:c,error}=await sb.from('gm_conversations').insert({title,is_group:true,creator_id:me.id}).select('id').single();
+    const sb=await getSupabase();
+    // The database validates the authenticated creator, selected profiles and block rules,
+    // then creates the group and every membership in one atomic transaction.
+    const {data:conversationId,error}=await sb.rpc('gm_create_group_conversation',{
+      group_title:title,
+      member_users:[...new Set(userIds)]
+    });
     if(error)fail(error);
-    const ids=[...new Set([me.id,...userIds])];
-    const {error:e}=await sb.from('gm_conversation_members').insert(ids.map(user_id=>({conversation_id:c.id,user_id})));
-    if(e)fail(e);
-    return loadConversation(c.id);
+    if(!conversationId)throw new Error('The group could not be created. Please retry.');
+    return loadConversation(conversationId);
   },
   async updateProfile(patch:Record<string,unknown>){const sb=await getSupabase(),me=await currentProfile();const {error}=await sb.from('gm_profiles').update(patch).eq('id',me.id);if(error)fail(error);profileCache.delete(me.auth_user_id);},
   async read(id:string) {
