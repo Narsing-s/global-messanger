@@ -306,7 +306,7 @@ export const api = {
     const {data,error}=await sb.from('gm_messages').select('*').ilike('body','%'+term.replace(/[,%]/g,'')+'%').order('created_at',{ascending:false}).limit(limit);
     if(error)fail(error);const ids=[...new Set((data||[]).map((m:any)=>m.sender_id))];
     const {data:profiles,error:pe}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);if(pe)fail(pe);
-    const map=new Map((profiles||[]).map((p:any)=>[p.id,p]));return (data||[]).map((m:any)=>messageShape(m,map.get(m.sender_id)));
+    const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);const map=new Map(safeProfiles.map((p:any)=>[p.id,p]));return (data||[]).map((m:any)=>messageShape(m,map.get(m.sender_id)));
   },
   async bookmarks(){
     const sb=await getSupabase(),me=await currentProfile();const {data,error}=await sb.from('gm_bookmarks').select('message_id,created_at').eq('user_id',me.id).order('created_at',{ascending:false}).limit(100);if(error)fail(error);
