@@ -99,22 +99,13 @@ async function sendMessage(conversationId:string,body:string,extra:any={}) {
 }
 async function ensureDirect(userId:string) {
   const sb=await getSupabase(),me=await currentProfile();
-  const {data:isBlocked,error:blockError}=await sb.rpc('gm_is_blocked_user',{target_user:userId});if(blockError)fail(blockError);if(isBlocked)throw new Error('This conversation cannot be started because one of the accounts has blocked the other.');
-  const {data:mine,error}=await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id);
+  // Create/reuse the direct conversation and both memberships atomically.
+  // The database function performs the operation with a validated auth.uid(),
+  // so RLS cannot leave behind an empty conversation if the second insert fails.
+  const {data:conversationId,error}=await sb.rpc('gm_start_direct_conversation',{target_user:userId});
   if(error)fail(error);
-  const {data:theirs,error:e}=await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',userId);
-  if(e)fail(e);
-  const theirsSet=new Set((theirs||[]).map((x:any)=>x.conversation_id));
-  const shared=(mine||[]).map((x:any)=>x.conversation_id).filter((id:string)=>theirsSet.has(id));
-  if(shared.length){
-    const {data:found}=await sb.from('gm_conversations').select('id').in('id',shared).eq('is_group',false).limit(1).maybeSingle();
-    if(found)return loadConversation(found.id);
-  }
-  const {data:c,error:ce}=await sb.from('gm_conversations').insert({is_group:false,creator_id:me.id}).select('id').single();
-  if(ce)fail(ce);
-  const {error:ie}=await sb.from('gm_conversation_members').insert([{conversation_id:c.id,user_id:me.id},{conversation_id:c.id,user_id:userId}]);
-  if(ie)fail(ie);
-  return loadConversation(c.id);
+  if(!conversationId)throw new Error('The conversation could not be created. Please retry.');
+  return loadConversation(conversationId);
 }
 async function recordLogin(sb:any,profile:any,event:'login'|'logout'|'password_changed'){
   const ua=typeof navigator!=='undefined'?navigator.userAgent.slice(0,500):null;
