@@ -735,3 +735,12 @@ USING(public.gm_is_conversation_member(conversation_id))
 WITH CHECK(sender_id=public.gm_current_profile_id() AND public.gm_is_conversation_member(conversation_id));
 REVOKE UPDATE ON public.gm_notifications FROM authenticated;
 GRANT UPDATE(read_at) ON public.gm_notifications TO authenticated;
+
+DROP INDEX IF EXISTS public.idx_gm_conversation_members_user_id;
+DROP INDEX IF EXISTS public.idx_gm_message_reactions_message_id;
+DROP POLICY IF EXISTS "gm profile owner updates own profile" ON public.gm_profiles;
+CREATE POLICY "gm profile owner updates own profile" ON public.gm_profiles FOR UPDATE TO authenticated
+USING(auth_user_id=(SELECT auth.uid())) WITH CHECK(auth_user_id=(SELECT auth.uid()));
+DROP POLICY IF EXISTS "gm profile visibility controls discovery" ON public.gm_profiles;
+CREATE POLICY "gm profile visibility controls discovery" ON public.gm_profiles FOR SELECT TO authenticated
+USING(auth_user_id=(SELECT auth.uid()) OR public.gm_is_profile_visible(id));
