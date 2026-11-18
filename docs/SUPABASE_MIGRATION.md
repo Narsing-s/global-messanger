@@ -31,8 +31,8 @@ The client currently loads @supabase/supabase-js from the browser ESM CDN at esm
 
 This is a staged migration, not yet a complete replacement of every legacy endpoint.
 
-- The primary React app's account, chat, group, message, upload, presence, typing and E2EE-key flows use Supabase.
-- Legacy add-on modules still contain Worker endpoints for account-session management, privacy settings, support tickets, AI assist, global entities and some call/SFU control APIs. Those routes need their own Supabase tables / Edge Functions before those add-on screens can be considered migrated.
+- The primary React app's account, chat, group, message, upload, presence, typing, E2EE-key, privacy settings, device-session and password-reset flows use Supabase.
+- Legacy add-on modules still contain Worker endpoints for support tickets, AI assist, global entities and some call/SFU control APIs. Those routes need their own Supabase tables / Edge Functions before those add-on screens can be considered migrated.
 - Supabase is not a media SFU. Live audio/video still needs a separate WebRTC SFU/TURN service; the media transport endpoints cannot be replaced by a Postgres table or Realtime channel.
 - Existing Cloudflare D1 records and PBKDF2 password hashes have not been imported. Existing accounts must be claimed or recreated through a verified reset flow before their old chat history can be retained.
 
