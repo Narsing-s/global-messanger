@@ -38,7 +38,7 @@ export const organizationApi={
 };
 export const messagingApi={
  async createPoll(conversationId:string,question:string,options:string[],multiple=false){const {sb,profile}=await ctx();if(options.length<2||options.length>12)throw new Error('A poll needs 2 to 12 options.');const {data:p,error}=await sb.from('gm_polls').insert({conversation_id:conversationId,creator_id:profile.id,question:question.trim(),multiple_choice:multiple}).select('*').single();if(error)fail(error);const {data:o,error:e}=await sb.from('gm_poll_options').insert(options.map((label,position)=>({poll_id:p.id,label:label.trim(),position}))).select('*');if(e)fail(e);return {...p,options:o||[]};},
- async votePoll(pollId:string,optionIds:string[]){const {sb,profile}=await ctx();const {data:p,error}=await sb.from('gm_polls').select('id,multiple_choice').eq('id',pollId).single();if(error)fail(error);const {error:del}=await sb.from('gm_poll_votes').delete().eq('user_id',profile.id).in('poll_option_id',await pollOptionIds(sb,pollId));if(del)fail(del);if(!p.multiple_choice&&optionIds.length>1)throw new Error('This poll allows one choice only.');const {error:ins}=await sb.from('gm_poll_votes').insert(optionIds.map(poll_option_id=>({poll_option_id,user_id:profile.id})));if(ins)fail(ins);return {success:true};},
+ async votePoll(pollId:string,optionIds:string[]){const {sb,profile}=await ctx();const {data:p,error}=await sb.from('gm_polls').select('id,multiple_choice').eq('id',pollId).single();if(error)fail(error);if(!optionIds.length)throw new Error('Choose at least one option.');if(!p.multiple_choice&&optionIds.length>1)throw new Error('This poll allows one choice only.');const {data:opts,error:oe}=await sb.from('gm_poll_options').select('id').eq('poll_id',pollId);if(oe)fail(oe);const valid=new Set((opts||[]).map((x:any)=>x.id));if(optionIds.some(id=>!valid.has(id)))throw new Error('One or more poll options are invalid.');const ids=[...valid];if(ids.length){const {error:del}=await sb.from('gm_poll_votes').delete().eq('user_id',profile.id).in('poll_option_id',ids);if(del)fail(del);}const {error:ins}=await sb.from('gm_poll_votes').insert(optionIds.map(poll_option_id=>({poll_option_id,user_id:profile.id})));if(ins)fail(ins);return {success:true};},
  async poll(pollId:string){const {sb}=await ctx();const {data:p,error}=await sb.from('gm_polls').select('*').eq('id',pollId).single();if(error)fail(error);const {data:o,error:e}=await sb.from('gm_poll_options').select('id,label,position').eq('poll_id',pollId).order('position');if(e)fail(e);const ids=(o||[]).map((x:any)=>x.id);const {data:v,error:ve}=await sb.from('gm_poll_votes').select('poll_option_id,user_id').in('poll_option_id',ids);if(ve)fail(ve);return {...p,options:(o||[]).map((x:any)=>({...x,votes:(v||[]).filter((z:any)=>z.poll_option_id===x.id)}))};},
  async schedule(conversationId:string,body:string,scheduledAt:string){const {sb,profile}=await ctx();if(new Date(scheduledAt)<=new Date())throw new Error('Choose a future time.');const {data,error}=await sb.from('gm_scheduled_messages').insert({conversation_id:conversationId,sender_id:profile.id,body,scheduled_for:scheduledAt}).select('*').single();if(error)fail(error);return data;},
  async scheduled(){const {sb,profile}=await ctx();const {data,error}=await sb.from('gm_scheduled_messages').select('*').eq('sender_id',profile.id).is('cancelled_at',null).is('sent_at',null).order('scheduled_for');if(error)fail(error);return data||[];},
@@ -72,4 +72,44 @@ export const notificationsApi={
  async list(){const {sb,profile}=await ctx();const {data,error}=await sb.from('gm_notifications').select('*').eq('user_id',profile.id).order('created_at',{ascending:false}).limit(100);if(error)fail(error);return data||[];},
  async markRead(){const {sb,profile}=await ctx();const {error}=await sb.from('gm_notifications').update({read_at:new Date().toISOString()}).eq('user_id',profile.id).is('read_at',null);if(error)fail(error);return {success:true};}
 };
+
+export const reportsApi={
+ async create(targetId:string,targetType:'user'|'message'='user',reason='other',details=''){
+  const {sb,profile}=await ctx();
+  const row:any={reporter_id:profile.id,reason,details};
+  if(targetType==='message')row.message_id=targetId;else row.reported_user_id=targetId;
+  const {data,error}=await sb.from('gm_user_reports').insert(row).select('*').single();
+  if(error)fail(error);return data;
+ }
+};
+export const exportApi={
+ async account(){
+  const {sb,profile,user}=await ctx();
+  const [members,ownMessages,bookmarks,devices,privacy,history,notifications,tickets,entities]=await Promise.all([
+   sb.from('gm_conversation_members').select('conversation_id,joined_at,last_read_at').eq('user_id',profile.id),
+   sb.from('gm_messages').select('*').eq('sender_id',profile.id).order('created_at',{ascending:false}).limit(5000),
+   sb.from('gm_bookmarks').select('message_id,created_at').eq('user_id',profile.id),
+   sb.from('gm_user_devices').select('id,device_name,platform,trusted,last_seen_at,created_at').eq('user_id',profile.id),
+   sb.from('gm_privacy_settings').select('*').eq('user_id',profile.id).maybeSingle(),
+   sb.from('gm_login_history').select('*').eq('user_id',profile.id).order('created_at',{ascending:false}).limit(200),
+   sb.from('gm_notifications').select('*').eq('user_id',profile.id).order('created_at',{ascending:false}).limit(1000),
+   sb.from('gm_support_tickets').select('*').eq('user_id',profile.id).order('created_at',{ascending:false}),
+   sb.from('gm_global_entities').select('*').eq('owner_id',profile.id).order('created_at',{ascending:false})
+  ]);
+  for(const r of [members,ownMessages,bookmarks,devices,privacy,history,notifications,tickets,entities])if(r.error)fail(r.error);
+  const ids=(members.data||[]).map((x:any)=>x.conversation_id);
+  const conversations=ids.length?await sb.from('gm_conversations').select('*').in('id',ids):{data:[],error:null};
+  if(conversations.error)fail(conversations.error);
+  return {exportedAt:new Date().toISOString(),account:{id:user.id,email:user.email,profile},conversations:conversations.data||[],memberships:members.data||[],messages:ownMessages.data||[],bookmarks:bookmarks.data||[],devices:devices.data||[],privacy:privacy.data||null,loginHistory:history.data||[],notifications:notifications.data||[],supportTickets:tickets.data||[],globalEntities:entities.data||[]};
+ },
+ async mediaIndex(){
+  const {sb,profile}=await ctx();
+  const {data,error}=await sb.from('gm_attachments').select('id,conversation_id,message_id,bucket_id,object_path,file_name,mime_type,size_bytes,created_at').eq('uploader_id',profile.id).order('created_at',{ascending:false}).limit(5000);
+  if(error)fail(error);return {exportedAt:new Date().toISOString(),items:data||[]};
+ }
+};
+export const featuresApi={
+ list:()=>({backend:'Supabase',authentication:'Supabase Auth',database:'Postgres + RLS',storage:'Supabase Storage',realtime:'Supabase Realtime',calls:'Peer-to-peer WebRTC; TURN/SFU not included',ai:'Supabase Edge Function; requires GROQ_API_KEY'})
+};
+
 export const advancedApi=async()=>{throw new Error('Legacy HTTP API is disabled. Use the Supabase-backed APIs exported by this module.');};
