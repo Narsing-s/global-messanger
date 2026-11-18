@@ -72,4 +72,44 @@ export const notificationsApi={
  async list(){const {sb,profile}=await ctx();const {data,error}=await sb.from('gm_notifications').select('*').eq('user_id',profile.id).order('created_at',{ascending:false}).limit(100);if(error)fail(error);return data||[];},
  async markRead(){const {sb,profile}=await ctx();const {error}=await sb.from('gm_notifications').update({read_at:new Date().toISOString()}).eq('user_id',profile.id).is('read_at',null);if(error)fail(error);return {success:true};}
 };
+
+export const reportsApi={
+ async create(targetId:string,targetType:'user'|'message'='user',reason='other',details=''){
+  const {sb,profile}=await ctx();
+  const row:any={reporter_id:profile.id,reason,details};
+  if(targetType==='message')row.message_id=targetId;else row.reported_user_id=targetId;
+  const {data,error}=await sb.from('gm_user_reports').insert(row).select('*').single();
+  if(error)fail(error);return data;
+ }
+};
+export const exportApi={
+ async account(){
+  const {sb,profile,user}=await ctx();
+  const [members,ownMessages,bookmarks,devices,privacy,history,notifications,tickets,entities]=await Promise.all([
+   sb.from('gm_conversation_members').select('conversation_id,joined_at,last_read_at').eq('user_id',profile.id),
+   sb.from('gm_messages').select('*').eq('sender_id',profile.id).order('created_at',{ascending:false}).limit(5000),
+   sb.from('gm_bookmarks').select('message_id,created_at').eq('user_id',profile.id),
+   sb.from('gm_user_devices').select('id,device_name,platform,trusted,last_seen_at,created_at').eq('user_id',profile.id),
+   sb.from('gm_privacy_settings').select('*').eq('user_id',profile.id).maybeSingle(),
+   sb.from('gm_login_history').select('*').eq('user_id',profile.id).order('created_at',{ascending:false}).limit(200),
+   sb.from('gm_notifications').select('*').eq('user_id',profile.id).order('created_at',{ascending:false}).limit(1000),
+   sb.from('gm_support_tickets').select('*').eq('user_id',profile.id).order('created_at',{ascending:false}),
+   sb.from('gm_global_entities').select('*').eq('owner_id',profile.id).order('created_at',{ascending:false})
+  ]);
+  for(const r of [members,ownMessages,bookmarks,devices,privacy,history,notifications,tickets,entities])if(r.error)fail(r.error);
+  const ids=(members.data||[]).map((x:any)=>x.conversation_id);
+  const conversations=ids.length?await sb.from('gm_conversations').select('*').in('id',ids):{data:[],error:null};
+  if(conversations.error)fail(conversations.error);
+  return {exportedAt:new Date().toISOString(),account:{id:user.id,email:user.email,profile},conversations:conversations.data||[],memberships:members.data||[],messages:ownMessages.data||[],bookmarks:bookmarks.data||[],devices:devices.data||[],privacy:privacy.data||null,loginHistory:history.data||[],notifications:notifications.data||[],supportTickets:tickets.data||[],globalEntities:entities.data||[]};
+ },
+ async mediaIndex(){
+  const {sb,profile}=await ctx();
+  const {data,error}=await sb.from('gm_attachments').select('id,conversation_id,message_id,bucket_id,object_path,file_name,mime_type,size_bytes,created_at').eq('uploader_id',profile.id).order('created_at',{ascending:false}).limit(5000);
+  if(error)fail(error);return {exportedAt:new Date().toISOString(),items:data||[]};
+ }
+};
+export const featuresApi={
+ list:()=>({backend:'Supabase',authentication:'Supabase Auth',database:'Postgres + RLS',storage:'Supabase Storage',realtime:'Supabase Realtime',calls:'Peer-to-peer WebRTC; TURN/SFU not included',ai:'Supabase Edge Function; requires GROQ_API_KEY'})
+};
+
 export const advancedApi=async()=>{throw new Error('Legacy HTTP API is disabled. Use the Supabase-backed APIs exported by this module.');};
