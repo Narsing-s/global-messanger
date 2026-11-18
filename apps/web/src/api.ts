@@ -61,9 +61,17 @@ async function listMessages(conversationId:string,limit=100) {
   const {data,error}=await sb.from('gm_messages').select('*').eq('conversation_id',conversationId).order('created_at',{ascending:true}).limit(limit);
   if(error)fail(error);
   const ids=[...new Set((data||[]).map((m:any)=>m.sender_id))];
+  const messageIds=(data||[]).map((m:any)=>m.id);
   const {data:profiles}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);
   const byId=new Map((profiles||[]).map((p:any)=>[p.id,p]));
-  return (data||[]).map((m:any)=>messageShape(m,byId.get(m.sender_id)));
+  const {data:attachments,error:attachmentError}=await sb.from('gm_attachments').select('message_id,bucket_id,object_path,file_name,mime_type,size_bytes').in('message_id',messageIds);
+  if(attachmentError)fail(attachmentError);
+  const attachmentMap=new Map<string,any>();
+  await Promise.all((attachments||[]).map(async (a:any)=>{
+    const {data:signed,error:signError}=await sb.storage.from(a.bucket_id).createSignedUrl(a.object_path,3600);
+    if(!signError&&signed)attachmentMap.set(a.message_id,{attachmentUrl:signed.signedUrl,attachmentName:a.file_name,attachmentMime:a.mime_type,attachmentSize:a.size_bytes});
+  }));
+  return (data||[]).map((m:any)=>messageShape({...m,metadata:{...(m.metadata||{}),...(attachmentMap.get(m.id)||{})}},byId.get(m.sender_id)));
 }
 async function sendMessage(conversationId:string,body:string,extra:any={}) {
   const sb=await getSupabase(),me=await currentProfile();
