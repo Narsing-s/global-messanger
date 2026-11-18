@@ -136,7 +136,62 @@ export const auth = {
   async logout(){const sb=await getSupabase();try{const p=await currentProfile();await recordLogin(sb,p,'logout')}catch{}profileCache.clear();const {error}=await sb.auth.signOut();if(error)fail(error);}
 };
 export async function request<T=any>(path:string,options:RequestInit={}):Promise<T>{
-  throw new Error('Legacy HTTP API routes have been removed. Use the Supabase-backed Messenger API instead.');
+  const method=(options.method||'GET').toUpperCase();
+  let body:any={};try{body=typeof options.body==='string'?JSON.parse(options.body):options.body||{}}catch{}
+  const {securityApi,profileApi,organizationApi,messagingApi,aiApi,supportApi,entitiesApi,notificationsApi}=await import('./services/advanced-api');
+  if(path==='/api/conversations'&&method==='GET')return await api.conversations() as T;
+  if(path==='/api/messages/bulk-delete'&&method==='POST')return await api.bulkDelete(body.messageIds||[]) as T;
+  if(path==='/api/messages/bulk-forward'&&method==='POST')return await messagingApi.bulkForward(body.messageIds||[],body.conversationId) as T;
+  if(path==='/api/bookmarks'&&method==='GET')return await api.bookmarks() as T;
+  if(path==='/api/notifications'||path==='/api/notifications/center')return await notificationsApi.list() as T;
+  if(path==='/api/notifications/center/read'&&method==='POST')return await notificationsApi.markRead() as T;
+  if(path==='/api/notifications/preferences'||path==='/api/privacy/settings')return await profileApi.privacy() as T;
+  if(path==='/api/privacy/settings'&&method==='PATCH')return await profileApi.updatePrivacy(body) as T;
+  if(path==='/api/account/sessions'&&method==='GET')return await securityApi.devices() as T;
+  if(path==='/api/security/login-history')return await securityApi.loginHistory() as T;
+  if(path==='/api/security/status')return await securityApi.securityStatus() as T;
+  if(path==='/api/security/2fa/status')return await securityApi.twoFactorStatus() as T;
+  if(path==='/api/security/2fa/setup'&&method==='POST')return await securityApi.setupTwoFactor() as T;
+  if(path==='/api/security/2fa/verify'&&method==='POST')return await securityApi.verifyTwoFactor(body.code,body.factorId) as T;
+  if(path==='/api/security/2fa/enable'&&method==='POST')return await securityApi.enableTwoFactor(body.secret,body.code) as T;
+  if(path==='/api/security/2fa/disable'&&method==='POST')return await securityApi.disableTwoFactor(body.code) as T;
+  if(path==='/api/product/features')return {features:{messaging:true,groups:true,media:true,realtime:true,e2ee:true,support:true,scheduledMessages:true,notifications:true}} as T;
+  if(path==='/api/account/export')return await exportAccountData() as T;
+  if(path==='/api/media/export')return await api.media(undefined,undefined,1000) as T;
+  if(path==='/api/reports'&&method==='POST')return await createUserReport(body) as T;
+  if(path==='/api/global/entities'&&method==='POST')return await entitiesApi.create(String(body.kind||'general'),String(body.title||''),body.payload||{}) as T;
+  if(path==='/api/global/entities'&&method==='GET')return await entitiesApi.list() as T;
+  if(path==='/api/support/tickets'&&method==='POST')return await supportApi.create(String(body.subject||''),String(body.category||'general'),String(body.description||'')) as T;
+  if(path==='/api/support/tickets'&&method==='GET')return await supportApi.list() as T;
+  const mute=path.match(/^\\/api\\/conversations\\/([^/]+)\\/mute$/);
+  if(mute&&method==='POST')return await api.mute(decodeURIComponent(mute[1]),Number(body.minutes||0)) as T;
+  const pins=path.match(/^\\/api\\/conversations\\/([^/]+)\\/pins$/);
+  if(pins&&method==='GET')return await api.pins(decodeURIComponent(pins[1])) as T;
+  const read=path.match(/^\\/api\\/conversations\\/([^/]+)\\/read$/);
+  if(read&&method==='POST'){await api.read(decodeURIComponent(read[1]));return {success:true} as T;}
+  const blocked=path.match(/^\\/api\\/users\\/([^/]+)\\/block$/);
+  if(blocked&&method==='POST'){await api.blockUser(decodeURIComponent(blocked[1]));return {success:true} as T;}
+  if(blocked&&method==='DELETE'){await securityApi.unblock(decodeURIComponent(blocked[1]));return {success:true} as T;}
+  const message=path.match(/^\\/api\\/messages\\/([^/]+)$/);
+  if(message&&method==='PATCH'){await api.editMessage(decodeURIComponent(message[1]),String(body.body||''));return {success:true} as T;}
+  if(path.startsWith('/api/messages/search')){const q=new URLSearchParams(path.split('?')[1]||'').get('q')||'';return await api.searchMessages(q) as T;}
+  if(path.startsWith('/api/search/universal')){const q=new URLSearchParams(path.split('?')[1]||'').get('q')||'';return await organizationApi.universalSearch(q) as T;}
+  if(path.startsWith('/api/media')){const query=new URLSearchParams(path.split('?')[1]||'');return await api.media(query.get('conversationId')||undefined,query.get('q')||undefined,Number(query.get('limit')||100)) as T;}
+  if(path==='/api/ai/assist'||path.startsWith('/api/ai/'))throw new Error('AI is not configured yet. Add an AI provider key to a Supabase Edge Function secret.');
+  throw new Error('This operation is not yet available in the Supabase backend: '+method+' '+path);
+}
+async function exportAccountData(){
+ const sb=await getSupabase(),me=await currentProfile();
+ const names=['gm_profiles','gm_conversation_members','gm_conversations','gm_messages','gm_bookmarks','gm_pinned_messages','gm_conversation_preferences','gm_user_devices','gm_privacy_settings','gm_notifications'];
+ const data:any={exportedAt:now(),profile:userShape(me),tables:{}};
+ for(const table of names){const q=table==='gm_profiles'?sb.from(table).select('id,username,display_name,avatar_url,last_seen_at').eq('id',me.id):table==='gm_conversation_members'?sb.from(table).select('*').eq('user_id',me.id):table==='gm_conversations'?sb.from(table).select('*').in('id',(await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id)).data?.map((x:any)=>x.conversation_id)||[]):table==='gm_messages'?sb.from(table).select('*').in('conversation_id',(await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id)).data?.map((x:any)=>x.conversation_id)||[]):sb.from(table).select('*').eq('user_id',me.id);const {data:rows,error}=await q;if(error)fail(error);data.tables[table]=rows||[];}
+ return data;
+}
+async function createUserReport(body:any){
+ const sb=await getSupabase(),me=await currentProfile();
+ const row:any={reporter_id:me.id,reason:String(body.reason||'other'),details:String(body.description||body.details||'').slice(0,4000)};
+ if(body.targetId&&String(body.targetId).includes('-'))row.reported_user_id=body.targetId;
+ const {data,error}=await sb.from('gm_user_reports').insert(row).select('*').single();if(error)fail(error);return data;
 }
 async function uploadWithProgress(file:File,onProgress?:(n:number)=>void,signal?:AbortSignal,conversationId?:string) {
   if(signal?.aborted)throw new DOMException('Upload aborted','AbortError');
@@ -258,6 +313,10 @@ export const api = {
   },
   async blockUser(userId:string){
     const sb=await getSupabase(),me=await currentProfile();const {error}=await sb.from('gm_user_blocks').upsert({blocker_id:me.id,blocked_id:userId},{onConflict:'blocker_id,blocked_id'});if(error)fail(error);
+  },
+  async bulkDelete(ids:string[]){
+    const sb=await getSupabase(),me=await currentProfile();const unique=[...new Set(ids.map(String))];if(!unique.length)return {success:true,deleted:0};
+    const {data,error}=await sb.from('gm_messages').update({body:'',deleted_at:now()}).in('id',unique).eq('sender_id',me.id).select('id');if(error)fail(error);return {success:true,deleted:data?.length||0};
   },
   async media(conversationId?:string,q?:string,limit=100) {
     const sb=await getSupabase();
