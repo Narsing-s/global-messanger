@@ -45,12 +45,12 @@ function Auth({onLogin}:{onLogin:(u:User,t:string)=>void}) {
       const body=register
         ? {username:derivedUsername,displayName:name.trim()||derivedUsername,email:cleanEmail,password}
         : {identifier:cleanEmail,password};
-      const r=await fetch(API+path,{method:'POST',headers:{'content-type':'application/json'},credentials:'include',body:JSON.stringify(body)});
+      const r=await fetch(API+path,{method:'POST',headers:{'content-type':'application/json'},credentials:'omit',body:JSON.stringify(body)});
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw Error(d.message||'Authentication failed');
       if(!d.token||!d.user)throw Error('Authentication server returned an invalid session');
       localStorage.setItem('gm_token',d.token);localStorage.setItem('gm_user',JSON.stringify(d.user));onLogin(d.user,d.token);
-    }catch(e:any){setError(e.message||'Authentication failed')}finally{setBusy(false)}
+    }catch(e:any){setError(e instanceof TypeError?'Cannot reach the messaging server. Check the API connection and CORS configuration, then retry.':e.message||'Authentication failed')}finally{setBusy(false)}
   }
   return <div className="auth-page"><form className="auth-card" onSubmit={submit}>
     <div className="brand"><div className="brand-mark"><MessageCircle/></div><div><b>Global Messenger</b><small>Connect · Chat · Share</small></div></div>
