@@ -72,36 +72,41 @@ STABLE
 SECURITY DEFINER
 SET search_path = public, private, pg_temp
 AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.gm_stories s
-    WHERE s.id = target_story
-      AND (
-        s.author_id = private.gm_current_profile_id()
-        OR (
-          s.archived_at IS NULL
-          AND s.expires_at > now()
-          AND (s.media_type = 'text' OR s.media_path IS NOT NULL)
-          AND NOT private.gm_is_blocked(s.author_id)
-          AND CASE s.audience_mode
-            WHEN 'everyone' THEN true
-            WHEN 'selected' THEN EXISTS (
-              SELECT 1 FROM public.gm_story_audience a
-              WHERE a.story_id = s.id
-                AND a.user_id = private.gm_current_profile_id()
-                AND a.audience_type = 'include'
-            )
-            WHEN 'except' THEN NOT EXISTS (
-              SELECT 1 FROM public.gm_story_audience a
-              WHERE a.story_id = s.id
-                AND a.user_id = private.gm_current_profile_id()
-                AND a.audience_type = 'exclude'
-            )
-            ELSE false
-          END
+  SELECT CASE
+    -- Anonymous Supabase sessions can use the authenticated database role.
+    -- Require a real Auth user and a mapped Messenger profile first.
+    WHEN auth.uid() IS NULL OR private.gm_current_profile_id() IS NULL THEN false
+    ELSE EXISTS (
+      SELECT 1
+      FROM public.gm_stories s
+      WHERE s.id = target_story
+        AND (
+          s.author_id = private.gm_current_profile_id()
+          OR (
+            s.archived_at IS NULL
+            AND s.expires_at > now()
+            AND (s.media_type = 'text' OR s.media_path IS NOT NULL)
+            AND NOT private.gm_is_blocked(s.author_id)
+            AND CASE s.audience_mode
+              WHEN 'everyone' THEN true
+              WHEN 'selected' THEN EXISTS (
+                SELECT 1 FROM public.gm_story_audience a
+                WHERE a.story_id = s.id
+                  AND a.user_id = private.gm_current_profile_id()
+                  AND a.audience_type = 'include'
+              )
+              WHEN 'except' THEN NOT EXISTS (
+                SELECT 1 FROM public.gm_story_audience a
+                WHERE a.story_id = s.id
+                  AND a.user_id = private.gm_current_profile_id()
+                  AND a.audience_type = 'exclude'
+              )
+              ELSE false
+            END
+          )
         )
-      )
-  )
+    )
+  END
 $$;
 REVOKE ALL ON FUNCTION private.gm_can_view_story(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION private.gm_can_view_story(uuid) TO authenticated;
