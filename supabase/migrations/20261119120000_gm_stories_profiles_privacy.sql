@@ -195,6 +195,10 @@ CREATE POLICY "gm story owners delete story media"
     AND (storage.foldername(name))[1] = private.gm_current_profile_id()::text
   );
 
+-- Prevent direct table reads from bypassing per-field profile privacy. The
+-- authenticated client receives these fields only through the privacy-aware RPC.
+REVOKE SELECT (avatar_url,bio,last_seen_at) ON public.gm_profiles FROM authenticated;
+
 -- Return only profile fields that the target user's privacy choices permit.
 CREATE OR REPLACE FUNCTION public.gm_get_profile_details(target_user uuid)
 RETURNS jsonb
@@ -216,10 +220,20 @@ BEGIN
   IF target_user IS NULL THEN
     RAISE EXCEPTION 'Profile not found';
   END IF;
-  IF target_user <> v_me AND (
-    NOT private.gm_is_profile_visible(target_user)
-    OR private.gm_is_blocked(target_user)
-  ) THEN
+  IF target_user <> v_me AND private.gm_is_blocked(target_user) THEN
+    RETURN NULL;
+  END IF;
+  IF target_user <> v_me AND NOT private.gm_is_profile_visible(target_user)
+     AND NOT EXISTS (
+       SELECT 1 FROM public.gm_conversation_members mine
+       JOIN public.gm_conversation_members peer
+         ON peer.conversation_id = mine.conversation_id
+       WHERE mine.user_id = v_me AND peer.user_id = target_user
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM public.gm_stories s
+       WHERE s.author_id = target_user AND private.gm_can_view_story(s.id)
+     ) THEN
     RETURN NULL;
   END IF;
   SELECT * INTO v_profile FROM public.gm_profiles WHERE id = target_user;
