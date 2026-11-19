@@ -95,3 +95,15 @@ html[data-gm-theme="dark"] .gm-profile-card{background:#151f34;border-color:#2b3
 html[data-gm-theme="dark"] .gm-profile-toolbar{border-color:#28334a}
 html[data-gm-theme="dark"] .gm-story-ring>span{background:#111a2e;border-color:#111a2e}
 html[data-gm-theme="dark"] .gm-profile-edit-fields input,html[data-gm-theme="dark"] .gm-profile-edit-fields textarea,html[data-gm-theme="dark"] .gm-privacy-card select,html[data-gm-theme="dark"] .gm-story-composer textarea,html[data-gm-theme="dark"] .gm-story-audience select,html[data-gm-theme="dark"] .gm-story-search input{background:#101a2e;border-color:#2b3851;color:#edf1fb}
+
+.gm-story-heading-actions{display:flex;align-items:center;gap:4px}
+.gm-story-heading-actions>button{display:flex;align-items:center;gap:4px;padding:6px 7px;border-radius:8px;color:var(--gm-muted);font-size:8px}
+.gm-story-heading-actions>button:hover{background:var(--gm-accent-soft);color:var(--gm-accent)}
+.gm-story-author{flex:1;text-align:left;background:transparent;color:#fff}
+.gm-story-author b,.gm-story-author small{display:block}
+.gm-story-author small{display:flex;align-items:center;gap:4px;font-size:8px;opacity:.75;margin-top:3px}
+.gm-story-stepper{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;pointer-events:none}
+.gm-story-stepper button{pointer-events:auto;width:34px;height:50px;border-radius:20px;background:rgba(0,0,0,.16);color:#fff;display:grid;place-items:center}
+.gm-story-stage{position:relative}
+.gm-story-viewer-list{display:flex;gap:5px;overflow:auto;padding:0 14px 12px}
+.gm-story-viewer-list span{padding:5px 8px;border-radius:12px;background:rgba(255,255,255,.13);font-size:8px;white-space:nowrap}
