@@ -17,6 +17,7 @@ import {
 import { api, auth } from './api';
 import './styles.css';
 import './ui-polish.css';
+import './premium-social.css';
 
 type User={id:string;username:string;displayName:string;avatarUrl?:string|null;lastSeenAt?:string};
 type Member={user:User;favoriteAt?:string|null;archivedAt?:string|null};
