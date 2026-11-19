@@ -48,6 +48,9 @@ export const socialApi={
   },
   async archive(){
     const {sb,profile}=await context();
+    const {data:privacy,error:privacyError}=await sb.from('gm_privacy_settings').select('save_stories_to_archive').eq('user_id',profile.id).maybeSingle();
+    if(privacyError)fail(privacyError);
+    if(privacy?.save_stories_to_archive===false)return [];
     const {data,error}=await sb.from('gm_stories').select('*').eq('author_id',profile.id)
       .or('archived_at.not.is.null,expires_at.lte.'+new Date().toISOString())
       .gte('created_at',new Date(Date.now()-30*86400000).toISOString())
@@ -96,8 +99,8 @@ export const socialApi={
   },
   async markViewed(storyId:string){
     const {sb,profile}=await context();
-    const {error}=await sb.from('gm_story_views').upsert({story_id:storyId,viewer_id:profile.id,viewed_at:new Date().toISOString()},{onConflict:'story_id,viewer_id'});
-    if(error)fail(error);
+    const {error}=await sb.from('gm_story_views').insert({story_id:storyId,viewer_id:profile.id});
+    if(error&&error.code!=='23505')fail(error);
   },
   async react(storyId:string,emoji:string){
     const {sb,profile}=await context();
@@ -141,7 +144,7 @@ export const socialApi={
   },
   async updatePrivacy(patch:Record<string,unknown>){
     const {sb,profile}=await context();
-    const allowed=['profile_visibility','read_receipts','online_status','last_seen_visibility','typing_indicators','profile_photo_visibility','about_visibility','default_story_audience','story_replies','save_stories_to_archive'];
+    const allowed=['profile_visibility','read_receipts','online_status','last_seen_visibility','typing_indicators','profile_photo_visibility','about_visibility','default_story_audience','save_stories_to_archive'];
     const values:any={user_id:profile.id,updated_at:new Date().toISOString()};
     for(const key of allowed){
       const value=patch[key];
