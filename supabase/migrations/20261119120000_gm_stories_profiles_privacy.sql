@@ -199,7 +199,7 @@ CREATE POLICY "gm story owners delete story media"
 REVOKE SELECT (auth_user_id,avatar_url,bio,last_seen_at) ON public.gm_profiles FROM authenticated;
 
 -- Return only profile fields that the target user's privacy choices permit.
-CREATE OR REPLACE FUNCTION public.gm_get_profile_details(target_user uuid)
+CREATE OR REPLACE FUNCTION private.gm_get_profile_details_impl(target_user uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
 STABLE
@@ -250,5 +250,16 @@ BEGIN
   );
 END;
 $$;
+REVOKE ALL ON FUNCTION private.gm_get_profile_details_impl(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.gm_get_profile_details_impl(uuid) TO authenticated;
+
+-- Expose only a SECURITY INVOKER RPC wrapper through the Data API.
+CREATE OR REPLACE FUNCTION public.gm_get_profile_details(target_user uuid)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public, private, pg_temp
+AS $$ SELECT private.gm_get_profile_details_impl(target_user) $$;
 REVOKE ALL ON FUNCTION public.gm_get_profile_details(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.gm_get_profile_details(uuid) TO authenticated;
