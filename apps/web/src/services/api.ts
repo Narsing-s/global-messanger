@@ -2,7 +2,7 @@ import { api, API } from '../api';
 import { securityApi, profileApi, organizationApi, messagingApi, supportApi, entitiesApi, notificationsApi } from './advanced-api';
 export { api, API };
 export const productApi={
- features:async()=>({features:{auth:true,messaging:true,groups:true,media:true,realtime:true,e2ee:true,privacy:true,scheduledMessages:true,polls:true,notifications:true,support:true}}),
+ features:async()=>({features:{auth:true,messaging:true,groups:true,media:true,realtime:true,e2ee:false,privacy:true,scheduledMessages:true,polls:true,notifications:true,support:true}}),
  sessions:()=>securityApi.devices(),
  revokeSession:(id:string)=>securityApi.logoutDevice(id),
  revokeOthers:()=>securityApi.logoutOtherDevices(),

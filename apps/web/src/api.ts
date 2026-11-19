@@ -171,7 +171,7 @@ export async function request<T=any>(path:string,options:RequestInit={}):Promise
   if(path==='/api/security/2fa/verify'&&method==='POST')return await securityApi.verifyTwoFactor(body.code,body.factorId) as T;
   if(path==='/api/security/2fa/enable'&&method==='POST')return await securityApi.enableTwoFactor(body.secret,body.code) as T;
   if(path==='/api/security/2fa/disable'&&method==='POST')return await securityApi.disableTwoFactor(body.code) as T;
-  if(path==='/api/product/features')return {features:{messaging:true,groups:true,media:true,realtime:true,e2ee:true,support:true,scheduledMessages:true,notifications:true}} as T;
+  if(path==='/api/product/features')return {features:{messaging:true,groups:true,media:true,realtime:true,e2ee:false,support:true,scheduledMessages:true,notifications:true}} as T;
   if(path==='/api/account/export')return await exportAccountData() as T;
   if(path==='/api/media/export')return await api.media(undefined,undefined,1000) as T;
   if(path==='/api/reports'&&method==='POST')return await createUserReport(body) as T;
