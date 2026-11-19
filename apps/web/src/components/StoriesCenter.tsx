@@ -1,5 +1,5 @@
 import React,{useEffect,useMemo,useState} from 'react';
-import {Archive,ArrowLeft,Camera,Clock,Eye,Image as ImageIcon,Plus,Send,Shield,Trash2,Upload,Users,X} from 'lucide-react';
+import {Archive,ArrowLeft,Camera,ChevronLeft,ChevronRight,Clock,Eye,Image as ImageIcon,Plus,Send,Shield,Trash2,Upload,Users,X} from 'lucide-react';
 import {api} from '../api';
 import {socialApi,type Story,type StoryAudience} from '../services/social-api';
 
