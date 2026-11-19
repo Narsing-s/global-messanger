@@ -21,13 +21,16 @@ async function currentProfile() {
   return data;
 }
 async function hidePrivateLastSeen(sb:any,profiles:any[]){
-  return await Promise.all((profiles||[]).map(async(p:any)=>{const {data:visible}=await sb.rpc('gm_last_seen_visible',{target_user:p.id});return visible===false?{...p,last_seen_at:null}:p;}));
+  return await Promise.all((profiles||[]).map(async(p:any)=>{
+    const {data,error}=await sb.rpc('gm_get_profile_details',{target_user:p.id});
+    if(error)fail(error);
+    return data?{...p,...data}:{...p,avatar_url:null,bio:null,last_seen_at:null};
+  }));
 }
 async function profileById(id:string) {
   const sb=await getSupabase();
-  const {data,error}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').eq('id',id).maybeSingle();
+  const {data,error}=await sb.rpc('gm_get_profile_details',{target_user:id});
   if(error)fail(error);
-  if(data){const [safe]=await hidePrivateLastSeen(sb,[data]);return safe;}
   return data;
 }
 function messageShape(m:any, sender?:any) {
@@ -44,7 +47,7 @@ async function loadConversation(id:string) {
   const {data:members,error:meErr}=await sb.from('gm_conversation_members').select('user_id,joined_at,last_read_at').eq('conversation_id',id);
   if(meErr)fail(meErr);
   const ids=(members||[]).map((m:any)=>m.user_id);
-  const {data:profiles,error:pErr}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);
+  const {data:profiles,error:pErr}=await sb.from('gm_profiles').select('id,username,display_name').in('id',ids);
   if(pErr)fail(pErr);
   const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);
   const {data:prefs}=await sb.from('gm_conversation_preferences').select('*').eq('conversation_id',id).eq('user_id',me.id).maybeSingle();
