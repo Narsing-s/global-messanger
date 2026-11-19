@@ -21,17 +21,37 @@ async function currentProfile() {
   return data;
 }
 const missingSocialRpc=(e:any)=>e?.code==='PGRST202'||e?.code==='42883'||String(e?.message||'').toLowerCase().includes('gm_get_profile_details');
+const profileDetailsCache=new Map<string,{expiresAt:number;value:any}>();
+const profileDetailsInFlight=new Map<string,Promise<any>>();
+async function getProfileDetails(sb:any,id:string){
+  const cached=profileDetailsCache.get(id);
+  if(cached&&cached.expiresAt>Date.now())return cached.value;
+  const pending=profileDetailsInFlight.get(id);
+  if(pending)return pending;
+  const request=(async()=>{
+    const {data,error}=await sb.rpc('gm_get_profile_details',{target_user:id});
+    if(!error){
+      const value=data||null;
+      profileDetailsCache.set(id,{expiresAt:Date.now()+30_000,value});
+      return value;
+    }
+    if(!missingSocialRpc(error))fail(error);
+    // Keep the legacy privacy-safe fallback for deployments awaiting the social migration.
+    const {data:legacy,error:legacyError}=await sb.from('gm_profiles').select('id,avatar_url,last_seen_at').eq('id',id).maybeSingle();
+    if(legacyError)fail(legacyError);
+    const {data:visible,error:visibilityError}=await sb.rpc('gm_last_seen_visible',{target_user:id});
+    if(visibilityError)fail(visibilityError);
+    const value=legacy?{...legacy,last_seen_at:visible===false?null:legacy.last_seen_at}:null;
+    profileDetailsCache.set(id,{expiresAt:Date.now()+30_000,value});
+    return value;
+  })();
+  profileDetailsInFlight.set(id,request);
+  try{return await request;}finally{profileDetailsInFlight.delete(id);}
+}
 async function hidePrivateLastSeen(sb:any,profiles:any[]){
   return await Promise.all((profiles||[]).map(async(p:any)=>{
-    const {data,error}=await sb.rpc('gm_get_profile_details',{target_user:p.id});
-    if(!error)return data?{...p,...data}:{...p,avatar_url:null,bio:null,last_seen_at:null};
-    if(!missingSocialRpc(error))fail(error);
-    // Backward compatibility while the additive social migration is awaiting deployment.
-    const {data:legacy,error:legacyError}=await sb.from('gm_profiles').select('id,avatar_url,last_seen_at').eq('id',p.id).maybeSingle();
-    if(legacyError)fail(legacyError);
-    const {data:visible,error:visibilityError}=await sb.rpc('gm_last_seen_visible',{target_user:p.id});
-    if(visibilityError)fail(visibilityError);
-    return {...p,...legacy,last_seen_at:visible===false?null:legacy?.last_seen_at};
+    const details=await getProfileDetails(sb,p.id);
+    return details?{...p,...details}:{...p,avatar_url:null,bio:null,last_seen_at:null};
   }));
 }
 async function profileById(id:string) {
@@ -71,16 +91,43 @@ async function loadConversation(id:string) {
 }
 async function listConversations() {
   const sb=await getSupabase(), me=await currentProfile();
-  const {data:members,error}=await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id);
+  const {data:memberships,error}=await sb.from('gm_conversation_members')
+    .select('conversation_id,user_id,joined_at,last_read_at').eq('user_id',me.id);
   if(error)fail(error);
-  const ids=(members||[]).map((x:any)=>x.conversation_id);
+  const ids=[...new Set((memberships||[]).map((x:any)=>x.conversation_id))];
   if(!ids.length)return [];
-  const {data:conversations,error:e}=await sb.from('gm_conversations').select('id,updated_at').in('id',ids).order('updated_at',{ascending:false});
-  if(e)fail(e);
-  const result=await Promise.all((conversations||[]).map((c:any)=>loadConversation(c.id)));
-  const {data:prefs}=await sb.from('gm_conversation_preferences').select('conversation_id,favorite,archived').eq('user_id',me.id);
-  const prefMap=new Map((prefs||[]).map((x:any)=>[x.conversation_id,x]));
-  return result.map((c:any)=>({...c,...(prefMap.get(c.id)||{})}));
+  const [conversationResult,allMembersResult,prefsResult]=await Promise.all([
+    sb.from('gm_conversations').select('id,is_group,title,created_at,updated_at').in('id',ids).order('updated_at',{ascending:false}),
+    sb.from('gm_conversation_members').select('conversation_id,user_id,joined_at,last_read_at').in('conversation_id',ids),
+    sb.from('gm_conversation_preferences').select('conversation_id,favorite,archived').eq('user_id',me.id)
+  ]);
+  if(conversationResult.error)fail(conversationResult.error);
+  if(allMembersResult.error)fail(allMembersResult.error);
+  if(prefsResult.error)fail(prefsResult.error);
+  const allMembers=allMembersResult.data||[];
+  const profileIds=[...new Set(allMembers.map((m:any)=>m.user_id))];
+  const {data:profiles,error:profileError}=await sb.from('gm_profiles')
+    .select('id,username,display_name').in('id',profileIds);
+  if(profileError)fail(profileError);
+  const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);
+  const profileById=new Map(safeProfiles.map((p:any)=>[p.id,p]));
+  const membersByConversation=new Map<string,any[]>();
+  for(const member of allMembers){
+    const list=membersByConversation.get(member.conversation_id)||[];
+    list.push(member);membersByConversation.set(member.conversation_id,list);
+  }
+  const prefMap=new Map((prefsResult.data||[]).map((x:any)=>[x.conversation_id,x]));
+  return (conversationResult.data||[]).map((conversation:any)=>{
+    const prefs:any=prefMap.get(conversation.id)||{};
+    return {
+      id:conversation.id,isGroup:conversation.is_group,title:conversation.title,
+      createdAt:conversation.created_at,updatedAt:conversation.updated_at,
+      favorite:!!prefs.favorite,archived:!!prefs.archived,
+      members:(membersByConversation.get(conversation.id)||[]).map((m:any)=>({
+        user:userShape(profileById.get(m.user_id)),joinedAt:m.joined_at,lastReadAt:m.last_read_at
+      }))
+    };
+  });
 }
 async function listMessages(conversationId:string,limit=100) {
   const sb=await getSupabase();
@@ -91,12 +138,24 @@ async function listMessages(conversationId:string,limit=100) {
   const {data:profiles}=await sb.from('gm_profiles').select('id,username,display_name').in('id',ids);
   const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);
   const byId=new Map(safeProfiles.map((p:any)=>[p.id,p]));
-  const {data:attachments,error:attachmentError}=await sb.from('gm_attachments').select('message_id,bucket_id,object_path,file_name,mime_type,size_bytes').in('message_id',messageIds);
+  const {data:attachments,error:attachmentError}=messageIds.length
+    ?await sb.from('gm_attachments').select('message_id,bucket_id,object_path,file_name,mime_type,size_bytes').in('message_id',messageIds)
+    :{data:[],error:null};
   if(attachmentError)fail(attachmentError);
   const attachmentMap=new Map<string,any>();
-  await Promise.all((attachments||[]).map(async (a:any)=>{
-    const {data:signed,error:signError}=await sb.storage.from(a.bucket_id).createSignedUrl(a.object_path,3600);
-    if(!signError&&signed)attachmentMap.set(a.message_id,{attachmentUrl:signed.signedUrl,attachmentName:a.file_name,attachmentMime:a.mime_type,attachmentSize:a.size_bytes});
+  const buckets=[...new Set((attachments||[]).map((a:any)=>a.bucket_id))];
+  await Promise.all(buckets.map(async(bucketId:any)=>{
+    const rows=(attachments||[]).filter((a:any)=>a.bucket_id===bucketId);
+    const {data:signed,error:signError}=await sb.storage.from(bucketId)
+      .createSignedUrls(rows.map((a:any)=>a.object_path),3600);
+    if(signError||!signed)return;
+    rows.forEach((a:any,index:number)=>{
+      const item=signed[index];
+      if(item?.signedUrl)attachmentMap.set(a.message_id,{
+        attachmentUrl:item.signedUrl,attachmentName:a.file_name,
+        attachmentMime:a.mime_type,attachmentSize:a.size_bytes
+      });
+    });
   }));
   return (data||[]).map((m:any)=>messageShape({...m,metadata:{...(m.metadata||{}),...(attachmentMap.get(m.id)||{})}},byId.get(m.sender_id)));
 }
