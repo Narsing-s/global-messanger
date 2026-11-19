@@ -65,6 +65,15 @@ BEGIN
      OR to_regclass('public.gm_story_reactions_user_idx') IS NULL THEN
     RAISE EXCEPTION 'Story foreign-key lookup indexes are missing';
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='gm_story_views'
+      AND policyname='gm viewers record own story views'
+      AND with_check ILIKE '%read_receipts%'
+  ) THEN
+    RAISE EXCEPTION 'Story-view insertion does not respect read-receipt privacy';
+  END IF;
 END $$;
 
 SELECT
