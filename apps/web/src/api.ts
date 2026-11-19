@@ -39,7 +39,7 @@ async function profileById(id:string) {
   const {data,error}=await sb.rpc('gm_get_profile_details',{target_user:id});
   if(!error)return data;
   if(!missingSocialRpc(error))fail(error);
-  const {data:legacy,error:legacyError}=await sb.from('gm_profiles').select('id,username,display_name').eq('id',id).maybeSingle();
+  const {data:legacy,error:legacyError}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').eq('id',id).maybeSingle();
   if(legacyError)fail(legacyError);
   if(!legacy)return null;
   const {data:visible,error:visibilityError}=await sb.rpc('gm_last_seen_visible',{target_user:id});
