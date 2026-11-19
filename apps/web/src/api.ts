@@ -246,7 +246,7 @@ export const api = {
     const sb=await getSupabase(),me=await currentProfile();
     const term=q.trim().replace(/[,%]/g,'');
     if(term.length<2)return [];
-    const {data,error}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').neq('id',me.id).or('username.ilike.%'+term+'%,display_name.ilike.%'+term+'%').limit(20);
+    const {data,error}=await sb.from('gm_profiles').select('id,username,display_name').neq('id',me.id).or('username.ilike.%'+term+'%,display_name.ilike.%'+term+'%').limit(20);
     if(error)fail(error);
     const safe=await hidePrivateLastSeen(sb,data||[]);
     return safe.map(userShape);
