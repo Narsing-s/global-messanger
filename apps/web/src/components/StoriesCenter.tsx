@@ -26,6 +26,12 @@ export default function StoriesCenter({currentUser,onProfile}:Props){
  async function openGroup(group:{items:Story[]}){const story=group.items.find(s=>s.id!==active?.id)||group.items[0];setActive(story);setViewers([]);try{await socialApi.markViewed(story.id);}catch(e:any){setError(e.message);}if(story.author_id===currentUser.id)try{setViewers(await socialApi.viewers(story.id));}catch{}}
  async function chooseStory(story:Story){setActive(story);setViewers([]);try{await socialApi.markViewed(story.id);}catch(e:any){setError(e.message);}if(story.author_id===currentUser.id)try{setViewers(await socialApi.viewers(story.id));}catch{}}
  async function react(emoji:string){if(!active)return;try{await socialApi.react(active.id,emoji);await refresh();}catch(e:any){setError(e.message);}}
+ async function stepStory(direction:number){
+  if(!active)return;
+  const group=byAuthor.find(g=>g.authorId===active.author_id);if(!group)return;
+  const index=group.items.findIndex(s=>s.id===active.id);const next=group.items[index+direction];
+  if(next)await chooseStory(next);
+ }
  async function remove(){if(!active||active.author_id!==currentUser.id)return;try{await socialApi.remove(active.id);setActive(null);await refresh();}catch(e:any){setError(e.message);}}
  async function archiveStory(){if(!active||active.author_id!==currentUser.id)return;try{await socialApi.archiveStory(active.id);setActive(null);await refresh();}catch(e:any){setError(e.message);}}
  async function openArchive(){setShowArchive(true);try{setArchive(await socialApi.archive());}catch(e:any){setError(e.message);}}
@@ -49,10 +55,10 @@ export default function StoriesCenter({currentUser,onProfile}:Props){
    <button className="gm-story-publish" disabled={busy||(!body.trim()&&!file)||(audience==='selected'&&!selected.length)} onClick={publish}>{busy?'Publishing…':<><Send size={16}/> Publish story</>}</button>
   </div></div>}
   {active&&<div className="gm-story-backdrop"><div className={'gm-story-viewer '+(active.background_theme||'aurora')}>
-   <header><button onClick={()=>setActive(null)}><ArrowLeft/></button><div><b>{active.author?.display_name||'Story'}</b><small><Clock size={12}/> {new Date(active.created_at).toLocaleString()}</small></div>{active.author_id===currentUser.id&&<button onClick={remove}><Trash2/></button>}</header>
+   <header><button onClick={()=>setActive(null)}><ArrowLeft/></button><button className="gm-story-author" onClick={()=>{if(active.author&&active.author_id!==currentUser.id)onProfile?.({id:active.author.id,username:active.author.username,displayName:active.author.display_name,avatarUrl:active.author.avatar_url});}}><b>{active.author?.display_name||'Story'}</b><small><Clock size={12}/> {new Date(active.created_at).toLocaleString()}</small></button>{active.author_id===currentUser.id&&<button onClick={remove}><Trash2/></button>}</header>
    <div className="gm-story-progress"><i/></div>
-   <div className="gm-story-stage">{active.media_url&&active.media_type==='image'&&<img src={active.media_url} alt="Story"/>}{active.media_url&&active.media_type==='video'&&<video src={active.media_url} controls autoPlay playsInline/>}{active.body&&<p>{active.body}</p>}</div>
-   {active.author_id===currentUser.id?<div className="gm-story-owner"><button onClick={archiveStory}><Archive size={15}/> Archive story</button><span><Eye size={15}/> {viewers.length} views</span></div>:<div className="gm-story-reactions">{emojis.map(e=><button key={e} onClick={()=>react(e)}>{e}</button>)}</div>}
+   <div className="gm-story-stage"><div className="gm-story-stepper"><button onClick={()=>stepStory(-1)} aria-label="Previous story"><ChevronLeft/></button><button onClick={()=>stepStory(1)} aria-label="Next story"><ChevronRight/></button></div>{active.media_url&&active.media_type==='image'&&<img src={active.media_url} alt="Story"/>}{active.media_url&&active.media_type==='video'&&<video src={active.media_url} controls autoPlay playsInline/>}{active.body&&<p>{active.body}</p>}</div>
+   {active.author_id===currentUser.id?<div className="gm-story-owner"><button onClick={archiveStory}><Archive size={15}/> Archive story</button><span><Eye size={15}/> {viewers.length} views</span></div>{viewers.length>0&&<div className="gm-story-viewer-list">{viewers.slice(0,8).map(v=><span key={v.viewer_id}>{v.user?.display_name||v.user?.username||'Viewer'}</span>)}</div>}:<div className="gm-story-reactions">{emojis.map(e=><button key={e} onClick={()=>react(e)}>{e}</button>)}</div>}
   </div></div>}
   {showArchive&&<div className="gm-story-backdrop"><div className="gm-story-archive"><header><div><span>PRIVATE TO YOU</span><h3>Story archive</h3></div><button onClick={()=>setShowArchive(false)}><X/></button></header>{archive.length?archive.map(s=><div key={s.id}><span>{s.body||s.media_type+' story'}</span><small>{new Date(s.created_at).toLocaleDateString()}</small></div>):<p>Your saved stories will appear here after they expire.</p>}</div></div>}
  </section>;
