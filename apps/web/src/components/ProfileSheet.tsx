@@ -81,6 +81,10 @@ export default function ProfileSheet({person,isSelf,online=false,onClose,onMessa
       <label>Profile discovery<select value={privacy?.profile_visibility?'everyone':'nobody'} onChange={e=>updatePrivacy({profile_visibility:e.target.value==='everyone'})}><option value="everyone">Visible to Messenger users</option><option value="nobody">Hidden from discovery</option></select></label>
       <label>About information<select value={privacy?.about_visibility||'everyone'} onChange={e=>updatePrivacy({about_visibility:e.target.value})}><option value="everyone">Everyone</option><option value="nobody">Nobody except me</option></select></label>
       <label>Default story audience<select value={privacy?.default_story_audience||'everyone'} onChange={e=>updatePrivacy({default_story_audience:e.target.value})}><option value="everyone">All users</option><option value="selected">Only selected people</option><option value="except">All except selected people</option><option value="only_me">Only me</option></select></label>
+      <label className="gm-privacy-toggle"><input type="checkbox" checked={privacy?.last_seen_visibility!==false} onChange={e=>updatePrivacy({last_seen_visibility:e.target.checked})}/> Share my last seen</label>
+      <label className="gm-privacy-toggle"><input type="checkbox" checked={privacy?.online_status!==false} onChange={e=>updatePrivacy({online_status:e.target.checked})}/> Show when I am online</label>
+      <label className="gm-privacy-toggle"><input type="checkbox" checked={privacy?.read_receipts!==false} onChange={e=>updatePrivacy({read_receipts:e.target.checked})}/> Send read receipts</label>
+      <label className="gm-privacy-toggle"><input type="checkbox" checked={privacy?.typing_indicators!==false} onChange={e=>updatePrivacy({typing_indicators:e.target.checked})}/> Share typing indicators</label>
       <label className="gm-privacy-toggle"><input type="checkbox" checked={privacy?.save_stories_to_archive!==false} onChange={e=>updatePrivacy({save_stories_to_archive:e.target.checked})}/> Save my stories to archive</label>
     </div>}
     {error&&<div className="gm-profile-error">{error}</div>}
