@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.gm_stories (
   expires_at timestamptz NOT NULL DEFAULT (now() + interval '24 hours'),
   archived_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK ((media_type = 'text' AND media_path IS NULL) OR media_type IN ('image','video'))
+  CHECK ((media_type = 'text' AND media_path IS NULL) OR (media_type IN ('image','video') AND media_path IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS gm_stories_author_created_idx
   ON public.gm_stories(author_id, created_at DESC);
