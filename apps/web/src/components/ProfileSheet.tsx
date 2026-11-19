@@ -24,7 +24,7 @@ export default function ProfileSheet({person,isSelf,online=false,onClose,onMessa
     const {data:convs,error:ce}=await sb.from('gm_conversations').select('id,title,is_group').in('id',ids).eq('is_group',true);
     if(ce)throw ce;setGroups(convs||[]);
     const groupIds=(convs||[]).map((c:any)=>c.id);
-    if(groupIds.length){
+    if(ids.length){
      const {data:files,error:fe}=await sb.from('gm_attachments').select('id,conversation_id,file_name,mime_type,bucket_id,object_path,created_at').in('conversation_id',ids).order('created_at',{ascending:false}).limit(6);
      if(fe)throw fe;
      const signed=await Promise.all((files||[]).map(async(f:any)=>{const {data}=await sb.storage.from(f.bucket_id).createSignedUrl(f.object_path,900);return {...f,url:data?.signedUrl||null};}));
