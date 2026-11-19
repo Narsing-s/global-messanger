@@ -66,12 +66,15 @@ export const socialApi={
     if(file&&(!allowedMedia.has(file.type)||file.size>25*1024*1024))throw new Error('Use JPG, PNG, WebP, MP4 or WebM media up to 25 MB.');
     if(input.audienceMode==='selected'&&!(input.audienceIds||[]).length)throw new Error('Choose at least one person for this story.');
     const mediaType=file?(file.type.startsWith('video/')?'video':'image'):'text';
+    const storyId=crypto.randomUUID();
+    const safeName=file?file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-90)||'story-media':null;
+    const mediaPath=file?profile.id+'/'+storyId+'/'+crypto.randomUUID()+'-'+safeName:null;
     const {data:story,error}=await sb.from('gm_stories').insert({
-      author_id:profile.id,media_type:mediaType,body,background_theme:input.backgroundTheme||'aurora',
-      audience_mode:input.audienceMode
+      id:storyId,author_id:profile.id,media_type:mediaType,body,media_path:mediaPath,
+      background_theme:input.backgroundTheme||'aurora',audience_mode:input.audienceMode
     }).select('*').single();
     if(error)fail(error);
-    let path:string|null=null;
+    let uploadedPath:string|null=null;
     try{
       if(input.audienceMode==='selected'||input.audienceMode==='except'){
         const audienceIds=[...new Set(input.audienceIds||[])].filter(id=>id!==profile.id);
@@ -82,17 +85,14 @@ export const socialApi={
           if(e)fail(e);
         }
       }
-      if(file){
-        const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-90)||'story-media';
-        path=profile.id+'/'+story.id+'/'+crypto.randomUUID()+'-'+safeName;
-        const {error:e}=await sb.storage.from('gm-story-media').upload(path,file,{contentType:file.type,upsert:false});
+      if(file&&mediaPath){
+        const {error:e}=await sb.storage.from('gm-story-media').upload(mediaPath,file,{contentType:file.type,upsert:false});
         if(e)fail(e);
-        const {error:ue}=await sb.from('gm_stories').update({media_path:path}).eq('id',story.id).eq('author_id',profile.id);
-        if(ue)fail(ue);
+        uploadedPath=mediaPath;
       }
       return story.id as string;
     }catch(error){
-      if(path)await sb.storage.from('gm-story-media').remove([path]);
+      if(uploadedPath)await sb.storage.from('gm-story-media').remove([uploadedPath]);
       await sb.from('gm_stories').delete().eq('id',story.id).eq('author_id',profile.id);
       throw error;
     }
