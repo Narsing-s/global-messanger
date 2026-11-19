@@ -33,7 +33,7 @@ Apply supabase/migrations/20261119120000_gm_stories_profiles_privacy.sql only af
 - gm_story_views
 - gm_story_reactions
 - private bucket gm-story-media
-- private.gm_can_view_story(uuid) and public.gm_get_profile_details(uuid)
+- private.gm_can_view_story(uuid), private.gm_get_profile_details_impl(uuid), and a SECURITY INVOKER public.gm_get_profile_details(uuid) wrapper
 
 All four new tables have RLS. Anonymous access is revoked. Story visibility checks expiration, audience selection and block relationships. Story media is stored under the profile-id/story-id/filename path and is only readable when the story is visible to the signed-in viewer.
 
