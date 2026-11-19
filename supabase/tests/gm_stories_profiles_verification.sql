@@ -36,8 +36,23 @@ BEGIN
   END IF;
 
   IF NOT has_function_privilege('authenticated','public.gm_get_profile_details(uuid)','EXECUTE')
-     OR NOT has_function_privilege('authenticated','private.gm_can_view_story(uuid)','EXECUTE') THEN
+     OR NOT has_function_privilege('authenticated','private.gm_can_view_story(uuid)','EXECUTE')
+     OR NOT has_function_privilege('authenticated','private.gm_get_profile_details_impl(uuid)','EXECUTE') THEN
     RAISE EXCEPTION 'Authenticated role is missing required privacy helper access';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname='public' AND p.proname='gm_get_profile_details'
+      AND p.prosecdef
+  ) THEN
+    RAISE EXCEPTION 'Public profile RPC must remain SECURITY INVOKER';
+  END IF;
+
+  IF has_function_privilege('anon','public.gm_get_profile_details(uuid)','EXECUTE')
+     OR has_function_privilege('anon','private.gm_get_profile_details_impl(uuid)','EXECUTE') THEN
+    RAISE EXCEPTION 'Anonymous role can execute a profile privacy function';
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM storage.buckets WHERE id='gm-story-media' AND public=false
