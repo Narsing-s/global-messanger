@@ -5,16 +5,16 @@ import {api} from '../api';
 import {socialApi} from '../services/social-api';
 
 type Person={id:string;username:string;displayName:string;avatarUrl?:string|null;lastSeenAt?:string|null};
-type Props={person:Person;isSelf:boolean;online?:boolean;onClose:()=>void;onMessage?:(person:Person)=>void;onCall?:(kind:'audio'|'video')=>void};
+type Props={person:Person;isSelf:boolean;online?:boolean;onClose:()=>void;onMessage?:(person:Person)=>void;onCall?:(kind:'audio'|'video')=>void;onProfileUpdated?:(person:Person)=>void};
 const pretty=(v?:string|null)=>v?new Date(v).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'Not available';
-export default function ProfileSheet({person,isSelf,online=false,onClose,onMessage,onCall}:Props){
+export default function ProfileSheet({person,isSelf,online=false,onClose,onMessage,onCall,onProfileUpdated}:Props){
  const [details,setDetails]=useState<any>(null),[privacy,setPrivacy]=useState<any>(null),[groups,setGroups]=useState<any[]>([]),[media,setMedia]=useState<any[]>([]);
  const [editing,setEditing]=useState(false),[name,setName]=useState(person.displayName),[bio,setBio]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[saved,setSaved]=useState(false);
  const [showPrivacy,setShowPrivacy]=useState(false),[copied,setCopied]=useState(false);
  async function refresh(){
   setError('');
   try{
-   const p=await socialApi.profileDetails(person.id);setDetails(p);setName(p?.display_name||person.displayName);setBio(p?.bio||'');
+   const p=await socialApi.profileDetails(person.id);setDetails(p);setName(p?.display_name||person.displayName);setBio(p?.bio||'');if(isSelf&&p)onProfileUpdated?.({id:p.id,username:p.username,displayName:p.display_name,avatarUrl:p.avatar_url,lastSeenAt:p.last_seen_at});
    if(isSelf){setPrivacy(await socialApi.privacy());}
    const sb=await getSupabase();
    const {data:members,error:me}=await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',person.id);
@@ -25,7 +25,7 @@ export default function ProfileSheet({person,isSelf,online=false,onClose,onMessa
     if(ce)throw ce;setGroups(convs||[]);
     const groupIds=(convs||[]).map((c:any)=>c.id);
     if(groupIds.length){
-     const {data:files,error:fe}=await sb.from('gm_attachments').select('id,conversation_id,file_name,mime_type,bucket_id,object_path,created_at').in('conversation_id',groupIds).order('created_at',{ascending:false}).limit(6);
+     const {data:files,error:fe}=await sb.from('gm_attachments').select('id,conversation_id,file_name,mime_type,bucket_id,object_path,created_at').in('conversation_id',ids).order('created_at',{ascending:false}).limit(6);
      if(fe)throw fe;
      const signed=await Promise.all((files||[]).map(async(f:any)=>{const {data}=await sb.storage.from(f.bucket_id).createSignedUrl(f.object_path,900);return {...f,url:data?.signedUrl||null};}));
      setMedia(signed);
