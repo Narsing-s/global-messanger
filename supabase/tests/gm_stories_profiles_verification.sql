@@ -57,8 +57,13 @@ BEGIN
 
   IF NOT EXISTS (SELECT 1 FROM storage.buckets WHERE id='gm-story-media' AND public=false
     AND file_size_limit=26214400
-    AND allowed_mime_types @> ARRAY['image/jpeg','image/png','image/webp','video/mp4','video/webm']) THEN
-    RAISE EXCEPTION 'Private story-media bucket or MIME allowlist is missing';
+    AND allowed_mime_types = ARRAY['image/jpeg','image/png','image/webp','video/mp4','video/webm']) THEN
+    RAISE EXCEPTION 'Private story-media bucket or exact MIME allowlist is missing';
+  END IF;
+
+  IF to_regclass('public.gm_story_views_viewer_idx') IS NULL
+     OR to_regclass('public.gm_story_reactions_user_idx') IS NULL THEN
+    RAISE EXCEPTION 'Story foreign-key lookup indexes are missing';
   END IF;
 END $$;
 
