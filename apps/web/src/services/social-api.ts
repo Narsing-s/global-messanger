@@ -140,16 +140,16 @@ export const socialApi={
     const {sb,profile}=await context();
     const {data,error}=await sb.from('gm_privacy_settings').select('*').eq('user_id',profile.id).maybeSingle();
     if(error)fail(error);
-    return data||{user_id:profile.id,profile_visibility:true,read_receipts:true,online_status:true,last_seen_visibility:true,typing_indicators:true,profile_photo_visibility:'everyone',about_visibility:'everyone',default_story_audience:'everyone',save_stories_to_archive:true};
+    return data||{user_id:profile.id,profile_visibility:true,read_receipts:true,online_status:true,last_seen_visibility:true,typing_indicators:true,about_visibility:'everyone',default_story_audience:'everyone',save_stories_to_archive:true};
   },
   async updatePrivacy(patch:Record<string,unknown>){
     const {sb,profile}=await context();
-    const allowed=['profile_visibility','read_receipts','online_status','last_seen_visibility','typing_indicators','profile_photo_visibility','about_visibility','default_story_audience','save_stories_to_archive'];
+    const allowed=['profile_visibility','read_receipts','online_status','last_seen_visibility','typing_indicators','about_visibility','default_story_audience','save_stories_to_archive'];
     const values:any={user_id:profile.id,updated_at:new Date().toISOString()};
     for(const key of allowed){
       const value=patch[key];
       if(['profile_visibility','read_receipts','online_status','last_seen_visibility','typing_indicators','save_stories_to_archive'].includes(key)&&typeof value==='boolean')values[key]=value;
-      if(key==='profile_photo_visibility'||key==='about_visibility'){
+      if(key==='about_visibility'){
         if(value==='everyone'||value==='nobody')values[key]=value;
       }
       if(key==='default_story_audience'&&['everyone','selected','except','only_me'].includes(String(value)))values[key]=value;
