@@ -99,6 +99,9 @@ export const socialApi={
   },
   async markViewed(storyId:string){
     const {sb,profile}=await context();
+    const {data:privacy,error:privacyError}=await sb.from('gm_privacy_settings').select('read_receipts').eq('user_id',profile.id).maybeSingle();
+    if(privacyError)fail(privacyError);
+    if(privacy?.read_receipts===false)return;
     const {error}=await sb.from('gm_story_views').insert({story_id:storyId,viewer_id:profile.id});
     if(error&&error.code!=='23505')fail(error);
   },
