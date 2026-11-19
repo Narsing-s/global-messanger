@@ -10,7 +10,6 @@ ALTER TABLE public.gm_privacy_settings
     CHECK (about_visibility IN ('everyone','nobody')),
   ADD COLUMN IF NOT EXISTS default_story_audience text NOT NULL DEFAULT 'everyone'
     CHECK (default_story_audience IN ('everyone','selected','except','only_me')),
-  ADD COLUMN IF NOT EXISTS story_replies boolean NOT NULL DEFAULT true,
   ADD COLUMN IF NOT EXISTS save_stories_to_archive boolean NOT NULL DEFAULT true;
 
 CREATE TABLE IF NOT EXISTS public.gm_stories (
