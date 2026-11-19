@@ -195,7 +195,7 @@ CREATE POLICY "gm story owners delete story media"
 
 -- Prevent direct table reads from bypassing per-field profile privacy. The
 -- authenticated client receives these fields only through the privacy-aware RPC.
-REVOKE SELECT (avatar_url,bio,last_seen_at) ON public.gm_profiles FROM authenticated;
+REVOKE SELECT (auth_user_id,avatar_url,bio,last_seen_at) ON public.gm_profiles FROM authenticated;
 
 -- Return only profile fields that the target user's privacy choices permit.
 CREATE OR REPLACE FUNCTION public.gm_get_profile_details(target_user uuid)
