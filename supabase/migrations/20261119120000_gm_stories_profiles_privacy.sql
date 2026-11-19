@@ -77,6 +77,7 @@ AS $$
         OR (
           s.archived_at IS NULL
           AND s.expires_at > now()
+          AND (s.media_type = 'text' OR s.media_path IS NOT NULL)
           AND NOT private.gm_is_blocked(s.author_id)
           AND CASE s.audience_mode
             WHEN 'everyone' THEN true
