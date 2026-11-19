@@ -74,6 +74,17 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'Story-view insertion does not respect read-receipt privacy';
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='gm_story_views'
+      AND policyname='gm story owners and viewers read views'
+      AND qual ILIKE '%viewer_id%'
+      AND qual ILIKE '%author_id%'
+      AND qual NOT ILIKE '%read_receipts%'
+  ) THEN
+    RAISE EXCEPTION 'Story-view visibility is not scoped to the viewer and story owner';
+  END IF;
 END $$;
 
 SELECT
