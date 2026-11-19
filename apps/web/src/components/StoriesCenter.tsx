@@ -1,5 +1,5 @@
 import React,{useEffect,useMemo,useState} from 'react';
-import {Archive,ArrowLeft,Camera,ChevronLeft,ChevronRight,Clock,Eye,Heart,Image as ImageIcon,Plus,Send,Shield,Trash2,Upload,Users,X} from 'lucide-react';
+import {Archive,ArrowLeft,Camera,Clock,Eye,Image as ImageIcon,Plus,Send,Shield,Trash2,Upload,Users,X} from 'lucide-react';
 import {api} from '../api';
 import {socialApi,type Story,type StoryAudience} from '../services/social-api';
 
@@ -31,9 +31,9 @@ export default function StoriesCenter({currentUser,onProfile}:Props){
  async function openArchive(){setShowArchive(true);try{setArchive(await socialApi.archive());}catch(e:any){setError(e.message);}}
  const mine=byAuthor.find(g=>g.authorId===currentUser.id);
  return <section className="gm-stories">
-  <div className="gm-stories-heading"><div><span>YOUR MOMENTS</span><h3>Stories</h3></div><button onClick={openArchive}><Archive size={16}/> Archive</button></div>
+  <div className="gm-stories-heading"><div><span>YOUR MOMENTS</span><h3>Stories</h3></div><div className="gm-story-heading-actions"><button onClick={()=>setComposer(true)}><Plus size={14}/> Add story</button><button onClick={openArchive}><Archive size={16}/> Archive</button></div></div>
   <div className="gm-story-strip">
-   <button className="gm-story-tile gm-story-create" onClick={()=>setComposer(true)}><span className="gm-story-ring"><span>{currentUser.avatarUrl?<img src={currentUser.avatarUrl} alt=""/>:(currentUser.displayName||'Me').slice(0,1)}</span><i><Plus size={13}/></i></span><b>Your story</b><small>{mine?mine.items.length+' active':'Share a moment'}</small></button>
+   <button className="gm-story-tile gm-story-create" onClick={()=>mine?chooseStory(mine.items[0]):setComposer(true)}><span className="gm-story-ring"><span>{currentUser.avatarUrl?<img src={currentUser.avatarUrl} alt=""/>:(currentUser.displayName||'Me').slice(0,1)}</span><i><Plus size={13}/></i></span><b>Your story</b><small>{mine?mine.items.length+' active':'Share a moment'}</small></button>
    {byAuthor.filter(g=>g.authorId!==currentUser.id).map(group=><button className="gm-story-tile" key={group.authorId} onClick={()=>openGroup(group)} onContextMenu={e=>{e.preventDefault();if(group.person)onProfile?.(group.person);}}>
     <span className="gm-story-ring"><span>{group.person?.avatarUrl?<img src={group.person.avatarUrl} alt=""/>:(group.person?.displayName||'U').slice(0,1)}</span></span><b>{group.person?.displayName||'Messenger user'}</b><small>{group.items.length} {group.items.length===1?'story':'stories'}</small>
    </button>)}
