@@ -111,7 +111,7 @@ export const socialApi={
     const {sb}=await context();
     const {data,error}=await sb.from('gm_story_views').select('viewer_id,viewed_at').eq('story_id',storyId).order('viewed_at',{ascending:false});
     if(error)fail(error);
-    return await Promise.all((data||[]).map(async view=>{
+    return await Promise.all((data||[]).map(async (view:any)=>{
       const {data:person,error:e}=await sb.rpc('gm_get_profile_details',{target_user:view.viewer_id});
       if(e)fail(e);
       return {...view,user:person};
