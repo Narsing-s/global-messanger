@@ -20,18 +20,31 @@ async function currentProfile() {
   profileCache.set(user.id,data);
   return data;
 }
+const missingSocialRpc=(e:any)=>e?.code==='PGRST202'||e?.code==='42883'||String(e?.message||'').toLowerCase().includes('gm_get_profile_details');
 async function hidePrivateLastSeen(sb:any,profiles:any[]){
   return await Promise.all((profiles||[]).map(async(p:any)=>{
     const {data,error}=await sb.rpc('gm_get_profile_details',{target_user:p.id});
-    if(error)fail(error);
-    return data?{...p,...data}:{...p,avatar_url:null,bio:null,last_seen_at:null};
+    if(!error)return data?{...p,...data}:{...p,avatar_url:null,bio:null,last_seen_at:null};
+    if(!missingSocialRpc(error))fail(error);
+    // Backward compatibility while the additive social migration is awaiting deployment.
+    const {data:legacy,error:legacyError}=await sb.from('gm_profiles').select('id,avatar_url,last_seen_at').eq('id',p.id).maybeSingle();
+    if(legacyError)fail(legacyError);
+    const {data:visible,error:visibilityError}=await sb.rpc('gm_last_seen_visible',{target_user:p.id});
+    if(visibilityError)fail(visibilityError);
+    return {...p,...legacy,last_seen_at:visible===false?null:legacy?.last_seen_at};
   }));
 }
 async function profileById(id:string) {
   const sb=await getSupabase();
   const {data,error}=await sb.rpc('gm_get_profile_details',{target_user:id});
-  if(error)fail(error);
-  return data;
+  if(!error)return data;
+  if(!missingSocialRpc(error))fail(error);
+  const {data:legacy,error:legacyError}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').eq('id',id).maybeSingle();
+  if(legacyError)fail(legacyError);
+  if(!legacy)return null;
+  const {data:visible,error:visibilityError}=await sb.rpc('gm_last_seen_visible',{target_user:id});
+  if(visibilityError)fail(visibilityError);
+  return {...legacy,last_seen_at:visible===false?null:legacy.last_seen_at};
 }
 function messageShape(m:any, sender?:any) {
   const meta=m.metadata||{};
