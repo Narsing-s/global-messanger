@@ -131,16 +131,15 @@ CREATE POLICY "gm story owners manage audience"
   WITH CHECK (EXISTS (SELECT 1 FROM public.gm_stories s WHERE s.id = story_id AND s.author_id = private.gm_current_profile_id()));
 
 DROP POLICY IF EXISTS "gm story owners and viewers read views" ON public.gm_story_views;
+-- A viewer's read_receipts preference is enforced at INSERT time below.
+-- Do not gate the author's SELECT by the author's own preference: authors should
+-- see viewers who opted in, while viewers who opted out never create a view row.
 CREATE POLICY "gm story owners and viewers read views"
   ON public.gm_story_views FOR SELECT TO authenticated
   USING (
-    coalesce((SELECT ps.read_receipts FROM public.gm_privacy_settings ps
-      WHERE ps.user_id = private.gm_current_profile_id()), true)
-    AND (
-      viewer_id = private.gm_current_profile_id()
-      OR EXISTS (SELECT 1 FROM public.gm_stories s
-        WHERE s.id = story_id AND s.author_id = private.gm_current_profile_id())
-    )
+    viewer_id = private.gm_current_profile_id()
+    OR EXISTS (SELECT 1 FROM public.gm_stories s
+      WHERE s.id = story_id AND s.author_id = private.gm_current_profile_id())
   );
 DROP POLICY IF EXISTS "gm viewers record own story views" ON public.gm_story_views;
 CREATE POLICY "gm viewers record own story views"
