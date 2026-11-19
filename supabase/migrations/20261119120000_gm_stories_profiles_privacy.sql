@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS public.gm_story_views (
 );
 CREATE INDEX IF NOT EXISTS gm_story_views_story_idx
   ON public.gm_story_views(story_id,viewed_at DESC);
+CREATE INDEX IF NOT EXISTS gm_story_views_viewer_idx
+  ON public.gm_story_views(viewer_id);
 
 CREATE TABLE IF NOT EXISTS public.gm_story_reactions (
   story_id uuid NOT NULL REFERENCES public.gm_stories(id) ON DELETE CASCADE,
@@ -55,6 +57,8 @@ CREATE TABLE IF NOT EXISTS public.gm_story_reactions (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (story_id,user_id)
 );
+CREATE INDEX IF NOT EXISTS gm_story_reactions_user_idx
+  ON public.gm_story_reactions(user_id);
 
 ALTER TABLE public.gm_stories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gm_story_audience ENABLE ROW LEVEL SECURITY;
