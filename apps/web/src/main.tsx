@@ -5,6 +5,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMessengerSocket, type Socket } from './services/socket';
 import ProductCenter from './components/ProductCenter';
+import StoriesCenter from './components/StoriesCenter';
+import ProfileSheet from './components/ProfileSheet';
 import './features';
 import { LoadingState } from './LoadingState';
 import {
@@ -72,9 +74,10 @@ function App(){
   const [theme,setTheme]=useState<'light'|'dark'>(()=>localStorage.getItem('gm_theme')==='dark'?'dark':'light');
   useEffect(()=>{document.documentElement.dataset.gmTheme=theme;localStorage.setItem('gm_theme',theme)},[theme]);
   const [groupOpen,setGroupOpen]=useState(false),[groupTitle,setGroupTitle]=useState(''),[groupUsers,setGroupUsers]=useState<User[]>([]);
-  const [menu,setMenu]=useState(false),[profileOpen,setProfileOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[productOpen,setProductOpen]=useState(false);
+  const [menu,setMenu]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[productOpen,setProductOpen]=useState(false);
   const [emoji,setEmoji]=useState(false),[reaction,setReaction]=useState<string|null>(null),[reply,setReply]=useState<Message|null>(null);
   const [editing,setEditing]=useState<Message|null>(null),[presence,setPresence]=useState<Record<string,boolean>>({});
+  const [profilePerson,setProfilePerson]=useState<User|null>(null);
   const fileRef=useRef<HTMLInputElement>(null),typingTimer=useRef<number | undefined>(undefined);
 
   useEffect(()=>{const t=localStorage.getItem('gm_token'),u=localStorage.getItem('gm_user');if(t&&u){try{setUser(JSON.parse(u));}catch{localStorage.clear()}}},[]);
@@ -110,14 +113,14 @@ function App(){
   if(!user)return <Auth onLogin={(u)=>setUser(u)}/>;
   const activeMessages=messages.filter(m=>m.conversationId===active?.id);
   return <div className={'messenger '+(mobile?'mobile-open':'')}>
-    <aside className="rail"><div className="rail-avatar"><Avatar user={user} size="lg"/></div>
+    <aside className="rail"><button className="rail-avatar profile-trigger" title="Open your profile" onClick={()=>setProfilePerson(user)}><Avatar user={user} size="lg"/></button>
       <nav><button className="active"><MessageCircle/><span>Chats</span></button><button onClick={()=>setGroupOpen(true)}><Users/><span>Groups</span></button><button onClick={()=>setFolder('favorites')}><Star/><span>Favorites</span></button><button onClick={()=>setFolder('archived')}><Archive/><span>Archive</span></button><button onClick={()=>setProductOpen(true)}><LayoutGrid/><span>Product Center</span></button></nav>
       <div className="rail-bottom"><button onClick={()=>setSettingsOpen(true)}><Settings/></button><button onClick={logout}><LogOut/></button></div>
     </aside>
     <section className="chat-list-pane">
       <header className="list-header"><div className="brand"><div className="brand-mark"><MessageCircle/></div><div><b>Global Messenger</b><small>{socket?.connected?'Connected':'Connecting…'}</small></div></div><button onClick={()=>setSettingsOpen(true)}><Settings/></button></header>
-      <div className="me-row"><Avatar user={user}/><div><b>{user.displayName}</b><small>@{user.username}</small></div><button onClick={()=>setProfileOpen(true)}><MoreVertical/></button></div>
-      <div className="search"><Search/><input value={query} onChange={e=>search(e.target.value)} placeholder="Search people or chats…"/></div>
+      <button className="me-row profile-trigger" onClick={()=>setProfilePerson(user)}><Avatar user={user}/><span><b>{user.displayName}</b><small>@{user.username}</small></span><MoreVertical/></button>
+      <StoriesCenter currentUser={user} onProfile={setProfilePerson}/><div className="search"><Search/><input value={query} onChange={e=>search(e.target.value)} placeholder="Search people or chats…"/></div>
       {people.length>0&&<div className="people"><b>People</b>{people.map(p=><button key={p.id} onClick={()=>openDirect(p)}><Avatar user={p}/><span><strong>{p.displayName}</strong><small>@{p.username}</small></span><Plus/></button>)}</div>}
       <div className="folders">{(['all','unread','groups','favorites','archived'] as Folder[]).map(f=><button key={f} className={folder===f?'selected':''} onClick={()=>setFolder(f)}>{f==='all'?'All':f[0].toUpperCase()+f.slice(1)}</button>)}</div>
       <div className="chat-list">{visible.map(c=>{const other=c.members.find(m=>m.user.id!==user.id)?.user;const latest=c.messages?.[0];return <button key={c.id} className={'chat '+(active?.id===c.id?'selected':'')} onClick={()=>{setActive(c);setMobile(true)}}><Avatar user={other} name={nameOf(c,user.id)}/><div><div><strong>{nameOf(c,user.id)}</strong><time>{time(latest?.createdAt)}</time></div><p>{latest?.type==='file'?'📎 '+(latest.attachmentName||'File'):latest?.body||'Start a conversation'}</p></div>{c.favorite&&<Star className="star"/>}{(c.unreadCount||0)>0&&<i className="unread"/>}</button>})}{!visible.length&&<div className="empty-list"><MessageCircle/><b>No chats here</b><span>Search for a person to start a conversation.</span></div>}</div>
@@ -125,7 +128,7 @@ function App(){
     </section>
     <main className="conversation">
       {!active?<div className="welcome"><MessageCircle/><h1>Your messages</h1><p>Private and group conversations in one place.</p><div><button className="primary" onClick={()=>document.querySelector<HTMLInputElement>('.search input')?.focus()}><Search/> Find people</button><button onClick={()=>setGroupOpen(true)}><Users/> Create group</button></div></div>:
-      <><header className="conversation-head"><button className="back" onClick={()=>setMobile(false)}><ChevronLeft/></button><Avatar user={activeOther} name={nameOf(active,user.id)}/><div><b>{nameOf(active,user.id)}</b><small>{active.isGroup?active.members.length+' members':activeOther&&presence[activeOther.id]?'Online':'Offline'}</small></div><span className="head-actions">{!active.isGroup&&<><button title="Voice call" onClick={()=>window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:'audio'}}))}><Phone/></button><button title="Video call" onClick={()=>window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:'video'}}))}><Video/></button></>}<button title="Product Center" onClick={()=>setProductOpen(true)}><LayoutGrid/></button><button onClick={()=>setMenu(!menu)}><MoreVertical/></button></span></header>
+      <><header className="conversation-head"><button className="back" onClick={()=>setMobile(false)}><ChevronLeft/></button><button className="conversation-profile-trigger" onClick={()=>activeOther&&setProfilePerson(activeOther)} title="View contact profile"><Avatar user={activeOther} name={nameOf(active,user.id)}/></button><div><b>{nameOf(active,user.id)}</b><small>{active.isGroup?active.members.length+' members':activeOther&&presence[activeOther.id]?'Online':'Offline'}</small></div><span className="head-actions">{!active.isGroup&&<><button title="Voice call" onClick={()=>window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:'audio'}}))}><Phone/></button><button title="Video call" onClick={()=>window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:'video'}}))}><Video/></button></>}<button title="Product Center" onClick={()=>setProductOpen(true)}><LayoutGrid/></button><button onClick={()=>setMenu(!menu)}><MoreVertical/></button></span></header>
       {menu&&<div className="chat-menu"><button onClick={()=>organize('favorite',!active.favorite)}><Star/> {active.favorite?'Remove favorite':'Add to favorites'}</button><button onClick={()=>organize('archived',!active.archived)}><Archive/> {active.archived?'Unarchive chat':'Archive chat'}</button><button onClick={()=>navigator.clipboard?.writeText(location.href)}><Copy/> Copy chat link</button></div>}
       <div className="messages">{activeMessages.length===0?<div className="empty-conversation"><MessageCircle/><span>No messages yet. Say hello!</span></div>:activeMessages.map(m=><Bubble key={m.id} m={m} own={m.senderId===user.id} onReply={()=>setReply(m)} onEdit={()=>{setEditing(m);setText(m.body)}} onDelete={()=>del(m)} reaction={reaction===m.id} onReact={()=>setReaction(reaction===m.id?null:m.id)} onEmoji={e=>react(m,e)}/>)}</div>
       <div className="composer-area">{reply&&<div className="context">Replying to {reply.sender?.displayName||'message'}<button onClick={()=>setReply(null)}><X/></button></div>}{editing&&<div className="context">Editing message<button onClick={()=>{setEditing(null);setText('')}}><X/></button></div>}
@@ -134,7 +137,7 @@ function App(){
         {typing&&<small className="typing">Someone is typing…</small>}{error&&<div className="error inline">{error}<button onClick={()=>setError('')}><X/></button></div>}
       </div></>}
     </main>
-    {profileOpen&&<Modal title="My profile" onClose={()=>setProfileOpen(false)}><Avatar user={user} size="xl"/><h2>{user.displayName}</h2><p>@{user.username}</p><button className="primary" onClick={logout}><LogOut/> Logout</button></Modal>}
+    {profilePerson&&<ProfileSheet person={profilePerson} isSelf={profilePerson.id===user.id} online={!!presence[profilePerson.id]} onClose={()=>setProfilePerson(null)} onMessage={p=>{setProfilePerson(null);openDirect(p)}} onCall={kind=>window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:kind}}))}/>}
     {settingsOpen&&<Modal title="Settings" onClose={()=>setSettingsOpen(false)}><button type="button" className="setting theme-setting" onClick={()=>setTheme(theme==='dark'?'light':'dark')}><span className="setting-icon">{theme==='dark'?<Sun/>:<Moon/>}</span><span><b>Appearance · {theme==='dark'?'Dark':'Light'}</b><small>Switch between light and dark themes. Your choice is saved on this device.</small></span><strong>{theme==='dark'?'Light mode':'Dark mode'}</strong></button><div className="setting"><Bell/><div><b>Notifications</b><small>Realtime message notifications are enabled when supported.</small></div></div><div className="setting"><ShieldCheck/><div><b>Account security</b><small>Use a strong password and sign out of shared devices.</small></div></div><button className="danger big" onClick={logout}><LogOut/> Log out</button></Modal>}
     {productOpen&&<ProductCenter onClose={()=>setProductOpen(false)} user={user} chats={chats} activeChat={active}/>}
     {groupOpen&&<GroupModal title={groupTitle} setTitle={setGroupTitle} users={groupUsers} setUsers={setGroupUsers} onCreate={createGroup} onClose={()=>setGroupOpen(false)}/>}
