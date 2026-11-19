@@ -8,7 +8,7 @@ This branch adds the first production-oriented social layer to the existing Reac
 - Premium story strip in the chat list and a dedicated Stories navigation shortcut.
 - Text, image and video stories; a 24-hour visibility window; six background themes.
 - Per-story audiences: all users, selected people, everyone except selected people, or only the author.
-- Story views, reactions, manual archive and a private story archive surface.
+- Story views, reactions, manual archive and a private story archive surface; story-view receipts follow the account's read-receipt preference.
 - A detailed profile sheet opened from the signed-in user's avatar and a direct-chat participant's avatar.
 - Profile editing for display name, About and profile image.
 - Contact information, username copy, last-seen display, mutual groups and shared media.
