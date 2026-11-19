@@ -1,5 +1,5 @@
 import React,{useEffect,useState} from 'react';
-import {ArrowLeft,Camera,Check,Copy,Image as ImageIcon,Lock,MessageCircle,MoreHorizontal,Phone,Shield,UserRound,Users,Video,X} from 'lucide-react';
+import {ArrowLeft,Camera,Check,Copy,Image as ImageIcon,Lock,MessageCircle,MoreHorizontal,Phone,Shield,Users,Video} from 'lucide-react';
 import {getSupabase} from '../supabase';
 import {api} from '../api';
 import {socialApi} from '../services/social-api';
@@ -11,7 +11,6 @@ export default function ProfileSheet({person,isSelf,online=false,onClose,onMessa
  const [details,setDetails]=useState<any>(null),[privacy,setPrivacy]=useState<any>(null),[groups,setGroups]=useState<any[]>([]),[media,setMedia]=useState<any[]>([]);
  const [editing,setEditing]=useState(false),[name,setName]=useState(person.displayName),[bio,setBio]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[saved,setSaved]=useState(false);
  const [showPrivacy,setShowPrivacy]=useState(false),[copied,setCopied]=useState(false);
- const [photo,setPhoto]=useState<HTMLInputElement|null>(null);
  async function refresh(){
   setError('');
   try{
@@ -83,7 +82,6 @@ export default function ProfileSheet({person,isSelf,online=false,onClose,onMessa
       <label>Profile photo<select value={privacy?.profile_photo_visibility||'everyone'} onChange={e=>updatePrivacy({profile_photo_visibility:e.target.value})}><option value="everyone">Everyone</option><option value="nobody">Nobody except me</option></select></label>
       <label>About information<select value={privacy?.about_visibility||'everyone'} onChange={e=>updatePrivacy({about_visibility:e.target.value})}><option value="everyone">Everyone</option><option value="nobody">Nobody except me</option></select></label>
       <label>Default story audience<select value={privacy?.default_story_audience||'everyone'} onChange={e=>updatePrivacy({default_story_audience:e.target.value})}><option value="everyone">All users</option><option value="selected">Only selected people</option><option value="except">All except selected people</option><option value="only_me">Only me</option></select></label>
-      <label className="gm-privacy-toggle"><input type="checkbox" checked={privacy?.story_replies!==false} onChange={e=>updatePrivacy({story_replies:e.target.checked})}/> Allow story replies</label>
       <label className="gm-privacy-toggle"><input type="checkbox" checked={privacy?.save_stories_to_archive!==false} onChange={e=>updatePrivacy({save_stories_to_archive:e.target.checked})}/> Save my stories to archive</label>
     </div>}
     {error&&<div className="gm-profile-error">{error}</div>}
