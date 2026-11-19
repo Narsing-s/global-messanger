@@ -68,9 +68,24 @@ jobs:
             adb install -r apps/web/android/app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop com.globalmessenger.app
             adb shell monkey -p com.globalmessenger.app 1
-            adb shell pidof com.globalmessenger.app
+            sleep 10
+            if ! adb shell pidof com.globalmessenger.app; then
+              adb logcat -d -t 2500 > android-emulator-logcat.txt
+              echo "Global Messenger process exited after launch. Recent Android logs:"
+              tail -n 300 android-emulator-logcat.txt
+              exit 1
+            fi
             adb shell dumpsys activity activities | grep -q 'com.globalmessenger.app'
             adb shell screencap -p /sdcard/global-messenger-smoke.png
+            adb logcat -d -t 1000 > android-emulator-logcat.txt
+
+      - name: Upload Android emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: global-messenger-android-emulator-diagnostics
+          path: android-emulator-logcat.txt
+          if-no-files-found: ignore
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4

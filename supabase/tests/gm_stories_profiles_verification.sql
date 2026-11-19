@@ -41,6 +41,11 @@ BEGIN
     RAISE EXCEPTION 'Authenticated role is missing required privacy helper access';
   END IF;
 
+  IF position('auth.uid() IS NULL' IN pg_get_functiondef('private.gm_can_view_story(uuid)'::regprocedure)) = 0
+     OR position('gm_current_profile_id() IS NULL' IN pg_get_functiondef('private.gm_can_view_story(uuid)'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'Story visibility helper does not reject anonymous/unmapped sessions';
+  END IF;
+
   IF EXISTS (
     SELECT 1 FROM pg_proc p
     JOIN pg_namespace n ON n.oid=p.pronamespace
@@ -73,6 +78,17 @@ BEGIN
       AND with_check ILIKE '%read_receipts%'
   ) THEN
     RAISE EXCEPTION 'Story-view insertion does not respect read-receipt privacy';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='gm_story_views'
+      AND policyname='gm story owners and viewers read views'
+      AND qual ILIKE '%viewer_id%'
+      AND qual ILIKE '%author_id%'
+      AND qual NOT ILIKE '%read_receipts%'
+  ) THEN
+    RAISE EXCEPTION 'Story-view visibility is not scoped to the viewer and story owner';
   END IF;
 END $$;
 
