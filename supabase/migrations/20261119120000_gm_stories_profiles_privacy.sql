@@ -4,13 +4,10 @@
 -- until the pull request's database and two-account tests have passed.
 
 ALTER TABLE public.gm_privacy_settings
-  ADD COLUMN IF NOT EXISTS profile_photo_visibility text NOT NULL DEFAULT 'everyone'
-    CHECK (profile_photo_visibility IN ('everyone','nobody')),
   ADD COLUMN IF NOT EXISTS about_visibility text NOT NULL DEFAULT 'everyone'
     CHECK (about_visibility IN ('everyone','nobody')),
   ADD COLUMN IF NOT EXISTS default_story_audience text NOT NULL DEFAULT 'everyone'
     CHECK (default_story_audience IN ('everyone','selected','except','only_me')),
-  ADD COLUMN IF NOT EXISTS story_replies boolean NOT NULL DEFAULT true,
   ADD COLUMN IF NOT EXISTS save_stories_to_archive boolean NOT NULL DEFAULT true;
 
 CREATE TABLE IF NOT EXISTS public.gm_stories (
@@ -24,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.gm_stories (
   expires_at timestamptz NOT NULL DEFAULT (now() + interval '24 hours'),
   archived_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK ((media_type = 'text' AND media_path IS NULL) OR media_type IN ('image','video'))
+  CHECK ((media_type = 'text' AND media_path IS NULL) OR (media_type IN ('image','video') AND media_path IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS gm_stories_author_created_idx
   ON public.gm_stories(author_id, created_at DESC);
@@ -50,6 +47,8 @@ CREATE TABLE IF NOT EXISTS public.gm_story_views (
 );
 CREATE INDEX IF NOT EXISTS gm_story_views_story_idx
   ON public.gm_story_views(story_id,viewed_at DESC);
+CREATE INDEX IF NOT EXISTS gm_story_views_viewer_idx
+  ON public.gm_story_views(viewer_id);
 
 CREATE TABLE IF NOT EXISTS public.gm_story_reactions (
   story_id uuid NOT NULL REFERENCES public.gm_stories(id) ON DELETE CASCADE,
@@ -58,6 +57,8 @@ CREATE TABLE IF NOT EXISTS public.gm_story_reactions (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (story_id,user_id)
 );
+CREATE INDEX IF NOT EXISTS gm_story_reactions_user_idx
+  ON public.gm_story_reactions(user_id);
 
 ALTER TABLE public.gm_stories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gm_story_audience ENABLE ROW LEVEL SECURITY;
@@ -80,6 +81,7 @@ AS $$
         OR (
           s.archived_at IS NULL
           AND s.expires_at > now()
+          AND (s.media_type = 'text' OR s.media_path IS NOT NULL)
           AND NOT private.gm_is_blocked(s.author_id)
           AND CASE s.audience_mode
             WHEN 'everyone' THEN true
@@ -132,13 +134,23 @@ DROP POLICY IF EXISTS "gm story owners and viewers read views" ON public.gm_stor
 CREATE POLICY "gm story owners and viewers read views"
   ON public.gm_story_views FOR SELECT TO authenticated
   USING (
-    viewer_id = private.gm_current_profile_id()
-    OR EXISTS (SELECT 1 FROM public.gm_stories s WHERE s.id = story_id AND s.author_id = private.gm_current_profile_id())
+    coalesce((SELECT ps.read_receipts FROM public.gm_privacy_settings ps
+      WHERE ps.user_id = private.gm_current_profile_id()), true)
+    AND (
+      viewer_id = private.gm_current_profile_id()
+      OR EXISTS (SELECT 1 FROM public.gm_stories s
+        WHERE s.id = story_id AND s.author_id = private.gm_current_profile_id())
+    )
   );
 DROP POLICY IF EXISTS "gm viewers record own story views" ON public.gm_story_views;
 CREATE POLICY "gm viewers record own story views"
   ON public.gm_story_views FOR INSERT TO authenticated
-  WITH CHECK (viewer_id = private.gm_current_profile_id() AND private.gm_can_view_story(story_id));
+  WITH CHECK (
+    viewer_id = private.gm_current_profile_id()
+    AND private.gm_can_view_story(story_id)
+    AND coalesce((SELECT ps.read_receipts FROM public.gm_privacy_settings ps
+      WHERE ps.user_id = private.gm_current_profile_id()), true)
+  );
 
 DROP POLICY IF EXISTS "gm viewers read story reactions" ON public.gm_story_reactions;
 CREATE POLICY "gm viewers read story reactions"
@@ -196,8 +208,12 @@ CREATE POLICY "gm story owners delete story media"
     AND (storage.foldername(name))[1] = private.gm_current_profile_id()::text
   );
 
+-- Prevent direct table reads from bypassing per-field profile privacy. The
+-- authenticated client receives these fields only through the privacy-aware RPC.
+REVOKE SELECT (auth_user_id,avatar_url,bio,last_seen_at) ON public.gm_profiles FROM authenticated;
+
 -- Return only profile fields that the target user's privacy choices permit.
-CREATE OR REPLACE FUNCTION public.gm_get_profile_details(target_user uuid)
+CREATE OR REPLACE FUNCTION private.gm_get_profile_details_impl(target_user uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
 STABLE
@@ -207,7 +223,6 @@ AS $$
 DECLARE
   v_me uuid := private.gm_current_profile_id();
   v_profile public.gm_profiles%ROWTYPE;
-  v_photo text;
   v_about text;
   v_last_seen boolean;
 BEGIN
@@ -217,28 +232,48 @@ BEGIN
   IF target_user IS NULL THEN
     RAISE EXCEPTION 'Profile not found';
   END IF;
-  IF target_user <> v_me AND (
-    NOT private.gm_is_profile_visible(target_user)
-    OR private.gm_is_blocked(target_user)
-  ) THEN
+  IF target_user <> v_me AND private.gm_is_blocked(target_user) THEN
+    RETURN NULL;
+  END IF;
+  IF target_user <> v_me AND NOT private.gm_is_profile_visible(target_user)
+     AND NOT EXISTS (
+       SELECT 1 FROM public.gm_conversation_members mine
+       JOIN public.gm_conversation_members peer
+         ON peer.conversation_id = mine.conversation_id
+       WHERE mine.user_id = v_me AND peer.user_id = target_user
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM public.gm_stories s
+       WHERE s.author_id = target_user AND private.gm_can_view_story(s.id)
+     ) THEN
     RETURN NULL;
   END IF;
   SELECT * INTO v_profile FROM public.gm_profiles WHERE id = target_user;
   IF NOT FOUND THEN RETURN NULL; END IF;
-  SELECT coalesce(profile_photo_visibility,'everyone'),
-         coalesce(about_visibility,'everyone'),
+  SELECT coalesce(about_visibility,'everyone'),
          coalesce(last_seen_visibility,true)
-    INTO v_photo,v_about,v_last_seen
+    INTO v_about,v_last_seen
     FROM public.gm_privacy_settings WHERE user_id = target_user;
   RETURN jsonb_build_object(
     'id',v_profile.id,
     'username',v_profile.username,
     'display_name',v_profile.display_name,
-    'avatar_url',CASE WHEN target_user = v_me OR coalesce(v_photo,'everyone') = 'everyone' THEN v_profile.avatar_url ELSE NULL END,
+    'avatar_url',v_profile.avatar_url,
     'bio',CASE WHEN target_user = v_me OR coalesce(v_about,'everyone') = 'everyone' THEN v_profile.bio ELSE NULL END,
     'last_seen_at',CASE WHEN target_user = v_me OR coalesce(v_last_seen,true) THEN v_profile.last_seen_at ELSE NULL END
   );
 END;
 $$;
+REVOKE ALL ON FUNCTION private.gm_get_profile_details_impl(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.gm_get_profile_details_impl(uuid) TO authenticated;
+
+-- Expose only a SECURITY INVOKER RPC wrapper through the Data API.
+CREATE OR REPLACE FUNCTION public.gm_get_profile_details(target_user uuid)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public, private, pg_temp
+AS $$ SELECT private.gm_get_profile_details_impl(target_user) $$;
 REVOKE ALL ON FUNCTION public.gm_get_profile_details(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.gm_get_profile_details(uuid) TO authenticated;

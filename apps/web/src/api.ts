@@ -20,15 +20,31 @@ async function currentProfile() {
   profileCache.set(user.id,data);
   return data;
 }
+const missingSocialRpc=(e:any)=>e?.code==='PGRST202'||e?.code==='42883'||String(e?.message||'').toLowerCase().includes('gm_get_profile_details');
 async function hidePrivateLastSeen(sb:any,profiles:any[]){
-  return await Promise.all((profiles||[]).map(async(p:any)=>{const {data:visible}=await sb.rpc('gm_last_seen_visible',{target_user:p.id});return visible===false?{...p,last_seen_at:null}:p;}));
+  return await Promise.all((profiles||[]).map(async(p:any)=>{
+    const {data,error}=await sb.rpc('gm_get_profile_details',{target_user:p.id});
+    if(!error)return data?{...p,...data}:{...p,avatar_url:null,bio:null,last_seen_at:null};
+    if(!missingSocialRpc(error))fail(error);
+    // Backward compatibility while the additive social migration is awaiting deployment.
+    const {data:legacy,error:legacyError}=await sb.from('gm_profiles').select('id,avatar_url,last_seen_at').eq('id',p.id).maybeSingle();
+    if(legacyError)fail(legacyError);
+    const {data:visible,error:visibilityError}=await sb.rpc('gm_last_seen_visible',{target_user:p.id});
+    if(visibilityError)fail(visibilityError);
+    return {...p,...legacy,last_seen_at:visible===false?null:legacy?.last_seen_at};
+  }));
 }
 async function profileById(id:string) {
   const sb=await getSupabase();
-  const {data,error}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').eq('id',id).maybeSingle();
-  if(error)fail(error);
-  if(data){const [safe]=await hidePrivateLastSeen(sb,[data]);return safe;}
-  return data;
+  const {data,error}=await sb.rpc('gm_get_profile_details',{target_user:id});
+  if(!error)return data;
+  if(!missingSocialRpc(error))fail(error);
+  const {data:legacy,error:legacyError}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').eq('id',id).maybeSingle();
+  if(legacyError)fail(legacyError);
+  if(!legacy)return null;
+  const {data:visible,error:visibilityError}=await sb.rpc('gm_last_seen_visible',{target_user:id});
+  if(visibilityError)fail(visibilityError);
+  return {...legacy,last_seen_at:visible===false?null:legacy.last_seen_at};
 }
 function messageShape(m:any, sender?:any) {
   const meta=m.metadata||{};
@@ -44,7 +60,7 @@ async function loadConversation(id:string) {
   const {data:members,error:meErr}=await sb.from('gm_conversation_members').select('user_id,joined_at,last_read_at').eq('conversation_id',id);
   if(meErr)fail(meErr);
   const ids=(members||[]).map((m:any)=>m.user_id);
-  const {data:profiles,error:pErr}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);
+  const {data:profiles,error:pErr}=await sb.from('gm_profiles').select('id,username,display_name').in('id',ids);
   if(pErr)fail(pErr);
   const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);
   const {data:prefs}=await sb.from('gm_conversation_preferences').select('*').eq('conversation_id',id).eq('user_id',me.id).maybeSingle();
@@ -72,7 +88,7 @@ async function listMessages(conversationId:string,limit=100) {
   if(error)fail(error);
   const ids=[...new Set((data||[]).map((m:any)=>m.sender_id))];
   const messageIds=(data||[]).map((m:any)=>m.id);
-  const {data:profiles}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);
+  const {data:profiles}=await sb.from('gm_profiles').select('id,username,display_name').in('id',ids);
   const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);
   const byId=new Map(safeProfiles.map((p:any)=>[p.id,p]));
   const {data:attachments,error:attachmentError}=await sb.from('gm_attachments').select('message_id,bucket_id,object_path,file_name,mime_type,size_bytes').in('message_id',messageIds);
@@ -200,7 +216,7 @@ async function exportAccountData(){
  const sb=await getSupabase(),me=await currentProfile();
  const names=['gm_profiles','gm_conversation_members','gm_conversations','gm_messages','gm_bookmarks','gm_pinned_messages','gm_conversation_preferences','gm_user_devices','gm_privacy_settings','gm_notifications'];
  const data:any={exportedAt:now(),profile:userShape(me),tables:{}};
- for(const table of names){const q=table==='gm_profiles'?sb.from(table).select('id,username,display_name,avatar_url,last_seen_at').eq('id',me.id):table==='gm_conversation_members'?sb.from(table).select('*').eq('user_id',me.id):table==='gm_conversations'?sb.from(table).select('*').in('id',(await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id)).data?.map((x:any)=>x.conversation_id)||[]):table==='gm_messages'?sb.from(table).select('*').in('conversation_id',(await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id)).data?.map((x:any)=>x.conversation_id)||[]):sb.from(table).select('*').eq('user_id',me.id);const {data:rows,error}=await q;if(error)fail(error);data.tables[table]=rows||[];}
+ for(const table of names){const q=table==='gm_profiles'?sb.from(table).select('id,username,display_name').eq('id',me.id):table==='gm_conversation_members'?sb.from(table).select('*').eq('user_id',me.id):table==='gm_conversations'?sb.from(table).select('*').in('id',(await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id)).data?.map((x:any)=>x.conversation_id)||[]):table==='gm_messages'?sb.from(table).select('*').in('conversation_id',(await sb.from('gm_conversation_members').select('conversation_id').eq('user_id',me.id)).data?.map((x:any)=>x.conversation_id)||[]):sb.from(table).select('*').eq('user_id',me.id);const {data:rows,error}=await q;if(error)fail(error);data.tables[table]=rows||[];}
  return data;
 }
 async function createUserReport(body:any){
@@ -230,7 +246,7 @@ export const api = {
     const sb=await getSupabase(),me=await currentProfile();
     const term=q.trim().replace(/[,%]/g,'');
     if(term.length<2)return [];
-    const {data,error}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').neq('id',me.id).or('username.ilike.%'+term+'%,display_name.ilike.%'+term+'%').limit(20);
+    const {data,error}=await sb.from('gm_profiles').select('id,username,display_name').neq('id',me.id).or('username.ilike.%'+term+'%,display_name.ilike.%'+term+'%').limit(20);
     if(error)fail(error);
     const safe=await hidePrivateLastSeen(sb,data||[]);
     return safe.map(userShape);
@@ -314,21 +330,21 @@ export const api = {
     const sb=await getSupabase();const term=q.trim();if(term.length<2)return [];
     const {data,error}=await sb.from('gm_messages').select('*').ilike('body','%'+term.replace(/[,%]/g,'')+'%').order('created_at',{ascending:false}).limit(limit);
     if(error)fail(error);const ids=[...new Set((data||[]).map((m:any)=>m.sender_id))];
-    const {data:profiles,error:pe}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',ids);if(pe)fail(pe);
+    const {data:profiles,error:pe}=await sb.from('gm_profiles').select('id,username,display_name').in('id',ids);if(pe)fail(pe);
     const safeProfiles=await hidePrivateLastSeen(sb,profiles||[]);const map=new Map(safeProfiles.map((p:any)=>[p.id,p]));return (data||[]).map((m:any)=>messageShape(m,map.get(m.sender_id)));
   },
   async bookmarks(){
     const sb=await getSupabase(),me=await currentProfile();const {data,error}=await sb.from('gm_bookmarks').select('message_id,created_at').eq('user_id',me.id).order('created_at',{ascending:false}).limit(100);if(error)fail(error);
     const ids=(data||[]).map((x:any)=>x.message_id);if(!ids.length)return [];
     const {data:messages,error:e}=await sb.from('gm_messages').select('*').in('id',ids);if(e)fail(e);
-    const senderIds=[...new Set((messages||[]).map((m:any)=>m.sender_id))];const {data:people,error:pe}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',senderIds);if(pe)fail(pe);
+    const senderIds=[...new Set((messages||[]).map((m:any)=>m.sender_id))];const {data:people,error:pe}=await sb.from('gm_profiles').select('id,username,display_name').in('id',senderIds);if(pe)fail(pe);
     const safePeople=await hidePrivateLastSeen(sb,people||[]);const senders=new Map(safePeople.map((p:any)=>[p.id,p]));const byId=new Map((messages||[]).map((m:any)=>[m.id,messageShape(m,senders.get(m.sender_id))]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:byId.get(x.message_id)})).filter((x:any)=>x.message);
   },
   async pins(conversationId:string){
     const sb=await getSupabase();const {data,error}=await sb.from('gm_pinned_messages').select('message_id,created_at').eq('conversation_id',conversationId).order('created_at',{ascending:false});if(error)fail(error);
     const ids=(data||[]).map((x:any)=>x.message_id);if(!ids.length)return [];
     const {data:messages,error:e}=await sb.from('gm_messages').select('*').in('id',ids);if(e)fail(e);
-    const senderIds=[...new Set((messages||[]).map((m:any)=>m.sender_id))];const {data:people,error:pe}=await sb.from('gm_profiles').select('id,username,display_name,avatar_url,last_seen_at').in('id',senderIds);if(pe)fail(pe);
+    const senderIds=[...new Set((messages||[]).map((m:any)=>m.sender_id))];const {data:people,error:pe}=await sb.from('gm_profiles').select('id,username,display_name').in('id',senderIds);if(pe)fail(pe);
     const safePeople=await hidePrivateLastSeen(sb,people||[]);const senders=new Map(safePeople.map((p:any)=>[p.id,p]));const byId=new Map((messages||[]).map((m:any)=>[m.id,messageShape(m,senders.get(m.sender_id))]));return (data||[]).map((x:any)=>({createdAt:x.created_at,message:byId.get(x.message_id)})).filter((x:any)=>x.message);
   },
   async mute(id:string,minutes:number){

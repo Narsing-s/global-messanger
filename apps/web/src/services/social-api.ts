@@ -48,6 +48,9 @@ export const socialApi={
   },
   async archive(){
     const {sb,profile}=await context();
+    const {data:privacy,error:privacyError}=await sb.from('gm_privacy_settings').select('save_stories_to_archive').eq('user_id',profile.id).maybeSingle();
+    if(privacyError)fail(privacyError);
+    if(privacy?.save_stories_to_archive===false)return [];
     const {data,error}=await sb.from('gm_stories').select('*').eq('author_id',profile.id)
       .or('archived_at.not.is.null,expires_at.lte.'+new Date().toISOString())
       .gte('created_at',new Date(Date.now()-30*86400000).toISOString())
@@ -63,12 +66,15 @@ export const socialApi={
     if(file&&(!allowedMedia.has(file.type)||file.size>25*1024*1024))throw new Error('Use JPG, PNG, WebP, MP4 or WebM media up to 25 MB.');
     if(input.audienceMode==='selected'&&!(input.audienceIds||[]).length)throw new Error('Choose at least one person for this story.');
     const mediaType=file?(file.type.startsWith('video/')?'video':'image'):'text';
+    const storyId=crypto.randomUUID();
+    const safeName=file?file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-90)||'story-media':null;
+    const mediaPath=file?profile.id+'/'+storyId+'/'+crypto.randomUUID()+'-'+safeName:null;
     const {data:story,error}=await sb.from('gm_stories').insert({
-      author_id:profile.id,media_type:mediaType,body,background_theme:input.backgroundTheme||'aurora',
-      audience_mode:input.audienceMode
+      id:storyId,author_id:profile.id,media_type:mediaType,body,media_path:mediaPath,
+      background_theme:input.backgroundTheme||'aurora',audience_mode:input.audienceMode
     }).select('*').single();
     if(error)fail(error);
-    let path:string|null=null;
+    let uploadedPath:string|null=null;
     try{
       if(input.audienceMode==='selected'||input.audienceMode==='except'){
         const audienceIds=[...new Set(input.audienceIds||[])].filter(id=>id!==profile.id);
@@ -79,25 +85,25 @@ export const socialApi={
           if(e)fail(e);
         }
       }
-      if(file){
-        const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-90)||'story-media';
-        path=profile.id+'/'+story.id+'/'+crypto.randomUUID()+'-'+safeName;
-        const {error:e}=await sb.storage.from('gm-story-media').upload(path,file,{contentType:file.type,upsert:false});
+      if(file&&mediaPath){
+        const {error:e}=await sb.storage.from('gm-story-media').upload(mediaPath,file,{contentType:file.type,upsert:false});
         if(e)fail(e);
-        const {error:ue}=await sb.from('gm_stories').update({media_path:path}).eq('id',story.id).eq('author_id',profile.id);
-        if(ue)fail(ue);
+        uploadedPath=mediaPath;
       }
       return story.id as string;
     }catch(error){
-      if(path)await sb.storage.from('gm-story-media').remove([path]);
+      if(uploadedPath)await sb.storage.from('gm-story-media').remove([uploadedPath]);
       await sb.from('gm_stories').delete().eq('id',story.id).eq('author_id',profile.id);
       throw error;
     }
   },
   async markViewed(storyId:string){
     const {sb,profile}=await context();
-    const {error}=await sb.from('gm_story_views').upsert({story_id:storyId,viewer_id:profile.id,viewed_at:new Date().toISOString()},{onConflict:'story_id,viewer_id'});
-    if(error)fail(error);
+    const {data:privacy,error:privacyError}=await sb.from('gm_privacy_settings').select('read_receipts').eq('user_id',profile.id).maybeSingle();
+    if(privacyError)fail(privacyError);
+    if(privacy?.read_receipts===false)return;
+    const {error}=await sb.from('gm_story_views').insert({story_id:storyId,viewer_id:profile.id});
+    if(error&&error.code!=='23505')fail(error);
   },
   async react(storyId:string,emoji:string){
     const {sb,profile}=await context();
@@ -108,7 +114,7 @@ export const socialApi={
     const {sb}=await context();
     const {data,error}=await sb.from('gm_story_views').select('viewer_id,viewed_at').eq('story_id',storyId).order('viewed_at',{ascending:false});
     if(error)fail(error);
-    return await Promise.all((data||[]).map(async view=>{
+    return await Promise.all((data||[]).map(async (view:any)=>{
       const {data:person,error:e}=await sb.rpc('gm_get_profile_details',{target_user:view.viewer_id});
       if(e)fail(e);
       return {...view,user:person};
@@ -137,16 +143,16 @@ export const socialApi={
     const {sb,profile}=await context();
     const {data,error}=await sb.from('gm_privacy_settings').select('*').eq('user_id',profile.id).maybeSingle();
     if(error)fail(error);
-    return data||{user_id:profile.id,profile_visibility:true,read_receipts:true,online_status:true,last_seen_visibility:true,typing_indicators:true,profile_photo_visibility:'everyone',about_visibility:'everyone',default_story_audience:'everyone',story_replies:true,save_stories_to_archive:true};
+    return data||{user_id:profile.id,profile_visibility:true,read_receipts:true,online_status:true,last_seen_visibility:true,typing_indicators:true,about_visibility:'everyone',default_story_audience:'everyone',save_stories_to_archive:true};
   },
   async updatePrivacy(patch:Record<string,unknown>){
     const {sb,profile}=await context();
-    const allowed=['profile_visibility','read_receipts','online_status','last_seen_visibility','typing_indicators','profile_photo_visibility','about_visibility','default_story_audience','story_replies','save_stories_to_archive'];
+    const allowed=['profile_visibility','read_receipts','online_status','last_seen_visibility','typing_indicators','about_visibility','default_story_audience','save_stories_to_archive'];
     const values:any={user_id:profile.id,updated_at:new Date().toISOString()};
     for(const key of allowed){
       const value=patch[key];
-      if(['profile_visibility','read_receipts','online_status','last_seen_visibility','typing_indicators','story_replies','save_stories_to_archive'].includes(key)&&typeof value==='boolean')values[key]=value;
-      if(key==='profile_photo_visibility'||key==='about_visibility'){
+      if(['profile_visibility','read_receipts','online_status','last_seen_visibility','typing_indicators','save_stories_to_archive'].includes(key)&&typeof value==='boolean')values[key]=value;
+      if(key==='about_visibility'){
         if(value==='everyone'||value==='nobody')values[key]=value;
       }
       if(key==='default_story_audience'&&['everyone','selected','except','only_me'].includes(String(value)))values[key]=value;
