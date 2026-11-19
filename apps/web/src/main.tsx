@@ -19,7 +19,7 @@ import './styles.css';
 import './ui-polish.css';
 import './premium-social.css';
 
-type User={id:string;username:string;displayName:string;avatarUrl?:string|null;lastSeenAt?:string};
+type User={id:string;username:string;displayName:string;avatarUrl?:string|null;lastSeenAt?:string|null};
 type Member={user:User;favoriteAt?:string|null;archivedAt?:string|null};
 type Message={id:string;conversationId:string;senderId:string;body:string;createdAt:string;editedAt?:string|null;deletedAt?:string|null;sender?:User;type?:string;attachmentUrl?:string|null;attachmentName?:string|null;attachmentMime?:string|null;attachmentSize?:number|null;replyToId?:string|null};
 type Chat={id:string;isGroup:boolean;title?:string|null;members:Member[];messages?:Message[];favorite?:boolean;archived?:boolean;unreadCount?:number};
