@@ -23,8 +23,8 @@ export default function StoriesCenter({currentUser,onProfile}:Props){
   try{await socialApi.createStory({body,file,backgroundTheme:theme,audienceMode:audience,audienceIds:selected.map(p=>p.id)});setComposer(false);setBody('');setFile(null);setSelected([]);await refresh();}
   catch(e:any){setError(e.message||'Unable to publish story.');}finally{setBusy(false);}
  }
- async function openGroup(group:{items:Story[]}){const story=group.items.find(s=>s.id!==active?.id)||group.items[0];setActive(story);setViewers([]);try{await socialApi.markViewed(story.id);}catch(e:any){setError(e.message);}if(story.author_id===currentUser.id)try{setViewers(await socialApi.viewers(story.id));}catch{}}
- async function chooseStory(story:Story){setActive(story);setViewers([]);try{await socialApi.markViewed(story.id);}catch(e:any){setError(e.message);}if(story.author_id===currentUser.id)try{setViewers(await socialApi.viewers(story.id));}catch{}}
+ async function openGroup(group:{items:Story[]}){const story=group.items.find(s=>s.id!==active?.id)||group.items[0];setActive(story);setViewers([]);if(story.author_id!==currentUser.id)try{await socialApi.markViewed(story.id);}catch(e:any){setError(e.message);}if(story.author_id===currentUser.id)try{setViewers(await socialApi.viewers(story.id));}catch{}}
+ async function chooseStory(story:Story){setActive(story);setViewers([]);if(story.author_id!==currentUser.id)try{await socialApi.markViewed(story.id);}catch(e:any){setError(e.message);}if(story.author_id===currentUser.id)try{setViewers(await socialApi.viewers(story.id));}catch{}}
  async function react(emoji:string){if(!active)return;try{await socialApi.react(active.id,emoji);await refresh();}catch(e:any){setError(e.message);}}
  async function stepStory(direction:number){
   if(!active)return;
