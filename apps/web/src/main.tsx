@@ -10,7 +10,7 @@ import ProfileSheet from './components/ProfileSheet';
 import './features';
 import { LoadingState } from './LoadingState';
 import {
-  Archive, Bell, CheckCheck, ChevronLeft, Copy, Heart, LogIn, LogOut,
+  Archive, Bell, CheckCheck, ChevronLeft, CirclePlay, Copy, Heart, LogIn, LogOut,
   MessageCircle, MoreVertical, Paperclip, Plus, Search, Send, Settings, Phone, Video, LayoutGrid,
   ShieldCheck, Smile, Star, Sun, Moon, Trash2, UserPlus, Users, X
 } from 'lucide-react';
@@ -115,7 +115,7 @@ function App(){
   const activeMessages=messages.filter(m=>m.conversationId===active?.id);
   return <div className={'messenger '+(mobile?'mobile-open':'')}>
     <aside className="rail"><button className="rail-avatar profile-trigger" title="Open your profile" onClick={()=>setProfilePerson(user)}><Avatar user={user} size="lg"/></button>
-      <nav><button className="active"><MessageCircle/><span>Chats</span></button><button onClick={()=>setGroupOpen(true)}><Users/><span>Groups</span></button><button onClick={()=>setFolder('favorites')}><Star/><span>Favorites</span></button><button onClick={()=>setFolder('archived')}><Archive/><span>Archive</span></button><button onClick={()=>setProductOpen(true)}><LayoutGrid/><span>Product Center</span></button></nav>
+      <nav><button className="active"><MessageCircle/><span>Chats</span></button><button onClick={()=>setGroupOpen(true)}><Users/><span>Groups</span></button><button onClick={()=>document.querySelector('.gm-stories')?.scrollIntoView({behavior:'smooth',block:'nearest'})}><CirclePlay/><span>Stories</span></button><button onClick={()=>setFolder('favorites')}><Star/><span>Favorites</span></button><button onClick={()=>setFolder('archived')}><Archive/><span>Archive</span></button><button onClick={()=>setProductOpen(true)}><LayoutGrid/><span>Product Center</span></button></nav>
       <div className="rail-bottom"><button onClick={()=>setSettingsOpen(true)}><Settings/></button><button onClick={logout}><LogOut/></button></div>
     </aside>
     <section className="chat-list-pane">
@@ -138,7 +138,7 @@ function App(){
         {typing&&<small className="typing">Someone is typing…</small>}{error&&<div className="error inline">{error}<button onClick={()=>setError('')}><X/></button></div>}
       </div></>}
     </main>
-    {profilePerson&&<ProfileSheet person={profilePerson} isSelf={profilePerson.id===user.id} online={!!presence[profilePerson.id]} onClose={()=>setProfilePerson(null)} onMessage={p=>{setProfilePerson(null);openDirect(p)}} onCall={kind=>window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:kind}}))}/>}
+    {profilePerson&&<ProfileSheet person={profilePerson} isSelf={profilePerson.id===user.id} online={!!presence[profilePerson.id]} onClose={()=>setProfilePerson(null)} onMessage={p=>{setProfilePerson(null);openDirect(p)}} onCall={kind=>window.dispatchEvent(new CustomEvent('gm:call',{detail:{type:kind}}))} onProfileUpdated={p=>{setUser(p);localStorage.setItem('gm_user',JSON.stringify(p));}}/>}
     {settingsOpen&&<Modal title="Settings" onClose={()=>setSettingsOpen(false)}><button type="button" className="setting theme-setting" onClick={()=>setTheme(theme==='dark'?'light':'dark')}><span className="setting-icon">{theme==='dark'?<Sun/>:<Moon/>}</span><span><b>Appearance · {theme==='dark'?'Dark':'Light'}</b><small>Switch between light and dark themes. Your choice is saved on this device.</small></span><strong>{theme==='dark'?'Light mode':'Dark mode'}</strong></button><div className="setting"><Bell/><div><b>Notifications</b><small>Realtime message notifications are enabled when supported.</small></div></div><div className="setting"><ShieldCheck/><div><b>Account security</b><small>Use a strong password and sign out of shared devices.</small></div></div><button className="danger big" onClick={logout}><LogOut/> Log out</button></Modal>}
     {productOpen&&<ProductCenter onClose={()=>setProductOpen(false)} user={user} chats={chats} activeChat={active}/>}
     {groupOpen&&<GroupModal title={groupTitle} setTitle={setGroupTitle} users={groupUsers} setUsers={setGroupUsers} onCreate={createGroup} onClose={()=>setGroupOpen(false)}/>}
