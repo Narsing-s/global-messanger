@@ -134,13 +134,23 @@ DROP POLICY IF EXISTS "gm story owners and viewers read views" ON public.gm_stor
 CREATE POLICY "gm story owners and viewers read views"
   ON public.gm_story_views FOR SELECT TO authenticated
   USING (
-    viewer_id = private.gm_current_profile_id()
-    OR EXISTS (SELECT 1 FROM public.gm_stories s WHERE s.id = story_id AND s.author_id = private.gm_current_profile_id())
+    coalesce((SELECT ps.read_receipts FROM public.gm_privacy_settings ps
+      WHERE ps.user_id = private.gm_current_profile_id()), true)
+    AND (
+      viewer_id = private.gm_current_profile_id()
+      OR EXISTS (SELECT 1 FROM public.gm_stories s
+        WHERE s.id = story_id AND s.author_id = private.gm_current_profile_id())
+    )
   );
 DROP POLICY IF EXISTS "gm viewers record own story views" ON public.gm_story_views;
 CREATE POLICY "gm viewers record own story views"
   ON public.gm_story_views FOR INSERT TO authenticated
-  WITH CHECK (viewer_id = private.gm_current_profile_id() AND private.gm_can_view_story(story_id));
+  WITH CHECK (
+    viewer_id = private.gm_current_profile_id()
+    AND private.gm_can_view_story(story_id)
+    AND coalesce((SELECT ps.read_receipts FROM public.gm_privacy_settings ps
+      WHERE ps.user_id = private.gm_current_profile_id()), true)
+  );
 
 DROP POLICY IF EXISTS "gm viewers read story reactions" ON public.gm_story_reactions;
 CREATE POLICY "gm viewers read story reactions"
