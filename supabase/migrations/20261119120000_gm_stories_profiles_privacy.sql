@@ -4,8 +4,6 @@
 -- until the pull request's database and two-account tests have passed.
 
 ALTER TABLE public.gm_privacy_settings
-  ADD COLUMN IF NOT EXISTS profile_photo_visibility text NOT NULL DEFAULT 'everyone'
-    CHECK (profile_photo_visibility IN ('everyone','nobody')),
   ADD COLUMN IF NOT EXISTS about_visibility text NOT NULL DEFAULT 'everyone'
     CHECK (about_visibility IN ('everyone','nobody')),
   ADD COLUMN IF NOT EXISTS default_story_audience text NOT NULL DEFAULT 'everyone'
@@ -210,7 +208,6 @@ AS $$
 DECLARE
   v_me uuid := private.gm_current_profile_id();
   v_profile public.gm_profiles%ROWTYPE;
-  v_photo text;
   v_about text;
   v_last_seen boolean;
 BEGIN
@@ -238,16 +235,15 @@ BEGIN
   END IF;
   SELECT * INTO v_profile FROM public.gm_profiles WHERE id = target_user;
   IF NOT FOUND THEN RETURN NULL; END IF;
-  SELECT coalesce(profile_photo_visibility,'everyone'),
-         coalesce(about_visibility,'everyone'),
+  SELECT coalesce(about_visibility,'everyone'),
          coalesce(last_seen_visibility,true)
-    INTO v_photo,v_about,v_last_seen
+    INTO v_about,v_last_seen
     FROM public.gm_privacy_settings WHERE user_id = target_user;
   RETURN jsonb_build_object(
     'id',v_profile.id,
     'username',v_profile.username,
     'display_name',v_profile.display_name,
-    'avatar_url',CASE WHEN target_user = v_me OR coalesce(v_photo,'everyone') = 'everyone' THEN v_profile.avatar_url ELSE NULL END,
+    'avatar_url',v_profile.avatar_url,
     'bio',CASE WHEN target_user = v_me OR coalesce(v_about,'everyone') = 'everyone' THEN v_profile.bio ELSE NULL END,
     'last_seen_at',CASE WHEN target_user = v_me OR coalesce(v_last_seen,true) THEN v_profile.last_seen_at ELSE NULL END
   );
