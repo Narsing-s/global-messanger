@@ -150,29 +150,11 @@ async function deriveAesKey(privateJwk: JsonWebKey, publicJwk: JsonWebKey, conve
   try { return await pending; } catch (error) { derivedKeyCache.delete(cacheKey); throw error; }
 }
 
-export async function encryptMessage(conversationId: string, plaintext: string) {
-  if (!localStorage.getItem('gm_token')) return plaintext;
-  try {
-    await registerIdentity();
-    const me = JSON.parse(localStorage.getItem('gm_user') || 'null');
-    const sender = await getIdentity();
-    const keys = await conversationKeys(conversationId);
-    const recipients = keys.filter(k => k.userId && k.publicKey);
-    if (!recipients.length || !me?.id) return plaintext;
-
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const entries: Record<string, { iv: string; ct: string }> = {};
-    for (const recipient of recipients) {
-      const key = await deriveAesKey(sender.privateKey, recipient.publicKey!, conversationId, salt);
-      const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
-      entries[String(recipient.userId)] = { iv: bytesToB64(iv), ct: bytesToB64(ciphertext) };
-    }
-    return PREFIX + JSON.stringify({ v: 1, alg: 'ECDH-P256/HKDF-SHA256/AES-256-GCM', senderKey: sender.publicKey, salt: bytesToB64(salt), entries });
-  } catch (error) {
-    console.warn('[Global Messenger E2EE] encryption deferred', error);
-    return plaintext;
-  }
+// Encryption is deliberately disabled until a reviewed, device-bound key lifecycle
+// and authenticated multi-device envelope protocol are shipped. Never downgrade
+// an attempted encrypted send to plaintext.
+export async function encryptMessage(_conversationId: string, _plaintext: string): Promise<string> {
+  throw new Error('End-to-end encryption is temporarily unavailable. Your message was not sent.');
 }
 
 export async function decryptMessage(conversationId: string, body: string) {
