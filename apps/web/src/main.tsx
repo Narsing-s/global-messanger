@@ -119,7 +119,7 @@ function App(){
   const activeMessages=messages.filter(m=>m.conversationId===active?.id);
   return <div className={'messenger '+(mobile?'mobile-open':'')}>
     <aside className="rail"><button className="rail-avatar profile-trigger" title="Open your profile" onClick={()=>setProfilePerson(user)}><Avatar user={user} size="lg"/></button>
-      <nav><button className="active"><MessageCircle/><span>Chats</span></button><button onClick={()=>setGroupOpen(true)}><Users/><span>Groups</span></button><button onClick={()=>document.querySelector('.gm-stories')?.scrollIntoView({behavior:'smooth',block:'nearest'})}><CirclePlay/><span>Stories</span></button><button onClick={()=>setFolder('favorites')}><Star/><span>Favorites</span></button><button onClick={()=>setFolder('archived')}><Archive/><span>Archive</span></button><button onClick={()=>setProductOpen(true)}><LayoutGrid/><span>Product Center</span></button></nav>
+      <nav><button className="active"><MessageCircle/><span>Chats</span></button><button onClick={()=>setGroupOpen(true)}><Users/><span>Groups</span></button><button onClick={()=>window.dispatchEvent(new Event('gm:open-stories'))}><CirclePlay/><span>Stories</span></button><button onClick={()=>setFolder('favorites')}><Star/><span>Favorites</span></button><button onClick={()=>setFolder('archived')}><Archive/><span>Archive</span></button><button onClick={()=>setProductOpen(true)}><LayoutGrid/><span>Product Center</span></button></nav>
       <div className="rail-bottom"><button onClick={()=>setSettingsOpen(true)}><Settings/></button><button onClick={logout}><LogOut/></button></div>
     </aside>
     <section className="chat-list-pane">
