@@ -70,6 +70,7 @@ function messageShape(m:any, sender?:any) {
   const meta=m.metadata||{};
   return { id:m.id, conversationId:m.conversation_id, senderId:m.sender_id, body:m.body, createdAt:m.created_at,
     editedAt:m.edited_at, deletedAt:m.deleted_at, sender:sender?userShape(sender):undefined, type:m.type,
+    storyId:meta.storyId||null, storyBody:meta.storyBody||'', storyMediaType:meta.storyMediaType||null, storyTheme:meta.storyTheme||null,
     attachmentUrl:meta.attachmentUrl||null, attachmentName:meta.attachmentName||null,
     attachmentMime:meta.attachmentMime||null, attachmentSize:meta.attachmentSize||null };
 }
