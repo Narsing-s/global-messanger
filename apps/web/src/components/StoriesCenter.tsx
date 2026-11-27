@@ -13,9 +13,9 @@ export default function StoriesCenter({currentUser,onProfile}:Props){
  const [composer,setComposer]=useState(false),[body,setBody]=useState(''),[file,setFile]=useState<File|null>(null),[theme,setTheme]=useState('aurora');
  const [audience,setAudience]=useState<StoryAudience>('everyone'),[selected,setSelected]=useState<Person[]>([]);
  const [search,setSearch]=useState(''),[found,setFound]=useState<Person[]>([]);
- const [active,setActive]=useState<Story|null>(null),[archive,setArchive]=useState<any[]>([]),[showArchive,setShowArchive]=useState(false),[viewers,setViewers]=useState<any[]>([]);
+ const [active,setActive]=useState<Story|null>(null),[archive,setArchive]=useState<any[]>([]),[showArchive,setShowArchive]=useState(false),[viewers,setViewers]=useState<any[]>([]),[storiesOpen,setStoriesOpen]=useState(false);
  async function refresh(){try{const data=await socialApi.stories();setStories(data);setError('');}catch(e:any){setError(e.message||'Stories are temporarily unavailable.');}}
- useEffect(()=>{refresh();socialApi.privacy().then(p=>setAudience(p.default_story_audience||'everyone')).catch(()=>{});},[]);
+ useEffect(()=>{refresh();socialApi.privacy().then(p=>setAudience(p.default_story_audience||'everyone')).catch(()=>{});const open=()=>setStoriesOpen(true);window.addEventListener('gm:open-stories',open);return()=>window.removeEventListener('gm:open-stories',open);},[]);
  const byAuthor=useMemo(()=>{const map=new Map<string,Story[]>();for(const s of stories){const list=map.get(s.author_id)||[];list.push(s);map.set(s.author_id,list);}return [...map.entries()].map(([authorId,items])=>({authorId,items:items.sort((a,b)=>+new Date(a.created_at)-+new Date(b.created_at)),person:items[0].author}));},[stories]);
  async function searchPeople(){if(search.trim().length<2)return;try{setFound((await api.searchUsers(search)).filter((p:any)=>p.id!==currentUser.id));}catch(e:any){setError(e.message);}}
  async function publish(){
@@ -37,14 +37,18 @@ export default function StoriesCenter({currentUser,onProfile}:Props){
  async function openArchive(){setShowArchive(true);try{setArchive(await socialApi.archive());}catch(e:any){setError(e.message);}}
  const mine=byAuthor.find(g=>g.authorId===currentUser.id);
  return <section className="gm-stories">
-  <div className="gm-stories-heading"><div><span>YOUR MOMENTS</span><h3>Stories</h3></div><div className="gm-story-heading-actions"><button onClick={()=>setComposer(true)}><Plus size={14}/> Add story</button><button onClick={openArchive}><Archive size={16}/> Archive</button></div></div>
-  <div className="gm-story-strip">
-   <button className="gm-story-tile gm-story-create" onClick={()=>mine?chooseStory(mine.items[0]):setComposer(true)}><span className="gm-story-ring"><span>{currentUser.avatarUrl?<img src={currentUser.avatarUrl} alt=""/>:(currentUser.displayName||'Me').slice(0,1)}</span><i><Plus size={13}/></i></span><b>Your story</b><small>{mine?mine.items.length+' active':'Share a moment'}</small></button>
-   {byAuthor.filter(g=>g.authorId!==currentUser.id).map(group=><button className="gm-story-tile" key={group.authorId} onClick={()=>openGroup(group)} onContextMenu={e=>{e.preventDefault();if(group.person)onProfile?.(group.person);}}>
-    <span className="gm-story-ring"><span>{group.person?.avatarUrl?<img src={group.person.avatarUrl} alt=""/>:(group.person?.displayName||'U').slice(0,1)}</span></span><b>{group.person?.displayName||'Messenger user'}</b><small>{group.items.length} {group.items.length===1?'story':'stories'}</small>
-   </button>)}
-  </div>
-  {error&&<div className="gm-story-error">{error}<button onClick={()=>setError('')}><X size={14}/></button></div>}
+  <button className="gm-stories-entry" onClick={()=>setStoriesOpen(true)}><span className="gm-stories-entry-icon"><Users size={17}/></span><span><b>Stories</b><small>{byAuthor.length?byAuthor.length+' people have stories':'View updates from people'}</small></span><ChevronRight size={17}/></button>
+  {storiesOpen&&<div className="gm-story-backdrop gm-stories-backdrop" onClick={()=>setStoriesOpen(false)}><div className="gm-stories-browser" onClick={e=>e.stopPropagation()}>
+   <header className="gm-stories-browser-header"><div><span>UPDATES</span><h3>Stories</h3></div><div className="gm-story-heading-actions"><button onClick={()=>{setStoriesOpen(false);setComposer(true)}}><Plus size={14}/> Add story</button><button onClick={()=>{setStoriesOpen(false);openArchive()}}><Archive size={16}/> Archive</button><button className="gm-stories-close" onClick={()=>setStoriesOpen(false)}><X size={18}/></button></div></header>
+   {error&&<div className="gm-story-error">{error}<button onClick={()=>setError('')}><X size={14}/></button></div>}
+   <div className="gm-story-strip gm-stories-grid">
+    <button className="gm-story-tile gm-story-create" onClick={()=>mine?chooseStory(mine.items[0]):(setStoriesOpen(false),setComposer(true))}><span className="gm-story-ring"><span>{currentUser.avatarUrl?<img src={currentUser.avatarUrl} alt=""/>:(currentUser.displayName||'Me').slice(0,1)}</span><i><Plus size={13}/></i></span><b>Your story</b><small>{mine?mine.items.length+' active':'Share a moment'}</small></button>
+    {byAuthor.filter(g=>g.authorId!==currentUser.id).map(group=><button className="gm-story-tile" key={group.authorId} onClick={()=>openGroup(group)} onContextMenu={e=>{e.preventDefault();if(group.person)onProfile?.(group.person);}}>
+     <span className="gm-story-ring"><span>{group.person?.avatarUrl?<img src={group.person.avatarUrl} alt=""/>:(group.person?.displayName||'U').slice(0,1)}</span></span><b>{group.person?.displayName||'Messenger user'}</b><small>{group.items.length} {group.items.length===1?'story':'stories'}</small>
+    </button>)}
+   </div>
+   {!byAuthor.length&&<div className="gm-stories-empty"><Camera size={25}/><b>No stories yet</b><span>When people share a story, it will appear here.</span></div>}
+  </div></div>}
   {composer&&<div className="gm-story-backdrop"><div className="gm-story-composer">
    <header><div><span>CREATE MOMENT</span><h3>Share a story</h3></div><button onClick={()=>setComposer(false)}><X/></button></header>
    {file?<div className="gm-story-file"><span><Upload/></span><div><b>{file.name}</b><small>{(file.size/1024/1024).toFixed(1)} MB · {file.type}</small></div><button onClick={()=>setFile(null)}><X/></button></div>:<textarea value={body} onChange={e=>setBody(e.target.value)} maxLength={1200} placeholder="What's happening? Write a moment…"/>}
