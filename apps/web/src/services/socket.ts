@@ -31,6 +31,7 @@ class MessengerSocket {
         else if(status==='CLOSED'){this.connected=false;this.emitLocal('disconnect');}
       });
       if(user&&this.profileId&&this.privacy.online_status)await channel.track({userId:this.profileId,online:true,lastSeenAt:new Date().toISOString()});
+      if(user&&this.profileId){const inbox=sb.channel('gm-inbox-'+this.profileId).on('postgres_changes',{event:'INSERT',schema:'public',table:'gm_messages'},(payload:any)=>{if(payload.new?.sender_id!==this.profileId)this.emitLocal('inbox:message',{conversationId:payload.new?.conversation_id});}).subscribe();this.channels.set('__inbox',inbox);}
     }catch(e:any){this.emitLocal('connect_error',e);}
     return this;
   }
