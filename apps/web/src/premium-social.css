@@ -107,3 +107,32 @@ html[data-gm-theme="dark"] .gm-profile-edit-fields input,html[data-gm-theme="dar
 .gm-story-stage{position:relative}
 .gm-story-viewer-list{display:flex;gap:5px;overflow:auto;padding:0 14px 12px}
 .gm-story-viewer-list span{padding:5px 8px;border-radius:12px;background:rgba(255,255,255,.13);font-size:8px;white-space:nowrap}
+
+
+/* Layout refinement: pin the Stories browser to the top and keep chat names left-aligned. */
+.gm-stories-backdrop{
+  align-items:start;
+  justify-items:center;
+  padding: max(12px, env(safe-area-inset-top)) 16px 16px;
+}
+.gm-stories-browser{
+  align-self:start;
+  margin:0 auto;
+}
+.chat>div>div{
+  align-items:flex-start;
+  justify-content:flex-start;
+  text-align:left;
+}
+.chat strong,
+.chat p{
+  text-align:left;
+}
+.conversation-head>div{
+  text-align:left;
+}
+@media(max-width:560px){
+  .gm-stories-backdrop{
+    padding: max(10px, env(safe-area-inset-top)) 9px 10px;
+  }
+}
