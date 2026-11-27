@@ -18,3 +18,37 @@
 
 /* WhatsApp-style stories: keep the chat list clean; open stories only on demand. */
 .gm-stories-entry{width:100%;display:flex;align-items:center;gap:11px;padding:11px 13px;margin:8px 0;border:1px solid var(--border,rgba(130,145,170,.2));border-radius:13px;background:var(--panel,rgba(130,145,170,.06));color:inherit;text-align:left;cursor:pointer}.gm-stories-entry-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:rgba(100,125,220,.13);color:var(--accent,#7187e8)}.gm-stories-entry>span:nth-child(2){display:flex;flex:1;flex-direction:column;gap:3px}.gm-stories-entry b{font-size:12px}.gm-stories-entry small{font-size:10px;opacity:.65}.gm-stories-backdrop{z-index:120}.gm-stories-browser{width:min(620px,calc(100vw - 28px));max-height:min(78vh,720px);overflow:auto;background:var(--surface,#fff);color:var(--text,inherit);border:1px solid var(--border,rgba(130,145,170,.2));border-radius:20px;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.24)}.gm-stories-browser-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.gm-stories-browser-header>div:first-child>span{font-size:9px;letter-spacing:.16em;opacity:.55}.gm-stories-browser-header h3{margin:3px 0 0;font-size:20px}.gm-stories-browser-header .gm-story-heading-actions{display:flex;align-items:center;gap:7px}.gm-stories-browser-header button{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border,rgba(130,145,170,.2));border-radius:10px;padding:8px 10px;background:transparent;color:inherit;font-size:11px;cursor:pointer}.gm-stories-browser-header .gm-stories-close{padding:8px;border:0}.gm-stories-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px;max-height:58vh;overflow:auto}.gm-stories-grid .gm-story-tile{min-height:130px;padding:12px 8px;border:1px solid var(--border,rgba(130,145,170,.2));border-radius:14px;background:var(--panel,rgba(130,145,170,.05))}.gm-stories-empty{min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;opacity:.7;text-align:center;font-size:12px}.gm-stories-empty span{font-size:11px;opacity:.8}@media(max-width:560px){.gm-stories-browser{width:calc(100vw - 20px);max-height:82vh;padding:14px}.gm-stories-browser-header{align-items:flex-start}.gm-stories-browser-header .gm-story-heading-actions{flex-wrap:wrap;justify-content:flex-end}.gm-stories-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* WhatsApp-inspired status screen: no permanent stories strip in the chat list. */
+.gm-stories{display:contents}
+.gm-stories-browser{width:min(470px,calc(100vw - 24px));max-height:min(82vh,760px);padding:0;background:#fff;color:#17223a;border:0;border-radius:18px;overflow:hidden}
+.gm-stories-browser-header{display:flex;align-items:center;gap:12px;padding:16px 18px;margin:0;border-bottom:1px solid #edf0f4;background:#fff}
+.gm-stories-browser-header>div:first-of-type{flex:1;min-width:0}
+.gm-stories-browser-header h3{font-size:18px;margin:0;color:#17223a}
+.gm-stories-browser-header small{display:block;margin-top:3px;font-size:10px;color:#8a95a5}
+.gm-stories-browser-header .gm-stories-back{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;border:0;padding:0}
+.gm-stories-browser-header .gm-stories-back:hover,.gm-stories-browser-header .gm-stories-close:hover{background:#f1f3f6}
+.gm-stories-browser-header .gm-story-heading-actions{gap:5px}
+.gm-stories-browser-header .gm-story-heading-actions button{font-size:10px;padding:7px 8px;border:0;background:#f5f6f8}
+.gm-stories-browser-header .gm-story-heading-actions .gm-stories-close{padding:7px;background:transparent}
+.gm-status-section{padding:14px 0 5px}
+.gm-status-section-title{padding:0 18px 8px;font-size:10px;font-weight:750;letter-spacing:.04em;color:#8792a1;text-transform:uppercase}
+.gm-status-row{width:100%;display:flex;align-items:center;gap:13px;padding:10px 18px;text-align:left;background:#fff;transition:background .15s}
+.gm-status-row:hover{background:#f7f8fa}
+.gm-status-avatar{width:52px;height:52px;flex:none;position:relative;border-radius:50%;display:grid;place-items:center;padding:3px;background:#d6dce4}
+.gm-status-avatar.has-story{background:conic-gradient(#18a66a 0 33%,#18a66a 35% 66%,#18a66a 68% 100%)}
+.gm-status-avatar>span{width:100%;height:100%;border:2px solid #fff;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:#e9edf3;color:#4e5c70;font-size:17px;font-weight:700}
+.gm-status-avatar img{width:100%;height:100%;object-fit:cover}
+.gm-status-avatar>i{position:absolute;right:-1px;bottom:-1px;width:19px;height:19px;border-radius:50%;display:grid;place-items:center;background:#16a765;color:#fff;border:2px solid #fff;font-style:normal}
+.gm-status-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.gm-status-copy b{font-size:13px;font-weight:650;color:#202b38}
+.gm-status-copy small{font-size:10px;color:#8792a1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gm-status-add{font-size:10px;font-weight:700;color:#159b61}
+.gm-recent-status{padding-top:13px;border-top:1px solid #f0f1f3}
+.gm-recent-status .gm-status-row{padding-top:9px;padding-bottom:9px}
+.gm-recent-status .gm-status-avatar{width:50px;height:50px}
+.gm-stories-empty{min-height:150px;padding:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;color:#8792a1}
+.gm-stories-empty b{font-size:12px;color:#596575}
+.gm-stories-empty span{font-size:10px;max-width:240px;line-height:1.5}
+@media(max-width:560px){.gm-stories-browser{width:calc(100vw - 18px);max-height:86vh;border-radius:16px}.gm-stories-browser-header{padding:14px}.gm-status-row{padding-left:15px;padding-right:15px}}
