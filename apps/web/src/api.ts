@@ -72,7 +72,7 @@ function messageShape(m:any, sender?:any) {
     editedAt:m.edited_at, deletedAt:m.deleted_at, sender:sender?userShape(sender):undefined, type:m.type,
     storyId:meta.storyId||null, storyBody:meta.storyBody||'', storyMediaType:meta.storyMediaType||null, storyTheme:meta.storyTheme||null,
     attachmentUrl:meta.attachmentUrl||null, attachmentName:meta.attachmentName||null,
-    attachmentMime:meta.attachmentMime||null, attachmentSize:meta.attachmentSize||null };
+    attachmentMime:meta.attachmentMime||null, attachmentSize:meta.attachmentSize||null, replyToId:meta.replyToId||null, reactions:meta.reactions||[] };
 }
 async function loadConversation(id:string) {
   const sb=await getSupabase(), me=await currentProfile();
@@ -158,7 +158,12 @@ async function listMessages(conversationId:string,limit=100) {
       });
     });
   }));
-  return (data||[]).map((m:any)=>messageShape({...m,metadata:{...(m.metadata||{}),...(attachmentMap.get(m.id)||{})}},byId.get(m.sender_id)));
+  const {data:reactionRows,error:reactionError}=messageIds.length?await sb.from('gm_message_reactions').select('message_id,user_id,emoji').in('message_id',messageIds):{data:[],error:null};
+  if(reactionError)fail(reactionError);
+  const reactionMap=new Map<string,any[]>();
+  for(const row of reactionRows||[]){const list=reactionMap.get(row.message_id)||[];list.push(row);reactionMap.set(row.message_id,list);}
+  const me=await currentProfile();
+  return (data||[]).map((m:any)=>{const grouped=new Map<string,any>();for(const row of reactionMap.get(m.id)||[]){const item=grouped.get(row.emoji)||{emoji:row.emoji,count:0,reactedByMe:false};item.count++;item.reactedByMe ||= row.user_id===me.id;grouped.set(row.emoji,item);}return messageShape({...m,metadata:{...(m.metadata||{}),...(attachmentMap.get(m.id)||{}),reactions:[...grouped.values()]}},byId.get(m.sender_id));});
 }
 async function sendMessage(conversationId:string,body:string,extra:any={}) {
   const sb=await getSupabase(),me=await currentProfile();
