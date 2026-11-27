@@ -400,3 +400,10 @@ html[data-gm-theme="dark"] .gm-status-copy b{color:#edf2fb}
 html[data-gm-theme="dark"] .gm-status-row:hover{background:#1b2941}
 html[data-gm-theme="dark"] .gm-status-avatar>span{background:#26334b;border-color:#131d30;color:#e7edfa}
 html[data-gm-theme="dark"] .gm-stories-browser-header button{background:#1d2a42;color:#dbe4f6}
+
+@media(min-width:701px) and (max-width:760px){
+  .conversation{display:none}
+  .messenger.mobile-open .chat-list-pane{display:none}
+  .messenger.mobile-open .conversation{display:flex}
+  .conversation-head .back{display:grid}
+}
