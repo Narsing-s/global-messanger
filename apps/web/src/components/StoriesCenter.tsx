@@ -37,17 +37,24 @@ export default function StoriesCenter({currentUser,onProfile}:Props){
  async function openArchive(){setShowArchive(true);try{setArchive(await socialApi.archive());}catch(e:any){setError(e.message);}}
  const mine=byAuthor.find(g=>g.authorId===currentUser.id);
  return <section className="gm-stories">
-  <button className="gm-stories-entry" onClick={()=>setStoriesOpen(true)}><span className="gm-stories-entry-icon"><Users size={17}/></span><span><b>Stories</b><small>{byAuthor.length?byAuthor.length+' people have stories':'View updates from people'}</small></span><ChevronRight size={17}/></button>
   {storiesOpen&&<div className="gm-story-backdrop gm-stories-backdrop" onClick={()=>setStoriesOpen(false)}><div className="gm-stories-browser" onClick={e=>e.stopPropagation()}>
-   <header className="gm-stories-browser-header"><div><span>UPDATES</span><h3>Stories</h3></div><div className="gm-story-heading-actions"><button onClick={()=>{setStoriesOpen(false);setComposer(true)}}><Plus size={14}/> Add story</button><button onClick={()=>{setStoriesOpen(false);openArchive()}}><Archive size={16}/> Archive</button><button className="gm-stories-close" onClick={()=>setStoriesOpen(false)}><X size={18}/></button></div></header>
+   <header className="gm-stories-browser-header"><button className="gm-stories-back" onClick={()=>setStoriesOpen(false)}><ArrowLeft size={19}/></button><div><h3>Stories</h3><small>Updates from you and your friends</small></div><div className="gm-story-heading-actions"><button onClick={()=>{setStoriesOpen(false);openArchive()}}><Archive size={16}/> Archive</button><button className="gm-stories-close" onClick={()=>setStoriesOpen(false)}><X size={18}/></button></div></header>
    {error&&<div className="gm-story-error">{error}<button onClick={()=>setError('')}><X size={14}/></button></div>}
-   <div className="gm-story-strip gm-stories-grid">
-    <button className="gm-story-tile gm-story-create" onClick={()=>mine?chooseStory(mine.items[0]):(setStoriesOpen(false),setComposer(true))}><span className="gm-story-ring"><span>{currentUser.avatarUrl?<img src={currentUser.avatarUrl} alt=""/>:(currentUser.displayName||'Me').slice(0,1)}</span><i><Plus size={13}/></i></span><b>Your story</b><small>{mine?mine.items.length+' active':'Share a moment'}</small></button>
-    {byAuthor.filter(g=>g.authorId!==currentUser.id).map(group=><button className="gm-story-tile" key={group.authorId} onClick={()=>openGroup(group)} onContextMenu={e=>{e.preventDefault();if(group.person)onProfile?.(group.person);}}>
-     <span className="gm-story-ring"><span>{group.person?.avatarUrl?<img src={group.person.avatarUrl} alt=""/>:(group.person?.displayName||'U').slice(0,1)}</span></span><b>{group.person?.displayName||'Messenger user'}</b><small>{group.items.length} {group.items.length===1?'story':'stories'}</small>
-    </button>)}
+   <div className="gm-status-section">
+    <div className="gm-status-section-title">My status</div>
+    <button className="gm-status-row gm-my-status" onClick={()=>mine?chooseStory(mine.items[0]):(setStoriesOpen(false),setComposer(true))}>
+     <span className={'gm-status-avatar '+(mine?'has-story':'')}><span>{currentUser.avatarUrl?<img src={currentUser.avatarUrl} alt=""/>:(currentUser.displayName||'Me').slice(0,1)}</span><i><Plus size={13}/></i></span>
+     <span className="gm-status-copy"><b>My status</b><small>{mine?mine.items.length+' updates · Tap to view':'Tap to add a status update'}</small></span>
+     {!mine&&<span className="gm-status-add">Add</span>}
+    </button>
    </div>
-   {!byAuthor.length&&<div className="gm-stories-empty"><Camera size={25}/><b>No stories yet</b><span>When people share a story, it will appear here.</span></div>}
+   <div className="gm-status-section gm-recent-status">
+    <div className="gm-status-section-title">Recent updates</div>
+    {byAuthor.filter(g=>g.authorId!==currentUser.id).length?byAuthor.filter(g=>g.authorId!==currentUser.id).map(group=><button className="gm-status-row" key={group.authorId} onClick={()=>openGroup(group)} onContextMenu={e=>{e.preventDefault();if(group.person)onProfile?.(group.person);}}>
+     <span className="gm-status-avatar has-story"><span>{group.person?.avatarUrl?<img src={group.person.avatarUrl} alt=""/>:(group.person?.displayName||'U').slice(0,1)}</span></span>
+     <span className="gm-status-copy"><b>{group.person?.displayName||'Messenger user'}</b><small>{group.items.length} {group.items.length===1?'update':'updates'} · {new Date(group.items[group.items.length-1].created_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</small></span>
+    </button>):<div className="gm-stories-empty"><Camera size={25}/><b>No recent updates</b><span>When your contacts share a status, it will appear here.</span></div>}
+   </div>
   </div></div>}
   {composer&&<div className="gm-story-backdrop"><div className="gm-story-composer">
    <header><div><span>CREATE MOMENT</span><h3>Share a story</h3></div><button onClick={()=>setComposer(false)}><X/></button></header>
