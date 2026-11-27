@@ -303,12 +303,21 @@ export const api = {
   messages:listMessages,
   async searchUsers(q:string) {
     const sb=await getSupabase(),me=await currentProfile();
-    const term=q.trim().replace(/[,%]/g,'');
+    const term=q.trim();
     if(term.length<2)return [];
-    const {data,error}=await sb.from('gm_profiles').select('id,username,display_name').neq('id',me.id).or('username.ilike.%'+term+'%,display_name.ilike.%'+term+'%').limit(20);
+    // Search through a database RPC so profile discovery is not accidentally
+    // hidden by direct-table column grants or row-level security policies.
+    // The RPC enforces profile_visibility and symmetric block rules server-side.
+    const {data,error}=await sb.rpc('gm_search_profiles',{
+      search_term:term,
+      result_limit:20
+    });
     if(error)fail(error);
-    const safe=await hidePrivateLastSeen(sb,data||[]);
-    return safe.map(userShape);
+    const profiles=await Promise.all((data||[]).filter((p:any)=>p.id!==me.id).map(async(p:any)=>{
+      const details=await getProfileDetails(sb,p.id);
+      return details?userShape({...p,...details}):null;
+    }));
+    return profiles.filter(Boolean);
   },
   direct:ensureDirect,
   async group(title:string,userIds:string[]) {
