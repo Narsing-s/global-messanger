@@ -136,3 +136,43 @@ html[data-gm-theme="dark"] .gm-profile-edit-fields input,html[data-gm-theme="dar
     padding: max(10px, env(safe-area-inset-top)) 9px 10px;
   }
 }
+
+
+/* Explicit left alignment for chat list names and active conversation identity. */
+.chat{
+  justify-content:flex-start!important;
+  text-align:left!important;
+}
+.chat>div{
+  text-align:left!important;
+  align-items:stretch!important;
+  justify-content:flex-start!important;
+}
+.chat>div>div{
+  width:100%;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  text-align:left!important;
+}
+.chat strong,
+.chat p,
+.chat time{
+  text-align:left!important;
+}
+.conversation-head{
+  justify-content:flex-start!important;
+  text-align:left!important;
+}
+.conversation-head>div{
+  flex:1;
+  text-align:left!important;
+  align-items:flex-start!important;
+  justify-content:flex-start!important;
+}
+.conversation-head b,
+.conversation-head small{
+  display:block;
+  width:100%;
+  text-align:left!important;
+}
