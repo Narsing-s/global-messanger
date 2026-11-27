@@ -12,3 +12,6 @@
 .story-reaction-context b{font-size:10px;color:#8291a8;font-weight:700}
 .story-reaction-context span{font-size:11px;opacity:.9;overflow-wrap:anywhere}
 .story-reaction-context small{font-size:9px;opacity:.7;text-transform:capitalize}
+
+/* Voice notes, quoted replies and persisted message reactions */
+.composer button.recording{background:#ffe9ec;color:#d93652;animation:gm-record-pulse 1.2s ease-in-out infinite}@keyframes gm-record-pulse{50%{box-shadow:0 0 0 6px rgba(217,54,82,.12)}}.bubble audio{display:block;max-width:min(280px,65vw);height:36px;margin:4px 0}.quoted-message{display:flex;flex-direction:column;gap:3px;padding:6px 8px;margin-bottom:7px;border-left:3px solid #8090e8;background:rgba(100,120,220,.10);border-radius:6px;font-size:9px}.quoted-message b{font-size:8px;opacity:.85}.quoted-message span{opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}.message-reactions{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.message-reactions span{border:1px solid rgba(130,145,170,.35);background:rgba(130,145,170,.12);border-radius:12px;padding:2px 6px;font-size:10px}.message-reactions span.mine{border-color:#7385ee;background:rgba(115,133,238,.18)}
