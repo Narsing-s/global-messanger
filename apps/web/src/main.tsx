@@ -21,7 +21,7 @@ import './premium-social.css';
 
 type User={id:string;username:string;displayName:string;avatarUrl?:string|null;lastSeenAt?:string|null};
 type Member={user:User;favoriteAt?:string|null;archivedAt?:string|null;lastReadAt?:string|null};
-type Message={id:string;conversationId:string;senderId:string;body:string;createdAt:string;editedAt?:string|null;deletedAt?:string|null;sender?:User;type?:string;attachmentUrl?:string|null;attachmentName?:string|null;attachmentMime?:string|null;attachmentSize?:number|null;replyToId?:string|null};
+type Message={id:string;conversationId:string;senderId:string;body:string;createdAt:string;editedAt?:string|null;deletedAt?:string|null;sender?:User;type?:string;storyId?:string|null;storyBody?:string;storyMediaType?:string|null;storyTheme?:string|null;attachmentUrl?:string|null;attachmentName?:string|null;attachmentMime?:string|null;attachmentSize?:number|null;replyToId?:string|null};
 type Chat={id:string;isGroup:boolean;title?:string|null;members:Member[];messages?:Message[];favorite?:boolean;archived?:boolean;unreadCount?:number};
 type Folder='all'|'unread'|'groups'|'favorites'|'archived';
 const normalizeChat=(c:any):Chat=>({...c,favorite:!!(c.favorite ?? c.members?.some((m:any)=>m.favoriteAt)),archived:!!(c.archived ?? c.members?.some((m:any)=>m.archivedAt)),unreadCount:Number(c.unreadCount??0)});
@@ -93,6 +93,7 @@ function App(){
     s.on('message:new',(m:Message)=>{setMessages(p=>p.some(x=>x.id===m.id)?p:[...p,m].sort((a,b)=>+new Date(a.createdAt)-+new Date(b.createdAt)));setChats(p=>p.map(c=>c.id===m.conversationId?{...c,messages:[m,...(c.messages||[]).filter(x=>x.id!==m.id)].slice(0,1)}:c));});
     s.on('message:updated',(m:Message)=>setMessages(p=>p.map(x=>x.id===m.id?m:x)));
     s.on('message:deleted',(d:any)=>setMessages(p=>p.map(x=>x.id===d.id?{...x,body:'',deletedAt:d.deletedAt}:x)));
+    s.on('inbox:message',()=>api.conversations().then((d:any)=>setChats(Array.isArray(d)?d.map(normalizeChat):[])).catch(()=>{}));
     s.on('reaction:update',()=>{if(active)setActive({...active})});
     setSocket(s);return()=>{alive=false;if((window as any).__gmMessengerSocket===s)delete (window as any).__gmMessengerSocket;s.disconnect()};
   },[user?.id]);
@@ -146,7 +147,7 @@ function App(){
 }
 
 function Bubble({m,own,receipt,onReply,onEdit,onDelete,reaction,onReact,onEmoji}:{m:Message;own:boolean;receipt:'sent'|'delivered'|'read';onReply:()=>void;onEdit:()=>void;onDelete:()=>void;reaction:boolean;onReact:()=>void;onEmoji:(e:string)=>void}){
-  return <div className={'bubble-row '+(own?'own':'')}><div className="bubble">{m.deletedAt?<i>Message deleted</i>:m.attachmentUrl?<>{m.attachmentMime?.startsWith('image/')?<img src={m.attachmentUrl} alt={m.attachmentName||'image'}/>:<a href={m.attachmentUrl} target="_blank" rel="noreferrer"><Paperclip/> {m.attachmentName||'Download file'}</a>}{m.body!=='Image'&&<p>{m.body}</p>}</>:<p>{m.body}</p>}<small>{time(m.createdAt)} {own&&<span className={'message-receipt '+receipt} title={receipt==='read'?'Read':receipt==='delivered'?'Delivered':'Sent'}>{receipt==='sent'?<Check/>:<CheckCheck/>}</span>}</small><button className="bubble-more" onClick={onReact}><Heart/></button>{reaction&&<div className="reaction">{['❤️','👍','😂','😮','😢','🔥'].map(e=><button key={e} onClick={()=>onEmoji(e)}>{e}</button>)}</div>}<div className="bubble-actions"><button onClick={onReply}>Reply</button>{own&&<><button onClick={onEdit}>Edit</button><button onClick={onDelete}>Delete</button></>}</div></div></div>
+  return <div className={'bubble-row '+(own?'own':'')}><div className={'bubble '+(m.type==='story_reaction'?'story-reaction-bubble':'')}>{m.type==='story_reaction'&&<div className="story-reaction-context"><b>Reacted to your story</b>{m.storyBody&&<span>{m.storyBody}</span>}{m.storyMediaType&&m.storyMediaType!=='text'&&<small>{m.storyMediaType==='video'?'Video story':'Photo story'}</small>}</div>}{m.deletedAt?<i>Message deleted</i>:m.attachmentUrl?<>{m.attachmentMime?.startsWith('image/')?<img src={m.attachmentUrl} alt={m.attachmentName||'image'}/>:<a href={m.attachmentUrl} target="_blank" rel="noreferrer"><Paperclip/> {m.attachmentName||'Download file'}</a>}{m.body!=='Image'&&<p>{m.body}</p>}</>:<p>{m.body}</p>}<small>{time(m.createdAt)} {own&&<span className={'message-receipt '+receipt} title={receipt==='read'?'Read':receipt==='delivered'?'Delivered':'Sent'}>{receipt==='sent'?<Check/>:<CheckCheck/>}</span>}</small><button className="bubble-more" onClick={onReact}><Heart/></button>{reaction&&<div className="reaction">{['❤️','👍','😂','😮','😢','🔥'].map(e=><button key={e} onClick={()=>onEmoji(e)}>{e}</button>)}</div>}<div className="bubble-actions"><button onClick={onReply}>Reply</button>{own&&<><button onClick={onEdit}>Edit</button><button onClick={onDelete}>Delete</button></>}</div></div></div>
 }
 
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){return <div className="modal-backdrop"><div className="modal"><header><b>{title}</b><button onClick={onClose}><X/></button></header><div className="modal-body">{children}</div></div></div>}
