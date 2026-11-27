@@ -202,3 +202,35 @@ html[data-gm-theme="dark"] .gm-profile-edit-fields input,html[data-gm-theme="dar
 .conversation-head small{
   text-align:right!important;
 }
+
+
+/* Final alignment: keep chat and profile names on the left. */
+.chat,
+.chat>div,
+.chat>div>div,
+.chat strong,
+.chat p,
+.chat time,
+.conversation-head,
+.conversation-head>div,
+.conversation-head b,
+.conversation-head small{
+  text-align:left!important;
+}
+.chat{
+  justify-content:flex-start!important;
+}
+.chat>div{
+  align-items:stretch!important;
+  justify-content:flex-start!important;
+}
+.chat>div>div{
+  justify-content:flex-start!important;
+}
+.conversation-head{
+  justify-content:flex-start!important;
+}
+.conversation-head>div{
+  align-items:flex-start!important;
+  justify-content:flex-start!important;
+}
