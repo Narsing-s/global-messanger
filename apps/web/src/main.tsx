@@ -94,8 +94,9 @@ function App(){
     s.on('message:updated',(m:Message)=>setMessages(p=>p.map(x=>x.id===m.id?m:x)));
     s.on('message:deleted',(d:any)=>setMessages(p=>p.map(x=>x.id===d.id?{...x,body:'',deletedAt:d.deletedAt}:x)));
     s.on('inbox:message',()=>api.conversations().then((d:any)=>setChats(Array.isArray(d)?d.map(normalizeChat):[])).catch(()=>{}));
+    const storyMessageHandler=(event:Event)=>{const message=(event as CustomEvent).detail as Message|undefined;if(!message?.id)return;setMessages(p=>p.some(x=>x.id===message.id)?p:[...p,message].sort((a,b)=>+new Date(a.createdAt)-+new Date(b.createdAt)));setChats(p=>p.map(c=>c.id===message.conversationId?{...c,messages:[message,...(c.messages||[]).filter(x=>x.id!==message.id)].slice(0,1)}:c));};window.addEventListener('gm:story-message',storyMessageHandler);
     s.on('reaction:update',()=>{if(active)setActive({...active})});
-    setSocket(s);return()=>{alive=false;if((window as any).__gmMessengerSocket===s)delete (window as any).__gmMessengerSocket;s.disconnect()};
+    setSocket(s);return()=>{alive=false;window.removeEventListener('gm:story-message',storyMessageHandler);if((window as any).__gmMessengerSocket===s)delete (window as any).__gmMessengerSocket;s.disconnect()};
   },[user?.id]);
   useEffect(()=>{if(!active)return;let alive=true;setTyping(false);socket?.emit('conversation:join',active.id);api.messages(active.id,100).then((d:any)=>alive&&setMessages(Array.isArray(d)?d:[])).catch(e=>alive&&setError(e.message));api.read(active.id).catch(()=>{});setChats(p=>p.map(c=>c.id===active.id?{...c,unreadCount:0}:c));const refreshReceipts=()=>api.conversation(active.id).then((c:any)=>{if(!alive)return;const next=normalizeChat(c);setActive(current=>current?.id===next.id?next:current);setChats(p=>p.map(item=>item.id===next.id?{...item,...next}:item))}).catch(()=>{});const receiptTimer=window.setInterval(refreshReceipts,4000);return()=>{alive=false;window.clearInterval(receiptTimer);socket?.emit('conversation:leave',active.id)}},[active?.id,socket]);
 
