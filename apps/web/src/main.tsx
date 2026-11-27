@@ -69,7 +69,7 @@ function Auth({onLogin}:{onLogin:(u:User,t:string)=>void}) {
 }
 function App(){
   const [user,setUser]=useState<User|null>(null),[chats,setChats]=useState<Chat[]>([]),[active,setActive]=useState<Chat|null>(null);
-  const [messages,setMessages]=useState<Message[]>([]),[query,setQuery]=useState(''),[people,setPeople]=useState<User[]>([]);
+  const [messages,setMessages]=useState<Message[]>([]),[query,setQuery]=useState(''),[people,setPeople]=useState<User[]>([]),[peopleSearchDone,setPeopleSearchDone]=useState(false);
   const [text,setText]=useState(''),[folder,setFolder]=useState<Folder>('all'),[socket,setSocket]=useState<Socket|null>(null);
   const [error,setError]=useState(''),[typing,setTyping]=useState(false),[mobile,setMobile]=useState(false);
   const [theme,setTheme]=useState<'light'|'dark'>(()=>localStorage.getItem('gm_theme')==='dark'?'dark':'light');
@@ -100,7 +100,7 @@ function App(){
 
   const visible=useMemo(()=>chats.filter(c=>folder==='all'?!c.archived:folder==='archived'?!!c.archived:folder==='favorites'?!!c.favorite:folder==='groups'?c.isGroup:(c.unreadCount||0)>0).filter(c=>{const n=nameOf(c,user?.id||'').toLowerCase();return !query||n.includes(query.toLowerCase())}),[chats,folder,query,user?.id]);
   const activeOther=active?.members.find(m=>m.user.id!==user?.id)?.user;
-  async function search(q:string){setQuery(q);if(q.trim().length<2)return setPeople([]);try{setPeople((await api.searchUsers(q)).filter((u:User)=>u.id!==user?.id))}catch(e:any){setError(e.message)}}
+  async function search(q:string){setQuery(q);if(q.trim().length<2){setPeople([]);setPeopleSearchDone(false);return}setPeopleSearchDone(false);try{setPeople((await api.searchUsers(q)).filter((u:User)=>u.id!==user?.id));setPeopleSearchDone(true)}catch(e:any){setPeople([]);setPeopleSearchDone(true);setError(e.message)}}
   async function openDirect(u:User){try{const c=normalizeChat(await api.direct(u.id));setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setPeople([]);setQuery('');setMobile(true)}catch(e:any){setError(e.message)}}
   async function createGroup(){if(!groupTitle.trim()||!groupUsers.length)return;try{const c=normalizeChat(await api.group(groupTitle.trim(),groupUsers.map(u=>u.id)));setChats(p=>[c,...p.filter(x=>x.id!==c.id)]);setActive(c);setGroupOpen(false);setGroupTitle('');setGroupUsers([]);setMobile(true)}catch(e:any){setError(e.message)}}
   async function send(){const body=text.trim();if(!body||!active)return;if(editing){api.editMessage(editing.id,body).catch(e=>setError(e.message));setEditing(null);setText('');return}try{await requestMessage(active.id,body)}catch(e:any){setError(e.message||'Unable to send message')}}
@@ -122,7 +122,7 @@ function App(){
       <header className="list-header"><div className="brand"><div className="brand-mark"><MessageCircle/></div><div><b>Global Messenger</b><small>{socket?.connected?'Connected':'Connecting…'}</small></div></div><button onClick={()=>setSettingsOpen(true)}><Settings/></button></header>
       <button className="me-row profile-trigger" onClick={()=>setProfilePerson(user)}><Avatar user={user}/><span><b>{user.displayName}</b><small>@{user.username}</small></span><MoreVertical/></button>
       <StoriesCenter currentUser={user} onProfile={setProfilePerson}/><div className="search"><Search/><input value={query} onChange={e=>search(e.target.value)} placeholder="Search people or chats…"/></div>
-      {people.length>0&&<div className="people"><b>People</b>{people.map(p=><button key={p.id} onClick={()=>openDirect(p)}><Avatar user={p}/><span><strong>{p.displayName}</strong><small>@{p.username}</small></span><Plus/></button>)}</div>}
+      {query.trim().length>=2&&<div className="people"><b>People</b>{people.length>0?people.map(p=><button key={p.id} onClick={()=>{setPeople([]);setProfilePerson(p)}}><Avatar user={p}/><span><strong>{p.displayName}</strong><small>@{p.username}</small></span><Plus/></button>):<div className="people-empty">{peopleSearchDone?'No discoverable profiles found. Check the name or username.':'Searching people…'}</div>}</div>}
       <div className="folders">{(['all','unread','groups','favorites','archived'] as Folder[]).map(f=><button key={f} className={folder===f?'selected':''} onClick={()=>setFolder(f)}>{f==='all'?'All':f[0].toUpperCase()+f.slice(1)}</button>)}</div>
       <div className="chat-list">{visible.map(c=>{const other=c.members.find(m=>m.user.id!==user.id)?.user;const latest=c.messages?.[0];return <button key={c.id} className={'chat '+(active?.id===c.id?'selected':'')} onClick={()=>{setActive(c);setMobile(true)}}><Avatar user={other} name={nameOf(c,user.id)}/><div><div><strong>{nameOf(c,user.id)}</strong><time>{time(latest?.createdAt)}</time></div><p>{latest?.type==='file'?'📎 '+(latest.attachmentName||'File'):latest?.body||'Start a conversation'}</p></div>{c.favorite&&<Star className="star"/>}{(c.unreadCount||0)>0&&<i className="unread"/>}</button>})}{!visible.length&&<div className="empty-list"><MessageCircle/><b>No chats here</b><span>Search for a person to start a conversation.</span></div>}</div>
       <div className="new-actions"><button onClick={()=>document.querySelector<HTMLInputElement>('.search input')?.focus()}><Plus/> New chat</button><button onClick={()=>setGroupOpen(true)}><Users/> New group</button></div>
