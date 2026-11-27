@@ -5,3 +5,10 @@
 .message-receipt svg{width:14px;height:14px;stroke-width:2.4;color:#8792a3}
 .message-receipt.delivered svg{color:#8792a3}
 .message-receipt.read svg{color:#2598f5}
+
+
+/* Story replies are visually grouped with their story context in chat. */
+.story-reaction-bubble .story-reaction-context{display:flex;flex-direction:column;gap:4px;padding:7px 9px;margin-bottom:7px;border-left:3px solid #8291a8;background:rgba(127,140,160,.10);border-radius:7px;font-size:11px}
+.story-reaction-context b{font-size:10px;color:#8291a8;font-weight:700}
+.story-reaction-context span{font-size:11px;opacity:.9;overflow-wrap:anywhere}
+.story-reaction-context small{font-size:9px;opacity:.7;text-transform:capitalize}
