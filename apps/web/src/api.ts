@@ -300,6 +300,7 @@ async function uploadWithProgress(file:File,onProgress?:(n:number)=>void,signal?
 }
 export const api = {
   conversations:listConversations,
+  conversation:loadConversation,
   messages:listMessages,
   async searchUsers(q:string) {
     const sb=await getSupabase(),me=await currentProfile();
