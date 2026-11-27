@@ -176,3 +176,29 @@ html[data-gm-theme="dark"] .gm-profile-edit-fields input,html[data-gm-theme="dar
   width:100%;
   text-align:left!important;
 }
+
+
+/* Align profile names and chat details to the right side of their rows. */
+.chat{
+  text-align:right!important;
+}
+.chat>div{
+  text-align:right!important;
+}
+.chat>div>div{
+  justify-content:flex-end!important;
+  text-align:right!important;
+}
+.chat strong,
+.chat p,
+.chat time{
+  text-align:right!important;
+}
+.conversation-head>div{
+  text-align:right!important;
+  align-items:flex-end!important;
+}
+.conversation-head b,
+.conversation-head small{
+  text-align:right!important;
+}
