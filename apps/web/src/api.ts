@@ -118,12 +118,19 @@ async function listConversations() {
     list.push(member);membersByConversation.set(member.conversation_id,list);
   }
   const prefMap=new Map((prefsResult.data||[]).map((x:any)=>[x.conversation_id,x]));
+  // Include the latest message in every inbox row so a newly-created story-reply DM
+  // appears immediately for both participants, even before either opens the chat.
+  const {data:recentMessages,error:recentError}=await sb.from('gm_messages').select('*').in('conversation_id',ids).order('created_at',{ascending:false}).limit(5000);
+  if(recentError)fail(recentError);
+  const latestByConversation=new Map<string,any>();
+  for(const message of recentMessages||[])if(!latestByConversation.has(message.conversation_id))latestByConversation.set(message.conversation_id,message);
   return (conversationResult.data||[]).map((conversation:any)=>{
     const prefs:any=prefMap.get(conversation.id)||{};
     return {
       id:conversation.id,isGroup:conversation.is_group,title:conversation.title,
       createdAt:conversation.created_at,updatedAt:conversation.updated_at,
       favorite:!!prefs.favorite,archived:!!prefs.archived,
+      messages:latestByConversation.has(conversation.id)?[messageShape(latestByConversation.get(conversation.id),profileById.get(latestByConversation.get(conversation.id).sender_id))]:[],
       members:(membersByConversation.get(conversation.id)||[]).map((m:any)=>({
         user:userShape(profileById.get(m.user_id)),joinedAt:m.joined_at,lastReadAt:m.last_read_at
       }))
